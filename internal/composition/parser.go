@@ -67,8 +67,10 @@ type CompiledStep struct {
 
 // CompiledResponse holds compiled expressions for response template.
 type CompiledResponse struct {
-	StatusExpr *CompiledExpr            // nil if status is static int
-	BodyExprs  map[string]*CompiledExpr // Compiled body template expressions
+	StatusExpr  *CompiledExpr            // nil if status is static int
+	BodyExprs   map[string]*CompiledExpr // Compiled body template expressions
+	BodyTemplate interface{}             // Original body template structure for evaluation
+	ContentType string                   // Content-Type header value
 }
 
 // CompileConfig takes a parsed config and compiles all expressions.
@@ -170,7 +172,9 @@ func compileStep(step *Step, env map[string]interface{}) (*CompiledStep, error) 
 // compileResponse compiles all expressions in a response template.
 func compileResponse(resp *ResponseTemplate, env map[string]interface{}) (*CompiledResponse, error) {
 	compiled := &CompiledResponse{
-		BodyExprs: make(map[string]*CompiledExpr),
+		BodyExprs:    make(map[string]*CompiledExpr),
+		BodyTemplate: resp.Body,
+		ContentType:  resp.ContentType,
 	}
 
 	// Compile status if it's an expression string
