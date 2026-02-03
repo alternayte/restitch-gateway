@@ -2,4 +2,7 @@ module github.com/restitch/restitch-gateway
 
 go 1.25.6
 
-require gopkg.in/yaml.v3 v3.0.1 // indirect
+require (
+	github.com/expr-lang/expr v1.17.7 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+)
