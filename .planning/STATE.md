@@ -1,9 +1,9 @@
 # Project State: Restitch
 
 **Last Updated:** 2026-02-03
-**Current Phase:** 4 - Error Handling & Resilience (COMPLETE)
-**Current Plan:** 04 of 04 complete
-**Status:** Phase 4 COMPLETE - all error handling and resilience features implemented
+**Current Phase:** 5 - Observability (IN PROGRESS)
+**Current Plan:** 01 of 03 complete
+**Status:** Plan 05-01 complete - request ID tracing and enhanced logging implemented
 
 ## Project Reference
 
@@ -11,34 +11,36 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 4 COMPLETE. Error handling foundation, optional step orchestration, partial response building, and error rule matching all implemented. Ready for Phase 5 (Observability).
+**Current Focus:** Phase 5 IN PROGRESS. Request ID tracing and enhanced structured logging complete. Next: step timing (05-02) and upstream health checks (05-03).
 
 ## Current Position
 
-**Phase:** 4 of 5 (Error Handling & Resilience) - COMPLETE
-**Plan:** 04 of 04 complete
-**Status:** All error handling features verified
-**Last activity:** 2026-02-03 - Completed Phase 4 verification (20/20 must-haves passed)
+**Phase:** 5 of 5 (Observability) - IN PROGRESS
+**Plan:** 01 of 03 complete
+**Status:** Request ID tracing working end-to-end
+**Last activity:** 2026-02-03 - Completed 05-01-PLAN.md (request ID and enhanced logging)
 
 **Progress:**
 ```
-[############################################      ] 88% (28/32)
-Phase 4 COMPLETE - error handling and resilience working
+[#############################################     ] 90% (18/20)
+Phase 5 IN PROGRESS - observability features being added
 ```
 
 **Next Actions:**
-1. Begin Phase 5 planning (Observability)
+1. Execute Plan 05-02 (Step timing collection)
+2. Execute Plan 05-03 (Upstream health checks)
+3. Verify Phase 5 success criteria
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks), 3 min for 04-03 (3 tasks), 2 min for 04-04 (3 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks), 3 min for 04-03 (3 tasks), 2 min for 04-04 (3 tasks), 5 min for 05-01 (2 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) - COMPLETE
 - Phase 2: 11/11 requirements (100%) - COMPLETE
 - Phase 3: 6/6 requirements (100%) - COMPLETE
 - Phase 4: 5/5 requirements (100%) - COMPLETE
-- Phase 5: 0/4 requirements (0%)
+- Phase 5: 2/4 requirements (50%) - IN PROGRESS
 
 **Blockers:** None currently
 
@@ -173,6 +175,13 @@ Phase 4 COMPLETE - error handling and resilience working
 - Decision: matchErrorRule checks exact status code matches (no ranges/wildcards)
 - Rationale: Per CONTEXT.md "Error matching rules replace the failed step's slot with the configured body value"; transparency via _errors maintains client awareness; simple list matching defers complexity to future
 
+**2026-02-03 - Plan 05-01 Execution (Request ID and Enhanced Logging)**
+- Decision: ULID format for request IDs (26 chars, time-sortable, collision-safe)
+- Decision: Honor incoming X-Request-ID if present, generate ULID if not
+- Decision: RequestIDMiddleware runs before LoggingMiddleware for context availability
+- Decision: Snake_case field names for JSON logs (request_id, status_code, duration_ms)
+- Rationale: ULID enables time-based log analysis; honoring incoming IDs supports distributed tracing; middleware order ensures context propagation; snake_case per CONTEXT.md requirements
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -202,7 +211,11 @@ Phase 4 COMPLETE - error handling and resilience working
 - [x] Execute Plan 04-03 (Partial response building)
 - [x] Execute Plan 04-04 (Error matching rules)
 - [x] Verify Phase 4 success criteria (PASSED - 20/20 must-haves)
-- [ ] Begin Phase 5 planning (Observability)
+- [x] Begin Phase 5 planning (Observability)
+- [x] Execute Plan 05-01 (Request ID and enhanced logging)
+- [ ] Execute Plan 05-02 (Step timing collection)
+- [ ] Execute Plan 05-03 (Upstream health checks)
+- [ ] Verify Phase 5 success criteria
 
 ### Known Blockers
 
@@ -214,43 +227,36 @@ None identified.
 **Phase 2:** SKIP research (Expr and YAML libraries have excellent docs) - COMPLETE
 **Phase 3:** Research COMPLETE - OAuth2 patterns documented in 03-RESEARCH.md
 **Phase 4:** Research COMPLETE - Error handling patterns documented in 04-RESEARCH.md
-**Phase 5:** SKIP research (standard observability patterns)
+**Phase 5:** SKIP research (standard observability patterns) - IN PROGRESS
 
 ## Session Continuity
 
 ### What Just Happened
 
-Phase 4 COMPLETE - All error handling and resilience features verified:
+Plan 05-01 COMPLETE - Request ID tracing and enhanced structured logging implemented:
 
 Plan deliverables:
-- 04-01: Config schema with Optional, Timeout, ErrorRules; step timeout execution with context.WithTimeout
-- 04-02: Error types (StepErrorDetail), executor rewritten with sync.WaitGroup for optional step support
-- 04-03: Partial response building with _errors array injection, X-Partial-Response header
-- 04-04: Error rule matching for status code replacement, matches recorded in _errors
-
-Verification: 20/20 must-haves passed (100%)
+- Task 1: Request ID infrastructure with ULID generation using oklog/ulid/v2
+- Task 2: Enhanced structured logging with request_id, method, path, status_code, duration_ms fields
 
 Key commits:
-- 94edaed, f0258e5, 3f529ee: Error handling config and timeout
-- 580001e, 3bb129c, 606eb8e: Optional step orchestration
-- 77c336f, e49f0c1, a2e7c6c: Partial response building
-- 97b63de, 520caee, 8b086cd: Error matching rules
+- 4f5ca97: Request ID infrastructure with ULID
+- 5f2beab: Enhanced logging with request ID and snake_case fields
 
 Patterns established:
-- Timeout hierarchy: step > upstream > 30s default
-- sync.WaitGroup replaces errgroup for optional step support
-- allErrors aggregates errors across all waves
-- X-Partial-Response header for partial response signaling
-- _errors array injected into response body
-- Error rule matches recorded transparently
+- ULID format for request IDs (time-sortable, collision-safe)
+- observability.GetRequestID(ctx) for request ID extraction
+- RequestIDMiddleware -> LoggingMiddleware middleware chain order
+- Snake_case field names in JSON logs
 
 ### What's Next
 
-Phase 5 (Observability):
-- Structured JSON logging for all requests
-- Request ID, method, path, status, duration in logs
-- Per-step timing for waterfall debugging
-- DAG execution order logging
+Phase 5 remaining plans:
+- 05-02: Step timing collection in executor
+- 05-03: Upstream health checks endpoint
+
+After Phase 5:
+- Project complete! All 32 v1 requirements implemented
 
 ### Context for Next Session
 
@@ -259,21 +265,20 @@ If returning after break:
 2. Review "Active TODOs" for immediate next actions
 3. Check "Known Blockers" for anything preventing progress
 4. Review `.planning/ROADMAP.md` for full phase structure
-5. Review completed summaries at `.planning/phases/04-error-handling-resilience/04-0X-SUMMARY.md`
+5. Review completed summary at `.planning/phases/05-observability/05-01-SUMMARY.md`
 
 Key files:
 - `.planning/ROADMAP.md` - Phase structure and success criteria
 - `.planning/REQUIREMENTS.md` - All 32 v1 requirements with traceability
-- `.planning/phases/04-error-handling-resilience/04-CONTEXT.md` - Phase 4 decisions
-- `.planning/phases/04-error-handling-resilience/04-RESEARCH.md` - Error handling and resilience patterns
-- `.planning/phases/04-error-handling-resilience/04-VERIFICATION.md` - Phase 4 verification report
+- `.planning/phases/05-observability/05-CONTEXT.md` - Phase 5 decisions
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
-- `cmd/restitch/main.go` - Application entrypoint with composition config loading
+- `cmd/restitch/main.go` - Application entrypoint with middleware chain
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
 - `internal/client/` - HTTP client with optimized connection pooling
 - `internal/composition/` - Complete composition engine with error handling
 - `internal/config/env.go` - Environment variable expansion with validation
 - `internal/auth/` - All authentication strategies (header, basic, passthrough, oauth2)
+- `internal/observability/` - Request ID generation and middleware
 
 ---
 
