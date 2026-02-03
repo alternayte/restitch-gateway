@@ -16,12 +16,15 @@ type CompositionResponse struct {
 // It evaluates the status expression (if present) and recursively evaluates
 // the body template to produce the final response.
 //
+// If stepErrors is non-empty, injects _errors array into response body.
+//
 // Per CONTEXT.md decisions:
 //   - Status defaults to 200 if not specified
 //   - Status can be static int or expression string
 //   - Body template is recursively evaluated preserving structure
 //   - Expression strings like "{{ steps.user.body }}" are evaluated and replaced
-func BuildResponse(template *CompiledResponse, results map[string]*StepResult, req *http.Request) (*CompositionResponse, error) {
+//   - Top-level `_errors` field in response body with failure details
+func BuildResponse(template *CompiledResponse, results map[string]*StepResult, req *http.Request, stepErrors []StepErrorDetail) (*CompositionResponse, error) {
 	// Build environment for expression evaluation
 	env := buildRequestEnv(req, results)
 
@@ -48,6 +51,14 @@ func BuildResponse(template *CompiledResponse, results map[string]*StepResult, r
 	body, err := evaluateTemplate(template.BodyTemplate, env)
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate response body: %w", err)
+	}
+
+	// Inject _errors array if any step failed
+	// Per CONTEXT.md: "Top-level `_errors` field in response body with failure details"
+	if len(stepErrors) > 0 {
+		if bodyMap, ok := body.(map[string]interface{}); ok {
+			bodyMap["_errors"] = stepErrors
+		}
 	}
 
 	return &CompositionResponse{
