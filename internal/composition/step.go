@@ -214,12 +214,15 @@ func propagateHeaders(req *http.Request, env map[string]interface{}) {
 	}
 
 	// List of headers to auto-propagate per CONTEXT.md
+	// Authorization is included for passthrough auth - other auth strategies
+	// (header, basic, oauth2) will override it via their RoundTripper
 	propagatedHeaders := []string{
 		"X-Request-ID",
 		"X-Correlation-ID",
 		"traceparent",
 		"Accept",
 		"Accept-Language",
+		"Authorization", // For passthrough auth
 	}
 
 	// Propagate headers from incoming request

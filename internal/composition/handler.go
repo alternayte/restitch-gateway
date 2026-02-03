@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/restitch/restitch-gateway/internal/auth"
 	"github.com/restitch/restitch-gateway/internal/server"
 )
 
@@ -54,8 +55,9 @@ func (h *Handler) RegisterRoutes(router *server.Router) {
 // and writes it back to the client.
 //
 // Error handling:
+//   - 401 Unauthorized: Passthrough auth but client didn't provide Authorization header
 //   - 404 Not Found: No composition matches this path
-//   - 502 Bad Gateway: Upstream step failure (network error, context cancellation)
+//   - 502 Bad Gateway: Upstream step failure (network error, auth failure, context cancellation)
 //   - 500 Internal Server Error: Response template evaluation error
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Find composition for this path and method
@@ -78,7 +80,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	result, err := h.executor.Execute(ctx, compositionName, r)
 	if err != nil {
-		// Fail-fast error from step execution (network failure, context cancellation)
+		// Check for passthrough auth missing header - return 401 Unauthorized
+		// Per CONTEXT.md/RESEARCH.md: Don't forward unauthenticated requests
+		if auth.IsMissingAuthHeaderError(err) {
+			slog.Warn("passthrough auth missing client authorization",
+				"composition", compositionName,
+				"path", r.URL.Path)
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			h.writeError(w, http.StatusUnauthorized, fmt.Errorf("authorization header required"))
+			return
+		}
+
+		// Other execution errors (network failure, OAuth2 token failure, context cancellation)
+		// Per CONTEXT.md: "Gateway auth failures (token fetch fails, network error) return 502"
 		slog.Error("composition execution failed",
 			"composition", compositionName,
 			"error", err)

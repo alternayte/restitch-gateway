@@ -168,3 +168,210 @@ func TestHandler_matchComposition(t *testing.T) {
 		})
 	}
 }
+
+func TestHandler_PassthroughAuthMissing(t *testing.T) {
+	// Create a mock upstream server that should never be called
+	// (request should fail before reaching upstream due to missing auth)
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("upstream should not be called when passthrough auth is missing")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mockServer.Close()
+
+	// Create test configuration with passthrough auth
+	configYAML := `
+upstreams:
+  test:
+    url: ` + mockServer.URL + `
+    auth:
+      passthrough: {}
+
+compositions:
+  protected:
+    path: /api/protected
+    method: GET
+    steps:
+      - name: data
+        upstream: test
+        path: /data
+    response:
+      status: 200
+      body:
+        data: "{{ steps.data.body }}"
+`
+
+	cfg, err := ParseConfig([]byte(configYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	compiledCfg, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig failed: %v", err)
+	}
+
+	// Create handler
+	handler := NewHandler(compiledCfg, &http.Client{})
+
+	// Create router and register routes
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+
+	// Request without Authorization header
+	req := httptest.NewRequest("GET", "/api/protected", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Should return 401 Unauthorized
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected status %d, got %d", http.StatusUnauthorized, w.Code)
+	}
+
+	// Should have WWW-Authenticate header
+	wwwAuth := w.Header().Get("WWW-Authenticate")
+	if wwwAuth != "Bearer" {
+		t.Errorf("expected WWW-Authenticate: Bearer, got %q", wwwAuth)
+	}
+
+	// Should have error body
+	var errorResp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&errorResp); err != nil {
+		t.Fatalf("failed to decode error response: %v", err)
+	}
+	if errorResp["error"] != "authorization header required" {
+		t.Errorf("unexpected error message: %s", errorResp["error"])
+	}
+}
+
+func TestHandler_PassthroughAuthPresent(t *testing.T) {
+	// Create a mock upstream server that verifies Authorization header
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "Bearer test-token-123" {
+			t.Errorf("expected Authorization: Bearer test-token-123, got %q", authHeader)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok"})
+	}))
+	defer mockServer.Close()
+
+	// Create test configuration with passthrough auth
+	configYAML := `
+upstreams:
+  test:
+    url: ` + mockServer.URL + `
+    auth:
+      passthrough: {}
+
+compositions:
+  protected:
+    path: /api/protected
+    method: GET
+    steps:
+      - name: data
+        upstream: test
+        path: /data
+    response:
+      status: 200
+      body:
+        data: "{{ steps.data.body }}"
+`
+
+	cfg, err := ParseConfig([]byte(configYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	compiledCfg, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig failed: %v", err)
+	}
+
+	// Create handler
+	handler := NewHandler(compiledCfg, &http.Client{})
+
+	// Create router and register routes
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+
+	// Request WITH Authorization header
+	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer test-token-123")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Should return 200 OK
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+}
+
+func TestHandler_HeaderAuth(t *testing.T) {
+	// Create a mock upstream server that verifies custom header
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiKey := r.Header.Get("X-API-Key")
+		if apiKey != "test-api-key-456" {
+			t.Errorf("expected X-API-Key: test-api-key-456, got %q", apiKey)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok"})
+	}))
+	defer mockServer.Close()
+
+	// Set env var for auth
+	t.Setenv("TEST_API_KEY", "test-api-key-456")
+
+	// Create test configuration with header auth
+	configYAML := `
+upstreams:
+  test:
+    url: ` + mockServer.URL + `
+    auth:
+      header:
+        name: "X-API-Key"
+        value: "${TEST_API_KEY}"
+
+compositions:
+  api:
+    path: /api/data
+    method: GET
+    steps:
+      - name: data
+        upstream: test
+        path: /data
+    response:
+      status: 200
+      body:
+        data: "{{ steps.data.body }}"
+`
+
+	cfg, err := ParseConfig([]byte(configYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	compiledCfg, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig failed: %v", err)
+	}
+
+	// Create handler
+	handler := NewHandler(compiledCfg, &http.Client{})
+
+	// Create router and register routes
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+
+	// Request (no client auth needed for header auth)
+	req := httptest.NewRequest("GET", "/api/data", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	// Should return 200 OK
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+}
