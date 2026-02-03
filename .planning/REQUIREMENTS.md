@@ -49,10 +49,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Observability
 
-- [ ] **OBS-01**: Structured JSON logging for all requests
-- [ ] **OBS-02**: Logs include request ID, method, path, status, duration
-- [ ] **OBS-03**: Per-step timing logged (which step took how long)
-- [ ] **OBS-04**: DAG execution order logged for debugging
+- [x] **OBS-01**: Structured JSON logging for all requests
+- [x] **OBS-02**: Logs include request ID, method, path, status, duration
+- [x] **OBS-03**: Per-step timing logged (which step took how long)
+- [x] **OBS-04**: DAG execution order logged for debugging
 
 ## v2 Requirements
 
@@ -132,10 +132,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ERR-03 | Phase 4 - Error Handling & Resilience | Complete |
 | ERR-04 | Phase 4 - Error Handling & Resilience | Complete |
 | ERR-05 | Phase 4 - Error Handling & Resilience | Complete |
-| OBS-01 | Phase 5 - Observability | Pending |
-| OBS-02 | Phase 5 - Observability | Pending |
-| OBS-03 | Phase 5 - Observability | Pending |
-| OBS-04 | Phase 5 - Observability | Pending |
+| OBS-01 | Phase 5 - Observability | Complete |
+| OBS-02 | Phase 5 - Observability | Complete |
+| OBS-03 | Phase 5 - Observability | Complete |
+| OBS-04 | Phase 5 - Observability | Complete |
 
 **Coverage:**
 - v1 requirements: 32 total
@@ -152,4 +152,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 4 complete - 28 requirements verified)*
+*Last updated: 2026-02-03 (Phase 5 complete - all 32 requirements verified)*
