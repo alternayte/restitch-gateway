@@ -51,11 +51,8 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 		return nil, fmt.Errorf("composition %q not found", compositionName)
 	}
 
-	// Build execution plan from DAG
-	plan, err := BuildDAG(comp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build execution plan: %w", err)
-	}
+	// Use pre-built execution plan (validated at config parse time)
+	plan := comp.ExecutionPlan
 
 	// Log execution plan at debug level (optional for Phase 2)
 	slog.Debug("executing composition",

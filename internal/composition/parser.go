@@ -53,8 +53,9 @@ type CompiledConfig struct {
 
 // CompiledComposition holds compiled expressions for a single composition.
 type CompiledComposition struct {
-	Steps    map[string]*CompiledStep
-	Response *CompiledResponse
+	Steps         map[string]*CompiledStep
+	Response      *CompiledResponse
+	ExecutionPlan *ExecutionPlan // Pre-built DAG execution plan (validated at parse time)
 }
 
 // CompiledStep holds a step definition plus its compiled expressions.
@@ -128,6 +129,13 @@ func compileComposition(comp *Composition) (*CompiledComposition, error) {
 		return nil, fmt.Errorf("response: %w", err)
 	}
 	compiledComp.Response = compiledResp
+
+	// Build and validate DAG execution plan at parse time
+	executionPlan, err := BuildDAG(compiledComp)
+	if err != nil {
+		return nil, fmt.Errorf("invalid composition structure: %w", err)
+	}
+	compiledComp.ExecutionPlan = executionPlan
 
 	return compiledComp, nil
 }
