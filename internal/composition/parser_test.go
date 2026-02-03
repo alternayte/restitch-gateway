@@ -364,3 +364,79 @@ compositions:
 		t.Error("expected orders expression to be compiled")
 	}
 }
+
+func TestCompileConfig_CircularDependency(t *testing.T) {
+	yaml := `
+upstreams:
+  api:
+    url: "http://localhost:8080"
+
+compositions:
+  test:
+    path: "/test"
+    method: GET
+    steps:
+      - name: a
+        upstream: api
+        path: "/a/{{ steps.b.body.id }}"
+        method: GET
+      - name: b
+        upstream: api
+        path: "/b/{{ steps.a.body.id }}"
+        method: GET
+    response:
+      status: 200
+      body:
+        result: ok
+      content_type: application/json
+`
+
+	cfg, err := ParseConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	_, err = CompileConfig(cfg)
+	if err == nil {
+		t.Fatal("expected error for circular dependency, got nil")
+	}
+	if !strings.Contains(err.Error(), "circular dependency") {
+		t.Errorf("expected 'circular dependency' error, got: %v", err)
+	}
+}
+
+func TestCompileConfig_MissingStepReference(t *testing.T) {
+	yaml := `
+upstreams:
+  api:
+    url: "http://localhost:8080"
+
+compositions:
+  test:
+    path: "/test"
+    method: GET
+    steps:
+      - name: a
+        upstream: api
+        path: "/a/{{ steps.nonexistent.body.id }}"
+        method: GET
+    response:
+      status: 200
+      body:
+        result: ok
+      content_type: application/json
+`
+
+	cfg, err := ParseConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	_, err = CompileConfig(cfg)
+	if err == nil {
+		t.Fatal("expected error for missing step reference, got nil")
+	}
+	if !strings.Contains(err.Error(), "non-existent") && !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'non-existent' or 'not found' error, got: %v", err)
+	}
+}
