@@ -40,12 +40,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Gateway Core
 
-- [ ] **GATE-01**: Gateway routes requests by path pattern to compositions
-- [ ] **GATE-02**: Gateway routes requests by HTTP method
-- [ ] **GATE-03**: Gateway terminates TLS (HTTPS support)
-- [ ] **GATE-04**: Gateway exposes /health endpoint for liveness checks
-- [ ] **GATE-05**: Gateway exposes /ready endpoint for readiness checks
-- [ ] **GATE-06**: Gateway drains connections gracefully on shutdown signal
+- [x] **GATE-01**: Gateway routes requests by path pattern to compositions
+- [x] **GATE-02**: Gateway routes requests by HTTP method
+- [x] **GATE-03**: Gateway terminates TLS (HTTPS support)
+- [x] **GATE-04**: Gateway exposes /health endpoint for liveness checks
+- [x] **GATE-05**: Gateway exposes /ready endpoint for readiness checks
+- [x] **GATE-06**: Gateway drains connections gracefully on shutdown signal
 
 ### Observability
 
@@ -104,12 +104,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GATE-01 | Phase 1 - Gateway Foundation | Pending |
-| GATE-02 | Phase 1 - Gateway Foundation | Pending |
-| GATE-03 | Phase 1 - Gateway Foundation | Pending |
-| GATE-04 | Phase 1 - Gateway Foundation | Pending |
-| GATE-05 | Phase 1 - Gateway Foundation | Pending |
-| GATE-06 | Phase 1 - Gateway Foundation | Pending |
+| GATE-01 | Phase 1 - Gateway Foundation | Complete |
+| GATE-02 | Phase 1 - Gateway Foundation | Complete |
+| GATE-03 | Phase 1 - Gateway Foundation | Complete |
+| GATE-04 | Phase 1 - Gateway Foundation | Complete |
+| GATE-05 | Phase 1 - Gateway Foundation | Complete |
+| GATE-06 | Phase 1 - Gateway Foundation | Complete |
 | COMP-01 | Phase 2 - Composition Engine | Pending |
 | COMP-02 | Phase 2 - Composition Engine | Pending |
 | COMP-03 | Phase 2 - Composition Engine | Pending |
@@ -152,4 +152,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 after roadmap creation*
+*Last updated: 2026-02-03 (Phase 1 complete - 6 requirements verified)*
