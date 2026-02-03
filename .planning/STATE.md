@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-02-03
 **Current Phase:** 3 - Upstream Authentication (IN PROGRESS)
-**Current Plan:** 01 of 05 complete
-**Status:** Phase 3 in progress - authentication foundation complete
+**Current Plan:** 02 of 05 complete
+**Status:** Phase 3 in progress - header and basic auth strategies complete
 
 ## Project Reference
 
@@ -11,35 +11,34 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 3 IN PROGRESS. Building authentication strategies for upstream services. Foundation complete (env var expansion, Strategy interface, config schema).
+**Current Focus:** Phase 3 IN PROGRESS. Building authentication strategies for upstream services. Header (AUTH-01) and Basic (AUTH-02) strategies complete.
 
 ## Current Position
 
 **Phase:** 3 of 5 (Upstream Authentication) - IN PROGRESS
-**Plan:** 01 of 05 complete
-**Status:** Authentication foundation complete
-**Last activity:** 2026-02-03 - Completed 03-01-PLAN.md (Auth foundation: env expansion, Strategy interface, config schema)
+**Plan:** 02 of 05 complete
+**Status:** Header and basic auth strategies complete
+**Last activity:** 2026-02-03 - Completed 03-02-PLAN.md (Header and Basic auth strategies)
 
 **Progress:**
 ```
-[##################                                ] 37% (12/32)
-Phase 3 plan 1 complete - auth foundation established
+[###################                               ] 40% (13/32)
+Phase 3 plan 2 complete - header and basic auth working
 ```
 
 **Next Actions:**
-1. Execute Plan 03-02 (Header authentication strategy)
-2. Execute Plan 03-03 (Basic authentication strategy)
-3. Execute Plan 03-04 (Passthrough authentication strategy)
-4. Execute Plan 03-05 (OAuth2 client credentials strategy)
+1. Execute Plan 03-03 (Passthrough authentication strategy) - NOTE: May already be done
+2. Execute Plan 03-04 (OAuth2 client credentials strategy)
+3. Execute Plan 03-05 (Integration and factory pattern)
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) - COMPLETE
 - Phase 2: 11/11 requirements (100%) - COMPLETE
-- Phase 3: 1/6 requirements (17%) - IN PROGRESS
+- Phase 3: 2/6 requirements (33%) - IN PROGRESS
 - Phase 4: 0/5 requirements (0%)
 - Phase 5: 0/4 requirements (0%)
 
@@ -121,6 +120,12 @@ Phase 3 plan 1 complete - auth foundation established
 - Decision: Config.Validate() enforces exactly one strategy per upstream (mutual exclusivity)
 - Rationale: Fail-fast validation catches missing secrets at startup not runtime; Strategy interface with RoundTripper pattern follows Go HTTP middleware conventions; mutual exclusivity prevents config confusion
 
+**2026-02-03 - Plan 03-02 Execution (Header and Basic Auth)**
+- Decision: Request cloning before header modification for retry safety
+- Decision: Env var expansion at strategy creation time, not per-request
+- Decision: Use stdlib SetBasicAuth instead of hand-rolling base64 encoding
+- Rationale: Cloning prevents duplicate headers on retries; fail-fast philosophy extends to credential resolution; stdlib functions are tested and secure
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -139,10 +144,10 @@ Phase 3 plan 1 complete - auth foundation established
 - [x] Verify Phase 2 complete with all issues resolved
 - [x] Begin Phase 3 planning (Authentication)
 - [x] Execute Plan 03-01 (Auth foundation: env expansion, Strategy interface, config schema)
-- [ ] Execute Plan 03-02 (Header authentication strategy)
-- [ ] Execute Plan 03-03 (Basic authentication strategy)
-- [ ] Execute Plan 03-04 (Passthrough authentication strategy)
-- [ ] Execute Plan 03-05 (OAuth2 client credentials strategy)
+- [x] Execute Plan 03-02 (Header and Basic authentication strategies)
+- [ ] Execute Plan 03-03 (Passthrough authentication strategy) - NOTE: May already be committed
+- [ ] Execute Plan 03-04 (OAuth2 client credentials strategy)
+- [ ] Execute Plan 03-05 (Integration and factory pattern)
 
 ### Known Blockers
 
@@ -160,33 +165,30 @@ None identified.
 
 ### What Just Happened
 
-Phase 3 Plan 01 COMPLETE - Authentication foundation established:
+Phase 3 Plan 02 COMPLETE - Header and Basic auth strategies implemented:
 
-Plan 03-01 deliverables:
-- ExpandEnvWithValidation function for ${VAR} expansion with fail-fast validation (internal/config/env.go)
-- Strategy interface with RoundTripper pattern for auth injection (internal/auth/auth.go)
-- Config types for all four strategies: header, basic, passthrough, oauth2
-- NoneStrategy for default no-auth behavior
-- Upstream struct extended with Auth field (internal/composition/config.go)
-- Config.Validate() enforces mutual exclusivity (one strategy per upstream)
+Plan 03-02 deliverables:
+- HeaderStrategy with RoundTripper pattern (internal/auth/header.go)
+- BasicStrategy with SetBasicAuth (internal/auth/basic.go)
+- Comprehensive tests for env var expansion and request cloning
+- Both strategies clone requests before modification (retry safe)
 
 Commits:
-- d941770: Environment variable expansion with validation
-- 45a3189: Auth strategy interface and config types
-- 07cea95: Auth configuration in upstream config schema
+- cea63ce: Header authentication strategy
+- 598ae7c: Basic authentication strategy
 
 Patterns established:
-- Strategy interface: RoundTripper(base) http.RoundTripper
-- Env var syntax: ${VAR_NAME} with alphanumeric and underscore
-- Fail-fast validation: startup errors not runtime errors
+- RoundTripper wrapper: clone request, modify, delegate to base
+- Factory function validates env vars before returning strategy
+
+Note: Passthrough strategy (501f959) was committed between header and basic - appears to be from previous session.
 
 ### What's Next
 
-Phase 3 continues with individual strategy implementations:
-- Execute Plan 03-02 (Header authentication - static header injection)
-- Execute Plan 03-03 (Basic authentication - HTTP Basic Auth)
-- Execute Plan 03-04 (Passthrough authentication - forward client auth)
-- Execute Plan 03-05 (OAuth2 client credentials - automatic token refresh)
+Phase 3 continues with remaining strategies:
+- Check if Plan 03-03 (Passthrough) needs execution or is already done
+- Execute Plan 03-04 (OAuth2 client credentials - token management)
+- Execute Plan 03-05 (Integration - factory pattern, upstream client wiring)
 
 ### Context for Next Session
 
@@ -195,7 +197,7 @@ If returning after break:
 2. Review "Active TODOs" for immediate next actions
 3. Check "Known Blockers" for anything preventing progress
 4. Review `.planning/ROADMAP.md` for full phase structure
-5. Review completed summary at `.planning/phases/03-upstream-authentication/03-01-SUMMARY.md`
+5. Review completed summaries at `.planning/phases/03-upstream-authentication/03-0*-SUMMARY.md`
 
 Key files:
 - `.planning/ROADMAP.md` - Phase structure and success criteria
@@ -203,6 +205,7 @@ Key files:
 - `.planning/phases/03-upstream-authentication/03-CONTEXT.md` - Phase 3 decisions
 - `.planning/phases/03-upstream-authentication/03-RESEARCH.md` - OAuth2 and auth patterns
 - `.planning/phases/03-upstream-authentication/03-01-SUMMARY.md` - Auth foundation summary
+- `.planning/phases/03-upstream-authentication/03-02-SUMMARY.md` - Header/Basic auth summary
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint with composition config loading
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
@@ -210,6 +213,8 @@ Key files:
 - `internal/composition/` - Complete composition engine with parse-time validation
 - `internal/config/env.go` - Environment variable expansion with validation
 - `internal/auth/auth.go` - Strategy interface and config types
+- `internal/auth/header.go` - HeaderStrategy implementation
+- `internal/auth/basic.go` - BasicStrategy implementation
 
 ---
 
