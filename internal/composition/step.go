@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/restitch/restitch-gateway/internal/client"
@@ -21,7 +23,29 @@ type StepResult struct {
 	RawBody []byte                 // Original response body
 }
 
-// ExecuteStep executes a single step by making HTTP request to upstream.
+// ExecuteStep executes a single step with timeout hierarchy resolution.
+// This is a wrapper that resolves timeout (step > upstream > default) and
+// calls ExecuteStepWithTimeout.
+func ExecuteStep(ctx context.Context, step *CompiledStep, upstream *CompiledUpstream, env map[string]interface{}, baseClient *http.Client) (*StepResult, error) {
+	// Resolve timeout: step > upstream > default
+	timeout := resolveTimeout(step, upstream)
+	return ExecuteStepWithTimeout(ctx, step, upstream, env, baseClient, timeout)
+}
+
+// resolveTimeout resolves the timeout for a step using the hierarchy:
+// step timeout > upstream default timeout > global default (30s)
+func resolveTimeout(step *CompiledStep, upstream *CompiledUpstream) time.Duration {
+	if step.Step.Timeout != nil && *step.Step.Timeout > 0 {
+		return *step.Step.Timeout
+	}
+	if upstream.Timeout > 0 {
+		return upstream.Timeout
+	}
+	return DefaultStepTimeout
+}
+
+// ExecuteStepWithTimeout executes a single step by making HTTP request to upstream
+// with the specified timeout.
 // It evaluates expressions for the request, builds the HTTP request with proper
 // context propagation, executes it, and returns the parsed result.
 //
@@ -36,8 +60,22 @@ type StepResult struct {
 //   - Creates new http.Client per request (reuses underlying transport connection pool)
 //   - Auth RoundTripper injects credentials (header, basic, bearer, or passthrough)
 //
+// Timeout handling:
+//   - Creates step context with timeout derived from parent context
+//   - Timeout errors are distinguished via context.DeadlineExceeded
+//
 // Per RESEARCH.md Pitfall 7: ALWAYS use http.NewRequestWithContext for cancellation.
-func ExecuteStep(ctx context.Context, step *CompiledStep, upstream *CompiledUpstream, env map[string]interface{}, baseClient *http.Client) (*StepResult, error) {
+func ExecuteStepWithTimeout(
+	parentCtx context.Context,
+	step *CompiledStep,
+	upstream *CompiledUpstream,
+	env map[string]interface{},
+	baseClient *http.Client,
+	timeout time.Duration,
+) (*StepResult, error) {
+	// Create step context with timeout derived from parent
+	stepCtx, cancel := context.WithTimeout(parentCtx, timeout)
+	defer cancel() // CRITICAL: Always release resources per RESEARCH.md
 	// Evaluate path expression
 	path, err := evaluatePath(step.PathExpr, env)
 	if err != nil {
@@ -57,8 +95,8 @@ func ExecuteStep(ctx context.Context, step *CompiledStep, upstream *CompiledUpst
 		body = bytes.NewReader(bodyContent)
 	}
 
-	// Create HTTP request with context (CRITICAL for cancellation)
-	req, err := http.NewRequestWithContext(ctx, step.Step.Method, url, body)
+	// Create HTTP request with step context (CRITICAL for timeout and cancellation)
+	req, err := http.NewRequestWithContext(stepCtx, step.Step.Method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -101,6 +139,10 @@ func ExecuteStep(ctx context.Context, step *CompiledStep, upstream *CompiledUpst
 	// Execute request using the HTTP client (potentially with auth)
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		// Check for timeout specifically per RESEARCH.md Pitfall 6
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("timeout after %v: %w", timeout, err)
+		}
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer client.DrainAndClose(resp.Body) // CRITICAL: Always drain for connection reuse
