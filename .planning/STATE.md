@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-02-03
 **Current Phase:** 3 - Upstream Authentication (IN PROGRESS)
-**Current Plan:** 03 of 05 complete
-**Status:** Phase 3 in progress - passthrough strategy complete
+**Current Plan:** 04 of 05 complete
+**Status:** Phase 3 in progress - OAuth2 strategy complete
 
 ## Project Reference
 
@@ -11,33 +11,32 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 3 IN PROGRESS. Building authentication strategies for upstream services. Foundation, header, basic, and passthrough strategies complete.
+**Current Focus:** Phase 3 IN PROGRESS. Building authentication strategies for upstream services. All individual strategies complete (header, basic, passthrough, OAuth2). Factory integration remaining.
 
 ## Current Position
 
 **Phase:** 3 of 5 (Upstream Authentication) - IN PROGRESS
-**Plan:** 03 of 05 complete
-**Status:** Passthrough authentication complete
-**Last activity:** 2026-02-03 - Completed 03-03-PLAN.md (Passthrough authentication strategy)
+**Plan:** 04 of 05 complete
+**Status:** OAuth2 client credentials strategy complete
+**Last activity:** 2026-02-03 - Completed 03-04-PLAN.md (OAuth2 client credentials strategy)
 
 **Progress:**
 ```
-[####################                              ] 44% (14/32)
-Phase 3 plans 1-3 complete - header, basic, passthrough strategies done
+[#######################                           ] 47% (15/32)
+Phase 3 plans 1-4 complete - all auth strategies done, factory remaining
 ```
 
 **Next Actions:**
-1. Execute Plan 03-04 (OAuth2 client credentials strategy)
-2. Execute Plan 03-05 (Strategy factory and integration)
+1. Execute Plan 03-05 (Strategy factory and integration)
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) - COMPLETE
 - Phase 2: 11/11 requirements (100%) - COMPLETE
-- Phase 3: 3/6 requirements (50%) - IN PROGRESS
+- Phase 3: 5/6 requirements (83%) - IN PROGRESS
 - Phase 4: 0/5 requirements (0%)
 - Phase 5: 0/4 requirements (0%)
 
@@ -131,6 +130,12 @@ Phase 3 plans 1-3 complete - header, basic, passthrough strategies done
 - Decision: IsMissingAuthHeaderError helper for handler-layer error detection
 - Rationale: Per RESEARCH.md Pitfall 5 - don't forward unauthenticated requests to upstreams that expect authentication; handler layer needs clean error detection for 401 response
 
+**2026-02-03 - Plan 03-04 Execution (OAuth2 Strategy)**
+- Decision: 30-second expiry buffer per CONTEXT.md (fixed, not percentage-based)
+- Decision: Initial token fetch at startup for fail-fast credential validation
+- Decision: Singleflight for concurrent token refresh deduplication
+- Rationale: Per RESEARCH.md patterns - ReuseTokenSourceWithExpiry for configurable buffer, singleflight.Group.Do() prevents thundering herd during concurrent requests
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -151,7 +156,7 @@ Phase 3 plans 1-3 complete - header, basic, passthrough strategies done
 - [x] Execute Plan 03-01 (Auth foundation: env expansion, Strategy interface, config schema)
 - [x] Execute Plan 03-02 (Header and Basic authentication strategies)
 - [x] Execute Plan 03-03 (Passthrough authentication strategy)
-- [ ] Execute Plan 03-04 (OAuth2 client credentials strategy)
+- [x] Execute Plan 03-04 (OAuth2 client credentials strategy)
 - [ ] Execute Plan 03-05 (Strategy factory and integration)
 
 ### Known Blockers
@@ -170,28 +175,30 @@ None identified.
 
 ### What Just Happened
 
-Phase 3 Plan 03 COMPLETE - Passthrough authentication strategy:
+Phase 3 Plan 04 COMPLETE - OAuth2 client credentials strategy:
 
-Plan 03-03 deliverables:
-- PassthroughStrategy implementing auth.Strategy (internal/auth/passthrough.go)
-- ErrMissingAuthHeader sentinel error for missing client auth
-- IsMissingAuthHeaderError helper function for handler layer
-- Tests for Bearer, Basic, custom schemes, and error cases
-- Package documentation with example error handling code
+Plan 03-04 deliverables:
+- OAuth2Strategy implementing auth.Strategy (internal/auth/oauth2.go)
+- Token caching with ReuseTokenSourceWithExpiry (30-second early refresh)
+- Singleflight protection against thundering herd during concurrent refresh
+- Initial token fetch at startup for fail-fast validation
+- Comprehensive test coverage (token injection, caching, refresh, singleflight)
+- Added golang.org/x/oauth2 v0.34.0 dependency
 
 Commits:
-- 501f959: Implement passthrough authentication strategy
-- dead09c: Add passthrough error handling documentation
+- 1afd91a: Add OAuth2 and singleflight dependencies
+- 5502e37: Implement OAuth2 client credentials strategy
 
 Patterns established:
-- Passthrough auth: reject at RoundTripper, return 401 at handler layer
-- Sentinel errors for auth failures with Is() helper functions
+- OAuth2 token lifecycle: ReuseTokenSourceWithExpiry with 30s buffer
+- Thundering herd prevention: singleflight.Group.Do() wrapping TokenSource.Token()
 
 ### What's Next
 
-Phase 3 continues with OAuth2 strategy:
-- Execute Plan 03-04 (OAuth2 client credentials - automatic token refresh)
+Phase 3 final plan:
 - Execute Plan 03-05 (Strategy factory and integration)
+
+After 03-05: Phase 3 complete, begin Phase 4 (Resilience)
 
 ### Context for Next Session
 
@@ -207,7 +214,7 @@ Key files:
 - `.planning/REQUIREMENTS.md` - All 32 v1 requirements with traceability
 - `.planning/phases/03-upstream-authentication/03-CONTEXT.md` - Phase 3 decisions
 - `.planning/phases/03-upstream-authentication/03-RESEARCH.md` - OAuth2 and auth patterns
-- `.planning/phases/03-upstream-authentication/03-03-SUMMARY.md` - Passthrough strategy summary
+- `.planning/phases/03-upstream-authentication/03-04-SUMMARY.md` - OAuth2 strategy summary
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint with composition config loading
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
@@ -215,7 +222,7 @@ Key files:
 - `internal/composition/` - Complete composition engine with parse-time validation
 - `internal/config/env.go` - Environment variable expansion with validation
 - `internal/auth/auth.go` - Strategy interface and config types
-- `internal/auth/passthrough.go` - Passthrough strategy with ErrMissingAuthHeader
+- `internal/auth/oauth2.go` - OAuth2 client credentials strategy with singleflight
 
 ---
 
