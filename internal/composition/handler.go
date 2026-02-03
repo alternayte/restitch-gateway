@@ -129,7 +129,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("composition complete",
 		"composition", compositionName,
-		"status", response.Status)
+		"status", response.Status,
+		"partial", result.IsPartial,
+		"errors", len(result.StepErrors))
 }
 
 // matchComposition finds the composition name for a given path and method.
