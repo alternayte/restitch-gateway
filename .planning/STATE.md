@@ -1,9 +1,9 @@
 # Project State: Restitch
 
 **Last Updated:** 2026-02-03
-**Current Phase:** 2 - Composition Engine (COMPLETE + GAP CLOSED)
-**Current Plan:** 05 of 05 complete (gap closure)
-**Status:** Phase 2 complete - all 11 composition requirements satisfied, validation timing fixed
+**Current Phase:** 3 - Upstream Authentication (IN PROGRESS)
+**Current Plan:** 01 of 05 complete
+**Status:** Phase 3 in progress - authentication foundation complete
 
 ## Project Reference
 
@@ -11,34 +11,35 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 2 COMPLETE. Full composition engine with YAML config, expression compilation, DAG execution, response merging, and HTTP handler integration. Ready for Phase 3 (Authentication).
+**Current Focus:** Phase 3 IN PROGRESS. Building authentication strategies for upstream services. Foundation complete (env var expansion, Strategy interface, config schema).
 
 ## Current Position
 
-**Phase:** 2 of 5 (Composition Engine) - COMPLETE + GAP CLOSED
-**Plan:** 05 of 05 complete
-**Status:** Phase 2 complete with validation timing fix
-**Last activity:** 2026-02-03 - Completed 02-05-PLAN.md (Validation timing fix for circular dependencies and missing step references)
+**Phase:** 3 of 5 (Upstream Authentication) - IN PROGRESS
+**Plan:** 01 of 05 complete
+**Status:** Authentication foundation complete
+**Last activity:** 2026-02-03 - Completed 03-01-PLAN.md (Auth foundation: env expansion, Strategy interface, config schema)
 
 **Progress:**
 ```
-[################                                  ] 34% (11/32)
-Phase 2 gap closed - validation timing bugs fixed
+[##################                                ] 37% (12/32)
+Phase 3 plan 1 complete - auth foundation established
 ```
 
 **Next Actions:**
-1. Begin Phase 3 planning (Authentication)
-2. Run `/gsd:discuss-phase 3` to gather context
-3. Run `/gsd:plan-phase 3` to create execution plans
+1. Execute Plan 03-02 (Header authentication strategy)
+2. Execute Plan 03-03 (Basic authentication strategy)
+3. Execute Plan 03-04 (Passthrough authentication strategy)
+4. Execute Plan 03-05 (OAuth2 client credentials strategy)
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks)
 
 **Phase Completion:**
-- Phase 1: 6/6 requirements (100%) ✓ VERIFIED
-- Phase 2: 11/11 requirements (100%) ✓ COMPLETE - All COMP-01 through COMP-11
-- Phase 3: 0/6 requirements (0%)
+- Phase 1: 6/6 requirements (100%) - COMPLETE
+- Phase 2: 11/11 requirements (100%) - COMPLETE
+- Phase 3: 1/6 requirements (17%) - IN PROGRESS
 - Phase 4: 0/5 requirements (0%)
 - Phase 5: 0/4 requirements (0%)
 
@@ -113,6 +114,13 @@ Phase 2 gap closed - validation timing bugs fixed
 - Decision: Invalid configs prevent gateway startup with clear error messages
 - Rationale: UAT tests 9 and 10 revealed validation timing bug - circular dependencies and missing step references were detected at request time instead of startup; moving BuildDAG to compileComposition() fixed both issues per CONTEXT.md fail-fast principle
 
+**2026-02-03 - Plan 03-01 Execution (Auth Foundation)**
+- Decision: ExpandEnvWithValidation validates ALL ${VAR} references before any expansion
+- Decision: Empty env var treated as error (not just missing) for security
+- Decision: NoneStrategy as default passthrough (base RoundTripper unchanged)
+- Decision: Config.Validate() enforces exactly one strategy per upstream (mutual exclusivity)
+- Rationale: Fail-fast validation catches missing secrets at startup not runtime; Strategy interface with RoundTripper pattern follows Go HTTP middleware conventions; mutual exclusivity prevents config confusion
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -129,7 +137,12 @@ Phase 2 gap closed - validation timing bugs fixed
 - [x] Diagnose Phase 2 UAT gaps (Tests 9 and 10 - validation timing bugs)
 - [x] Execute Plan 02-05 (Gap closure - move validation to parse-time)
 - [x] Verify Phase 2 complete with all issues resolved
-- [ ] Begin Phase 3 planning (Authentication)
+- [x] Begin Phase 3 planning (Authentication)
+- [x] Execute Plan 03-01 (Auth foundation: env expansion, Strategy interface, config schema)
+- [ ] Execute Plan 03-02 (Header authentication strategy)
+- [ ] Execute Plan 03-03 (Basic authentication strategy)
+- [ ] Execute Plan 03-04 (Passthrough authentication strategy)
+- [ ] Execute Plan 03-05 (OAuth2 client credentials strategy)
 
 ### Known Blockers
 
@@ -138,8 +151,8 @@ None identified.
 ### Research Flags
 
 **Phase 1:** SKIP research (standard Go patterns, well-documented) - COMPLETE
-**Phase 2:** SKIP research (Expr and YAML libraries have excellent docs)
-**Phase 3:** MAY NEED research for OAuth2 edge cases (concurrent token refresh, cache invalidation)
+**Phase 2:** SKIP research (Expr and YAML libraries have excellent docs) - COMPLETE
+**Phase 3:** Research COMPLETE - OAuth2 patterns documented in 03-RESEARCH.md
 **Phase 4:** MAY NEED research for partial response UX (200 vs 207 Multi-Status decision)
 **Phase 5:** SKIP research (standard observability patterns)
 
@@ -147,33 +160,33 @@ None identified.
 
 ### What Just Happened
 
-Phase 2 COMPLETE with gap closure - All 11 composition requirements satisfied, validation timing bugs fixed:
+Phase 3 Plan 01 COMPLETE - Authentication foundation established:
 
-Plan 02-05 deliverables (Gap Closure):
-- DAG validation moved from request-time to parse-time (internal/composition/parser.go)
-- ExecutionPlan pre-built and stored in CompiledComposition (eliminates redundant DAG builds)
-- Gateway fails to start on circular dependencies with clear error message
-- Gateway fails to start on missing step references with clear error message
-- Tests verify startup-time validation (internal/composition/parser_test.go)
+Plan 03-01 deliverables:
+- ExpandEnvWithValidation function for ${VAR} expansion with fail-fast validation (internal/config/env.go)
+- Strategy interface with RoundTripper pattern for auth injection (internal/auth/auth.go)
+- Config types for all four strategies: header, basic, passthrough, oauth2
+- NoneStrategy for default no-auth behavior
+- Upstream struct extended with Auth field (internal/composition/config.go)
+- Config.Validate() enforces mutual exclusivity (one strategy per upstream)
 
 Commits:
-- c6f311b: Move BuildDAG from request-time to parse-time
-- 3f18df0: Add tests for startup validation failures
+- d941770: Environment variable expansion with validation
+- 45a3189: Auth strategy interface and config types
+- 07cea95: Auth configuration in upstream config schema
 
-UAT Issues Resolved:
-- Test 9 (Circular dependency detected at startup): FIXED - BuildDAG now called during CompileConfig()
-- Test 10 (Missing step reference detected at startup): FIXED - validateDependencies runs at parse-time
-
-Phase 2 requirements satisfied:
-- COMP-01 through COMP-11: All ✓ (previously completed)
-- UAT tests 9 and 10: ✓ (fixed in 02-05)
+Patterns established:
+- Strategy interface: RoundTripper(base) http.RoundTripper
+- Env var syntax: ${VAR_NAME} with alphanumeric and underscore
+- Fail-fast validation: startup errors not runtime errors
 
 ### What's Next
 
-Phase 3: Authentication
-- Gather context via `/gsd:discuss-phase 3`
-- Create execution plans via `/gsd:plan-phase 3`
-- Implement auth requirements (AUTH-01 through AUTH-06)
+Phase 3 continues with individual strategy implementations:
+- Execute Plan 03-02 (Header authentication - static header injection)
+- Execute Plan 03-03 (Basic authentication - HTTP Basic Auth)
+- Execute Plan 03-04 (Passthrough authentication - forward client auth)
+- Execute Plan 03-05 (OAuth2 client credentials - automatic token refresh)
 
 ### Context for Next Session
 
@@ -182,18 +195,21 @@ If returning after break:
 2. Review "Active TODOs" for immediate next actions
 3. Check "Known Blockers" for anything preventing progress
 4. Review `.planning/ROADMAP.md` for full phase structure
-5. Review completed summaries at `.planning/phases/02-composition-engine/02-*-SUMMARY.md`
+5. Review completed summary at `.planning/phases/03-upstream-authentication/03-01-SUMMARY.md`
 
 Key files:
 - `.planning/ROADMAP.md` - Phase structure and success criteria
 - `.planning/REQUIREMENTS.md` - All 32 v1 requirements with traceability
-- `.planning/phases/02-composition-engine/02-RESEARCH.md` - Phase 2 research findings
-- `.planning/phases/02-composition-engine/02-05-SUMMARY.md` - Validation timing fix summary
+- `.planning/phases/03-upstream-authentication/03-CONTEXT.md` - Phase 3 decisions
+- `.planning/phases/03-upstream-authentication/03-RESEARCH.md` - OAuth2 and auth patterns
+- `.planning/phases/03-upstream-authentication/03-01-SUMMARY.md` - Auth foundation summary
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint with composition config loading
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
 - `internal/client/` - HTTP client with optimized connection pooling
-- `internal/composition/` - Complete composition engine with parse-time validation (config, expressions, DAG, execution, response merging, HTTP handler)
+- `internal/composition/` - Complete composition engine with parse-time validation
+- `internal/config/env.go` - Environment variable expansion with validation
+- `internal/auth/auth.go` - Strategy interface and config types
 
 ---
 
