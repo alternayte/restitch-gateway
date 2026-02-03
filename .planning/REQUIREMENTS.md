@@ -23,12 +23,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Upstream Authentication
 
-- [ ] **AUTH-01**: Upstream auth strategy: header (static API key/token injection)
-- [ ] **AUTH-02**: Upstream auth strategy: basic (username/password)
-- [ ] **AUTH-03**: Upstream auth strategy: passthrough (forward caller's auth header)
-- [ ] **AUTH-04**: Upstream auth strategy: oauth2_client_credentials
-- [ ] **AUTH-05**: OAuth2 tokens are cached and auto-refreshed before expiry
-- [ ] **AUTH-06**: Each upstream can have its own auth configuration
+- [x] **AUTH-01**: Upstream auth strategy: header (static API key/token injection)
+- [x] **AUTH-02**: Upstream auth strategy: basic (username/password)
+- [x] **AUTH-03**: Upstream auth strategy: passthrough (forward caller's auth header)
+- [x] **AUTH-04**: Upstream auth strategy: oauth2_client_credentials
+- [x] **AUTH-05**: OAuth2 tokens are cached and auto-refreshed before expiry
+- [x] **AUTH-06**: Each upstream can have its own auth configuration
 
 ### Error Handling
 
@@ -121,12 +121,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMP-09 | Phase 2 - Composition Engine | Complete |
 | COMP-10 | Phase 2 - Composition Engine | Complete |
 | COMP-11 | Phase 2 - Composition Engine | Complete |
-| AUTH-01 | Phase 3 - Upstream Authentication | Pending |
-| AUTH-02 | Phase 3 - Upstream Authentication | Pending |
-| AUTH-03 | Phase 3 - Upstream Authentication | Pending |
-| AUTH-04 | Phase 3 - Upstream Authentication | Pending |
-| AUTH-05 | Phase 3 - Upstream Authentication | Pending |
-| AUTH-06 | Phase 3 - Upstream Authentication | Pending |
+| AUTH-01 | Phase 3 - Upstream Authentication | Complete |
+| AUTH-02 | Phase 3 - Upstream Authentication | Complete |
+| AUTH-03 | Phase 3 - Upstream Authentication | Complete |
+| AUTH-04 | Phase 3 - Upstream Authentication | Complete |
+| AUTH-05 | Phase 3 - Upstream Authentication | Complete |
+| AUTH-06 | Phase 3 - Upstream Authentication | Complete |
 | ERR-01 | Phase 4 - Error Handling & Resilience | Pending |
 | ERR-02 | Phase 4 - Error Handling & Resilience | Pending |
 | ERR-03 | Phase 4 - Error Handling & Resilience | Pending |
@@ -152,4 +152,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 2 complete - 17 requirements verified)*
+*Last updated: 2026-02-03 (Phase 3 complete - 23 requirements verified)*

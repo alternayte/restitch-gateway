@@ -104,13 +104,14 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 5. User can observe OAuth2 tokens reused across requests (not fetched every time) and refreshed before expiry
 
 **Plans:** 5 plans
-- [ ] 03-01-PLAN.md — Environment variable validation, auth config schema, strategy interface
-- [ ] 03-02-PLAN.md — Header and basic auth strategies with RoundTripper pattern
-- [ ] 03-03-PLAN.md — Passthrough auth strategy with missing header handling
-- [ ] 03-04-PLAN.md — OAuth2 client credentials with token caching and singleflight
-- [ ] 03-05-PLAN.md — Integration wiring: auth strategies into composition engine
+- [x] 03-01-PLAN.md — Environment variable validation, auth config schema, strategy interface
+- [x] 03-02-PLAN.md — Header and basic auth strategies with RoundTripper pattern
+- [x] 03-03-PLAN.md — Passthrough auth strategy with missing header handling
+- [x] 03-04-PLAN.md — OAuth2 client credentials with token caching and singleflight
+- [x] 03-05-PLAN.md — Integration wiring: auth strategies into composition engine
 
-**Status:** Planned
+**Status:** Complete
+**Completed:** 2026-02-03
 
 ---
 
@@ -167,11 +168,11 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 |-------|------|--------------|--------|------------|
 | 1 | Gateway Foundation | 6 | Complete | 100% |
 | 2 | Composition Engine | 11 | Complete | 100% |
-| 3 | Upstream Authentication | 6 | Planned | 0% |
+| 3 | Upstream Authentication | 6 | Complete | 100% |
 | 4 | Error Handling & Resilience | 5 | Pending | 0% |
 | 5 | Observability | 4 | Pending | 0% |
 
-**Overall:** 17/32 requirements complete (53%)
+**Overall:** 23/32 requirements complete (72%)
 
 ---
 
@@ -239,4 +240,4 @@ See `.planning/research/SUMMARY.md` for complete analysis.
 
 ---
 
-*Last updated: 2026-02-03 (Phase 3 planned)*
+*Last updated: 2026-02-03 (Phase 3 complete)*
