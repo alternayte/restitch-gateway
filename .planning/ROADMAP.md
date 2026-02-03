@@ -135,7 +135,13 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 4. User can configure timeout per step and observe gateway cancel request after timeout expires
 5. User receives response indicating partial data (via header or status code) when some steps fail
 
-**Status:** Pending
+**Plans:** 4 plans
+- [ ] 04-01-PLAN.md — Config schema (optional, timeout, error_rules) and step timeout execution
+- [ ] 04-02-PLAN.md — Error types and optional step orchestration (sync.WaitGroup)
+- [ ] 04-03-PLAN.md — Partial response builder and X-Partial-Response header
+- [ ] 04-04-PLAN.md — Error matching rules for status code replacement
+
+**Status:** Planned
 
 ---
 
@@ -169,7 +175,7 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 | 1 | Gateway Foundation | 6 | Complete | 100% |
 | 2 | Composition Engine | 11 | Complete | 100% |
 | 3 | Upstream Authentication | 6 | Complete | 100% |
-| 4 | Error Handling & Resilience | 5 | Pending | 0% |
+| 4 | Error Handling & Resilience | 5 | Planned | 0% |
 | 5 | Observability | 4 | Pending | 0% |
 
 **Overall:** 23/32 requirements complete (72%)
@@ -220,7 +226,8 @@ Research identified critical patterns and pitfalls that inform phase execution:
 **Phase 4 resilience patterns:**
 - Optional vs required dependency marking
 - Partial response with X-Partial-Response header
-- Exponential backoff for retries
+- Context timeout per step with hierarchy (step > upstream > 30s default)
+- sync.WaitGroup replaces errgroup for optional step support
 
 **Phase 5 observability:**
 - Structured logging with request ID propagation
@@ -240,4 +247,4 @@ See `.planning/research/SUMMARY.md` for complete analysis.
 
 ---
 
-*Last updated: 2026-02-03 (Phase 3 complete)*
+*Last updated: 2026-02-03 (Phase 4 planned)*
