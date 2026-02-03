@@ -1,9 +1,9 @@
 # Project State: Restitch
 
 **Last Updated:** 2026-02-03
-**Current Phase:** 2 - Composition Engine (COMPLETE)
-**Current Plan:** 04 of 4 complete
-**Status:** Phase 2 complete - all 11 composition requirements satisfied
+**Current Phase:** 2 - Composition Engine (COMPLETE + GAP CLOSED)
+**Current Plan:** 05 of 05 complete (gap closure)
+**Status:** Phase 2 complete - all 11 composition requirements satisfied, validation timing fixed
 
 ## Project Reference
 
@@ -15,14 +15,15 @@
 
 ## Current Position
 
-**Phase:** 2 of 5 (Composition Engine) - COMPLETE
-**Plan:** 04 of 04 complete
-**Status:** Phase 2 complete
-**Last activity:** 2026-02-03 - Completed 02-04-PLAN.md (Response merging and HTTP handler integration)
+**Phase:** 2 of 5 (Composition Engine) - COMPLETE + GAP CLOSED
+**Plan:** 05 of 05 complete
+**Status:** Phase 2 complete with validation timing fix
+**Last activity:** 2026-02-03 - Completed 02-05-PLAN.md (Validation timing fix for circular dependencies and missing step references)
 
 **Progress:**
 ```
 [################                                  ] 34% (11/32)
+Phase 2 gap closed - validation timing bugs fixed
 ```
 
 **Next Actions:**
@@ -32,7 +33,7 @@
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) ✓ VERIFIED
@@ -106,6 +107,12 @@
 - Decision: Added HTTPClient() method to client.Client for interface compatibility
 - Rationale: Template evaluation requires original structure; type preservation for complex objects; graceful degradation without config; standard http.Client interface needed by composition handler
 
+**2026-02-03 - Plan 02-05 Execution (Gap Closure)**
+- Decision: Move BuildDAG from request-time to parse-time for fail-fast validation
+- Decision: Store ExecutionPlan in CompiledComposition to avoid redundant DAG builds
+- Decision: Invalid configs prevent gateway startup with clear error messages
+- Rationale: UAT tests 9 and 10 revealed validation timing bug - circular dependencies and missing step references were detected at request time instead of startup; moving BuildDAG to compileComposition() fixed both issues per CONTEXT.md fail-fast principle
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -118,7 +125,10 @@
 - [x] Execute Plan 02-02 (DAG construction with dependency inference)
 - [x] Execute Plan 02-03 (Step execution and DAG executor)
 - [x] Execute Plan 02-04 (Response merging and HTTP handler integration)
-- [x] Verify Phase 2 success criteria (PASSED)
+- [x] Verify Phase 2 success criteria (PASSED - with 2 issues identified)
+- [x] Diagnose Phase 2 UAT gaps (Tests 9 and 10 - validation timing bugs)
+- [x] Execute Plan 02-05 (Gap closure - move validation to parse-time)
+- [x] Verify Phase 2 complete with all issues resolved
 - [ ] Begin Phase 3 planning (Authentication)
 
 ### Known Blockers
@@ -137,31 +147,26 @@ None identified.
 
 ### What Just Happened
 
-Phase 2 COMPLETE - All 11 composition requirements satisfied:
+Phase 2 COMPLETE with gap closure - All 11 composition requirements satisfied, validation timing bugs fixed:
 
-Plan 02-04 deliverables:
-- Response template evaluation with recursive structure preservation (internal/composition/response.go)
-- HTTP handler for composition execution and response merging (internal/composition/handler.go)
-- Gateway integration with config loading and route registration (cmd/restitch/main.go)
-- End-to-end verification successful with live upstream (jsonplaceholder.typicode.com)
+Plan 02-05 deliverables (Gap Closure):
+- DAG validation moved from request-time to parse-time (internal/composition/parser.go)
+- ExecutionPlan pre-built and stored in CompiledComposition (eliminates redundant DAG builds)
+- Gateway fails to start on circular dependencies with clear error message
+- Gateway fails to start on missing step references with clear error message
+- Tests verify startup-time validation (internal/composition/parser_test.go)
 
 Commits:
-- ab1b1f7: Response template evaluation and merging
-- 5556710: HTTP handler for compositions
-- bcf0893: Integration with main.go
+- c6f311b: Move BuildDAG from request-time to parse-time
+- 3f18df0: Add tests for startup validation failures
+
+UAT Issues Resolved:
+- Test 9 (Circular dependency detected at startup): FIXED - BuildDAG now called during CompileConfig()
+- Test 10 (Missing step reference detected at startup): FIXED - validateDependencies runs at parse-time
 
 Phase 2 requirements satisfied:
-- COMP-01: YAML config parsing ✓
-- COMP-02: Expression compilation ✓
-- COMP-03: DAG construction ✓
-- COMP-04: Dependency inference ✓
-- COMP-05: Step execution ✓
-- COMP-06: Parallel execution ✓
-- COMP-07: Request context propagation ✓
-- COMP-08: Template interpolation ✓
-- COMP-09: Response merging ✓
-- COMP-10: Header propagation ✓
-- COMP-11: HTTP handler integration ✓
+- COMP-01 through COMP-11: All ✓ (previously completed)
+- UAT tests 9 and 10: ✓ (fixed in 02-05)
 
 ### What's Next
 
@@ -183,11 +188,12 @@ Key files:
 - `.planning/ROADMAP.md` - Phase structure and success criteria
 - `.planning/REQUIREMENTS.md` - All 32 v1 requirements with traceability
 - `.planning/phases/02-composition-engine/02-RESEARCH.md` - Phase 2 research findings
+- `.planning/phases/02-composition-engine/02-05-SUMMARY.md` - Validation timing fix summary
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint with composition config loading
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
 - `internal/client/` - HTTP client with optimized connection pooling
-- `internal/composition/` - Complete composition engine (config, expressions, DAG, execution, response merging, HTTP handler)
+- `internal/composition/` - Complete composition engine with parse-time validation (config, expressions, DAG, execution, response merging, HTTP handler)
 
 ---
 
