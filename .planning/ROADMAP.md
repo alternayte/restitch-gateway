@@ -71,12 +71,13 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 5. User receives merged response combining data from all successful steps
 
 **Plans:** 4 plans
-- [ ] 02-01-PLAN.md — YAML config schema, parsing, expression compilation
-- [ ] 02-02-PLAN.md — DAG builder, dependency inference from expressions
-- [ ] 02-03-PLAN.md — Step executor, parallel execution with errgroup
-- [ ] 02-04-PLAN.md — Response merging, HTTP handler, main.go integration
+- [x] 02-01-PLAN.md — YAML config schema, parsing, expression compilation
+- [x] 02-02-PLAN.md — DAG builder, dependency inference from expressions
+- [x] 02-03-PLAN.md — Step executor, parallel execution with errgroup
+- [x] 02-04-PLAN.md — Response merging, HTTP handler, main.go integration
 
-**Status:** Planned
+**Status:** Complete
+**Completed:** 2026-02-03
 
 ---
 
@@ -157,12 +158,12 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 | Phase | Name | Requirements | Status | Completion |
 |-------|------|--------------|--------|------------|
 | 1 | Gateway Foundation | 6 | Complete | 100% |
-| 2 | Composition Engine | 11 | Planned | 0% |
+| 2 | Composition Engine | 11 | Complete | 100% |
 | 3 | Upstream Authentication | 6 | Pending | 0% |
 | 4 | Error Handling & Resilience | 5 | Pending | 0% |
 | 5 | Observability | 4 | Pending | 0% |
 
-**Overall:** 6/32 requirements complete (19%)
+**Overall:** 17/32 requirements complete (53%)
 
 ---
 
@@ -229,4 +230,4 @@ See `.planning/research/SUMMARY.md` for complete analysis.
 
 ---
 
-*Last updated: 2026-02-03 (Phase 2 planned)*
+*Last updated: 2026-02-03 (Phase 2 complete)*

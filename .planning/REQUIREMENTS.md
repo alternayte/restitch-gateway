@@ -9,17 +9,17 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Composition Engine
 
-- [ ] **COMP-01**: Gateway parses YAML configuration defining compositions
-- [ ] **COMP-02**: Compositions define steps with upstream service calls
-- [ ] **COMP-03**: Steps can declare dependencies on other steps
-- [ ] **COMP-04**: Gateway builds DAG from step dependencies
-- [ ] **COMP-05**: Independent steps execute in parallel via goroutines
-- [ ] **COMP-06**: Dependent steps wait for their dependencies to complete
-- [ ] **COMP-07**: Expr language evaluates dynamic values in step paths
-- [ ] **COMP-08**: Expr language evaluates dynamic values in step params
-- [ ] **COMP-09**: Expr language evaluates dynamic values in response body
-- [ ] **COMP-10**: Steps can access results from completed dependency steps
-- [ ] **COMP-11**: Response body merges/reshapes data from multiple steps
+- [x] **COMP-01**: Gateway parses YAML configuration defining compositions
+- [x] **COMP-02**: Compositions define steps with upstream service calls
+- [x] **COMP-03**: Steps can declare dependencies on other steps
+- [x] **COMP-04**: Gateway builds DAG from step dependencies
+- [x] **COMP-05**: Independent steps execute in parallel via goroutines
+- [x] **COMP-06**: Dependent steps wait for their dependencies to complete
+- [x] **COMP-07**: Expr language evaluates dynamic values in step paths
+- [x] **COMP-08**: Expr language evaluates dynamic values in step params
+- [x] **COMP-09**: Expr language evaluates dynamic values in response body
+- [x] **COMP-10**: Steps can access results from completed dependency steps
+- [x] **COMP-11**: Response body merges/reshapes data from multiple steps
 
 ### Upstream Authentication
 
@@ -110,17 +110,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GATE-04 | Phase 1 - Gateway Foundation | Complete |
 | GATE-05 | Phase 1 - Gateway Foundation | Complete |
 | GATE-06 | Phase 1 - Gateway Foundation | Complete |
-| COMP-01 | Phase 2 - Composition Engine | Pending |
-| COMP-02 | Phase 2 - Composition Engine | Pending |
-| COMP-03 | Phase 2 - Composition Engine | Pending |
-| COMP-04 | Phase 2 - Composition Engine | Pending |
-| COMP-05 | Phase 2 - Composition Engine | Pending |
-| COMP-06 | Phase 2 - Composition Engine | Pending |
-| COMP-07 | Phase 2 - Composition Engine | Pending |
-| COMP-08 | Phase 2 - Composition Engine | Pending |
-| COMP-09 | Phase 2 - Composition Engine | Pending |
-| COMP-10 | Phase 2 - Composition Engine | Pending |
-| COMP-11 | Phase 2 - Composition Engine | Pending |
+| COMP-01 | Phase 2 - Composition Engine | Complete |
+| COMP-02 | Phase 2 - Composition Engine | Complete |
+| COMP-03 | Phase 2 - Composition Engine | Complete |
+| COMP-04 | Phase 2 - Composition Engine | Complete |
+| COMP-05 | Phase 2 - Composition Engine | Complete |
+| COMP-06 | Phase 2 - Composition Engine | Complete |
+| COMP-07 | Phase 2 - Composition Engine | Complete |
+| COMP-08 | Phase 2 - Composition Engine | Complete |
+| COMP-09 | Phase 2 - Composition Engine | Complete |
+| COMP-10 | Phase 2 - Composition Engine | Complete |
+| COMP-11 | Phase 2 - Composition Engine | Complete |
 | AUTH-01 | Phase 3 - Upstream Authentication | Pending |
 | AUTH-02 | Phase 3 - Upstream Authentication | Pending |
 | AUTH-03 | Phase 3 - Upstream Authentication | Pending |
@@ -152,4 +152,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 1 complete - 6 requirements verified)*
+*Last updated: 2026-02-03 (Phase 2 complete - 17 requirements verified)*
