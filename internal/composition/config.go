@@ -14,6 +14,8 @@
 // syntax errors.
 package composition
 
+import "github.com/restitch/restitch-gateway/internal/auth"
+
 // Config represents the complete composition configuration loaded from YAML.
 // It defines all upstreams and compositions available to the gateway.
 type Config struct {
@@ -22,8 +24,10 @@ type Config struct {
 }
 
 // Upstream represents a named backend service that steps can call.
+// Auth configuration is optional - if omitted, no authentication is applied.
 type Upstream struct {
-	URL string `yaml:"url"`
+	URL  string       `yaml:"url"`
+	Auth *auth.Config `yaml:"auth"` // Optional auth configuration (AUTH-06)
 }
 
 // Composition represents a multi-step API composition with a response template.
