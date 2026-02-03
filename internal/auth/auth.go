@@ -10,6 +10,28 @@
 //
 // All strategies are configured at startup via YAML, with secrets referenced
 // using ${VAR_NAME} environment variable syntax.
+//
+// # Passthrough Error Handling
+//
+// When using passthrough authentication, the client MUST include an Authorization
+// header. If missing, the RoundTripper returns ErrMissingAuthHeader.
+//
+// The composition handler should catch this error using IsMissingAuthHeaderError
+// and return:
+//   - Status: 401 Unauthorized
+//   - Header: WWW-Authenticate: Bearer (or appropriate scheme)
+//   - Body: {"error": "authorization header required"}
+//
+// This is a security best practice - don't forward unauthenticated requests
+// to upstreams that expect authentication.
+//
+// Example error handling in handler:
+//
+//	if auth.IsMissingAuthHeaderError(err) {
+//	    w.Header().Set("WWW-Authenticate", "Bearer")
+//	    http.Error(w, `{"error":"authorization header required"}`, 401)
+//	    return
+//	}
 package auth
 
 import (
