@@ -103,7 +103,14 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 4. User can configure OAuth2 client credentials and observe gateway automatically fetch and use access token
 5. User can observe OAuth2 tokens reused across requests (not fetched every time) and refreshed before expiry
 
-**Status:** Pending
+**Plans:** 5 plans
+- [ ] 03-01-PLAN.md — Environment variable validation, auth config schema, strategy interface
+- [ ] 03-02-PLAN.md — Header and basic auth strategies with RoundTripper pattern
+- [ ] 03-03-PLAN.md — Passthrough auth strategy with missing header handling
+- [ ] 03-04-PLAN.md — OAuth2 client credentials with token caching and singleflight
+- [ ] 03-05-PLAN.md — Integration wiring: auth strategies into composition engine
+
+**Status:** Planned
 
 ---
 
@@ -160,7 +167,7 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 |-------|------|--------------|--------|------------|
 | 1 | Gateway Foundation | 6 | Complete | 100% |
 | 2 | Composition Engine | 11 | Complete | 100% |
-| 3 | Upstream Authentication | 6 | Pending | 0% |
+| 3 | Upstream Authentication | 6 | Planned | 0% |
 | 4 | Error Handling & Resilience | 5 | Pending | 0% |
 | 5 | Observability | 4 | Pending | 0% |
 
@@ -206,7 +213,8 @@ Research identified critical patterns and pitfalls that inform phase execution:
 
 **Phase 3 authentication:**
 - golang.org/x/oauth2 for OAuth2 client credentials
-- LRU cache for token management (bounded, TTL-based)
+- golang.org/x/sync/singleflight for concurrent token refresh protection
+- RoundTripper pattern for auth injection per upstream
 
 **Phase 4 resilience patterns:**
 - Optional vs required dependency marking
@@ -231,4 +239,4 @@ See `.planning/research/SUMMARY.md` for complete analysis.
 
 ---
 
-*Last updated: 2026-02-03 (Phase 2 complete)*
+*Last updated: 2026-02-03 (Phase 3 planned)*
