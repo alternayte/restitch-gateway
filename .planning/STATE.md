@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-02-03
 **Current Phase:** 5 - Observability (IN PROGRESS)
-**Current Plan:** 01 of 03 complete
-**Status:** Plan 05-01 complete - request ID tracing and enhanced logging implemented
+**Current Plan:** 02 of 03 complete
+**Status:** Plan 05-02 COMPLETE - step timing and request completion summary implemented
 
 ## Project Reference
 
@@ -11,29 +11,28 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 5 IN PROGRESS. Request ID tracing and enhanced structured logging complete. Next: step timing (05-02) and upstream health checks (05-03).
+**Current Focus:** Phase 5 IN PROGRESS. Request ID infrastructure (05-01) and step timing (05-02) complete. Upstream health checks (05-03) next.
 
 ## Current Position
 
 **Phase:** 5 of 5 (Observability) - IN PROGRESS
-**Plan:** 01 of 03 complete
-**Status:** Request ID tracing working end-to-end
-**Last activity:** 2026-02-03 - Completed 05-01-PLAN.md (request ID and enhanced logging)
+**Plan:** 02 of 03 complete
+**Status:** Step timing and request completion summary implemented
+**Last activity:** 2026-02-03 - Completed 05-02-PLAN.md (step timing collection)
 
 **Progress:**
 ```
-[#############################################     ] 90% (18/20)
-Phase 5 IN PROGRESS - observability features being added
+[###############################################   ] 94% (30/32)
+Phase 5 IN PROGRESS - 2 of 3 plans complete
 ```
 
 **Next Actions:**
-1. Execute Plan 05-02 (Step timing collection)
-2. Execute Plan 05-03 (Upstream health checks)
-3. Verify Phase 5 success criteria
+1. Execute Plan 05-03 (Upstream health checks)
+2. Verify Phase 5 success criteria
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks), 3 min for 04-03 (3 tasks), 2 min for 04-04 (3 tasks), 5 min for 05-01 (2 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks), 3 min for 04-03 (3 tasks), 2 min for 04-04 (3 tasks), 5 min for 05-01 (2 tasks), 4 min for 05-02 (2 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) - COMPLETE
@@ -42,7 +41,7 @@ Phase 5 IN PROGRESS - observability features being added
 - Phase 4: 5/5 requirements (100%) - COMPLETE
 - Phase 5: 2/4 requirements (50%) - IN PROGRESS
 
-**Blockers:** None currently
+**Blockers:** 05-03 has import cycle issue (server -> composition, but composition -> server for Router)
 
 ## Accumulated Context
 
@@ -182,6 +181,13 @@ Phase 5 IN PROGRESS - observability features being added
 - Decision: Snake_case field names for JSON logs (request_id, status_code, duration_ms)
 - Rationale: ULID enables time-based log analysis; honoring incoming IDs supports distributed tracing; middleware order ensures context propagation; snake_case per CONTEXT.md requirements
 
+**2026-02-03 - Plan 05-02 Execution (Step Timing)**
+- Decision: Wave numbers 1-indexed for human readability in logs
+- Decision: Timing recorded for all step outcomes (success, failed, skipped)
+- Decision: Duration calculated from microseconds/1000 for ms precision
+- Decision: findSlowestStep helper returns map[string]interface{} for structured logging
+- Rationale: Human-readable wave numbers (wave: 1 vs wave: 0); complete timing data for all outcomes; float64 milliseconds for precision; structured map enables JSON logging
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -212,14 +218,14 @@ Phase 5 IN PROGRESS - observability features being added
 - [x] Execute Plan 04-04 (Error matching rules)
 - [x] Verify Phase 4 success criteria (PASSED - 20/20 must-haves)
 - [x] Begin Phase 5 planning (Observability)
-- [x] Execute Plan 05-01 (Request ID and enhanced logging)
-- [ ] Execute Plan 05-02 (Step timing collection)
+- [x] Execute Plan 05-01 (Request ID and enhanced logging) - commits 4f5ca97, 5f2beab
+- [x] Execute Plan 05-02 (Step timing collection) - commits 7654c42, f61a4b8
 - [ ] Execute Plan 05-03 (Upstream health checks)
 - [ ] Verify Phase 5 success criteria
 
 ### Known Blockers
 
-None identified.
+**05-03 Import Cycle:** Plan 05-03 introduces `server -> composition` import for UpstreamHealthHandler, but `composition -> server` already exists for Router. Need architectural resolution (options: move types to shared package, or move health handler to composition package).
 
 ### Research Flags
 
@@ -233,52 +239,50 @@ None identified.
 
 ### What Just Happened
 
-Plan 05-01 COMPLETE - Request ID tracing and enhanced structured logging implemented:
+Plan 05-02 COMPLETE - Step timing and request completion summary:
 
 Plan deliverables:
-- Task 1: Request ID infrastructure with ULID generation using oklog/ulid/v2
-- Task 2: Enhanced structured logging with request_id, method, path, status_code, duration_ms fields
+- StepTiming struct with name, wave, duration_ms, status, optional fields
+- Step logs include wave number (1-indexed) and duration_ms
+- Request completion log includes step_timings map and slowest_step
+- DAG execution order logged at INFO level
 
 Key commits:
-- 4f5ca97: Request ID infrastructure with ULID
-- 5f2beab: Enhanced logging with request ID and snake_case fields
+- 7654c42: Step timing collection in executor
+- f61a4b8: Request completion summary in handler
 
-Patterns established:
-- ULID format for request IDs (time-sortable, collision-safe)
-- observability.GetRequestID(ctx) for request ID extraction
-- RequestIDMiddleware -> LoggingMiddleware middleware chain order
-- Snake_case field names in JSON logs
+Deviations:
+- Fixed incomplete 05-01 task 2 commit (5f2beab)
+- Reverted broken 05-03 partial changes (import cycle)
 
 ### What's Next
 
-Phase 5 remaining plans:
-- 05-02: Step timing collection in executor
-- 05-03: Upstream health checks endpoint
-
-After Phase 5:
-- Project complete! All 32 v1 requirements implemented
+Plan 05-03 (Upstream Health Checks):
+- /health/upstreams endpoint
+- Per-upstream status, latency, last check
+- Configurable health path per upstream
+- BLOCKED: Import cycle issue needs resolution
 
 ### Context for Next Session
 
 If returning after break:
 1. Check "Current Position" above for phase/plan status
-2. Review "Active TODOs" for immediate next actions
-3. Check "Known Blockers" for anything preventing progress
-4. Review `.planning/ROADMAP.md` for full phase structure
-5. Review completed summary at `.planning/phases/05-observability/05-01-SUMMARY.md`
+2. Review "Known Blockers" for import cycle issue in 05-03
+3. Review `.planning/phases/05-observability/05-03-PLAN.md` for next plan
+4. Options for import cycle: shared types package or move handler
 
 Key files:
 - `.planning/ROADMAP.md` - Phase structure and success criteria
 - `.planning/REQUIREMENTS.md` - All 32 v1 requirements with traceability
 - `.planning/phases/05-observability/05-CONTEXT.md` - Phase 5 decisions
+- `.planning/phases/05-observability/05-02-SUMMARY.md` - This plan's summary
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint with middleware chain
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
 - `internal/client/` - HTTP client with optimized connection pooling
-- `internal/composition/` - Complete composition engine with error handling
-- `internal/config/env.go` - Environment variable expansion with validation
-- `internal/auth/` - All authentication strategies (header, basic, passthrough, oauth2)
-- `internal/observability/` - Request ID generation and middleware
+- `internal/composition/` - Complete composition engine with step timing
+- `internal/observability/` - Request ID infrastructure (ULID)
+- `internal/auth/` - All authentication strategies
 
 ---
 
