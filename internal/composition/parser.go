@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
 	"gopkg.in/yaml.v3"
@@ -54,10 +55,14 @@ type CompiledConfig struct {
 	Upstreams    map[string]*CompiledUpstream // Compiled upstreams with auth strategies
 }
 
+// DefaultStepTimeout is the default timeout for step execution when not configured.
+const DefaultStepTimeout = 30 * time.Second
+
 // CompiledUpstream holds an upstream definition plus its compiled auth strategy.
 type CompiledUpstream struct {
 	Upstream *Upstream
 	Auth     auth.Strategy // nil for no auth
+	Timeout  time.Duration // Upstream default timeout (0 means use 30s default)
 }
 
 // CompiledComposition holds compiled expressions for a single composition.
@@ -73,6 +78,9 @@ type CompiledStep struct {
 	PathExpr    *CompiledExpr            // Compiled path expression
 	BodyExpr    *CompiledExpr            // Compiled body expression (may be nil)
 	HeaderExprs map[string]*CompiledExpr // Compiled header expressions
+	Optional    bool                     // Whether step failure allows composition to continue
+	Timeout     time.Duration            // Resolved timeout value (step > upstream > 30s default)
+	ErrorRules  []ErrorRule              // Error matching rules
 }
 
 // CompiledResponse holds compiled expressions for response template.
@@ -122,6 +130,7 @@ func CompileConfig(ctx context.Context, cfg *Config) (*CompiledConfig, error) {
 		compiled.Upstreams[name] = &CompiledUpstream{
 			Upstream: &upstreamCopy,
 			Auth:     strategy,
+			Timeout:  upstream.Timeout,
 		}
 	}
 
@@ -183,6 +192,10 @@ func compileStep(step *Step, env map[string]interface{}) (*CompiledStep, error) 
 	compiled := &CompiledStep{
 		Step:        step,
 		HeaderExprs: make(map[string]*CompiledExpr),
+		Optional:    step.Optional,
+		ErrorRules:  step.ErrorRules,
+		// Timeout is resolved at execution time when we have upstream available
+		Timeout:     0,
 	}
 
 	// Compile path expression
