@@ -9,11 +9,21 @@ import (
 	"time"
 )
 
+// StepTiming records execution timing for a single step.
+type StepTiming struct {
+	Name       string  `json:"name"`
+	Wave       int     `json:"wave"`
+	DurationMS float64 `json:"duration_ms"`
+	Status     string  `json:"status"` // "success", "failed", "skipped"
+	Optional   bool    `json:"optional"`
+}
+
 // CompositionResult holds results from all steps in a composition.
 type CompositionResult struct {
-	Steps      map[string]*StepResult
-	StepErrors []StepErrorDetail // Errors from failed optional steps
-	IsPartial  bool              // True if any step failed
+	Steps       map[string]*StepResult
+	StepErrors  []StepErrorDetail // Errors from failed optional steps
+	IsPartial   bool              // True if any step failed
+	StepTimings []StepTiming      // Timing data for all steps
 }
 
 // Executor runs compositions according to their DAG execution plans.
@@ -45,9 +55,9 @@ func NewExecutor(config *CompiledConfig, httpClient *http.Client) *Executor {
 //   - Failed optional steps have nil result (available to dependents)
 //   - Dependent steps skip when their dependency failed
 //   - Upstream error passthrough (handled by ExecuteStep)
-//   - Logs show step start/complete events
+//   - Logs show step start/complete events with wave numbers and timing
 //
-// Returns CompositionResult with step results and collected errors.
+// Returns CompositionResult with step results, errors, and timing data.
 func (e *Executor) Execute(ctx context.Context, compositionName string, req *http.Request) (*CompositionResult, error) {
 	// Look up composition
 	comp, exists := e.config.Compositions[compositionName]
@@ -58,16 +68,21 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 	// Use pre-built execution plan (validated at config parse time)
 	plan := comp.ExecutionPlan
 
-	// Log execution plan at debug level (optional for Phase 2)
-	slog.Debug("executing composition",
+	// Log execution plan at INFO level (per OBS-04: DAG execution order for debugging)
+	slog.Info("executing composition",
 		"composition", compositionName,
 		"waves", len(plan.Waves),
-		"total_steps", countSteps(plan.Waves))
+		"total_steps", countSteps(plan.Waves),
+		"execution_order", plan.Waves)
 
 	// Execute waves sequentially
 	results := make(map[string]*StepResult)
 	resultsMutex := sync.Mutex{}
 	var allErrors []stepError // Collects errors across all waves
+
+	// Step timing collection (per OBS-03)
+	var stepTimings []StepTiming
+	var stepTimingsMu sync.Mutex
 
 	for waveIdx, wave := range plan.Waves {
 		slog.Debug("starting wave",
@@ -75,6 +90,7 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 			"steps", wave)
 
 		waveStart := time.Now()
+		waveNum := waveIdx + 1 // 1-indexed for human readability
 
 		var wg sync.WaitGroup
 		var waveErrors []stepError
@@ -86,7 +102,12 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 			go func() {
 				defer wg.Done()
 
-				stepErr := e.executeStepWithErrorHandling(ctx, compositionName, stepName, comp, req, results, &resultsMutex)
+				stepErr, timing := e.executeStepWithErrorHandling(ctx, compositionName, stepName, comp, req, results, &resultsMutex, waveNum)
+				if timing != nil {
+					stepTimingsMu.Lock()
+					stepTimings = append(stepTimings, *timing)
+					stepTimingsMu.Unlock()
+				}
 				if stepErr != nil {
 					errorsMu.Lock()
 					waveErrors = append(waveErrors, *stepErr)
@@ -125,14 +146,15 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 		"steps", len(results))
 
 	return &CompositionResult{
-		Steps:      results,
-		StepErrors: BuildErrorsArray(allErrors),
-		IsPartial:  len(allErrors) > 0,
+		Steps:       results,
+		StepErrors:  BuildErrorsArray(allErrors),
+		IsPartial:   len(allErrors) > 0,
+		StepTimings: stepTimings,
 	}, nil
 }
 
 // executeStepWithErrorHandling executes a single step with optional step error handling.
-// Returns stepError if step failed, nil if step succeeded.
+// Returns stepError if step failed (nil if succeeded), and StepTiming for all outcomes.
 func (e *Executor) executeStepWithErrorHandling(
 	ctx context.Context,
 	compositionName string,
@@ -141,10 +163,15 @@ func (e *Executor) executeStepWithErrorHandling(
 	req *http.Request,
 	results map[string]*StepResult,
 	resultsMutex *sync.Mutex,
-) *stepError {
+	waveNum int,
+) (*stepError, *StepTiming) {
+	stepStart := time.Now()
+
 	step, exists := comp.Steps[stepName]
 	if !exists {
-		return &stepError{stepName: stepName, err: fmt.Errorf("step not found"), optional: false}
+		durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
+		return &stepError{stepName: stepName, err: fmt.Errorf("step not found"), optional: false},
+			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "failed", Optional: false}
 	}
 
 	// Check if dependencies failed (result is nil)
@@ -154,21 +181,25 @@ func (e *Executor) executeStepWithErrorHandling(
 	resultsMutex.Unlock()
 
 	if depFailed {
+		durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
 		// Mark as skipped, add nil result
 		resultsMutex.Lock()
 		results[stepName] = nil
 		resultsMutex.Unlock()
 		return &stepError{
-			stepName: stepName,
-			err:      fmt.Errorf("dependency_failed"),
-			optional: true, // Skipped steps don't fail composition
-		}
+				stepName: stepName,
+				err:      fmt.Errorf("dependency_failed"),
+				optional: true, // Skipped steps don't fail composition
+			},
+			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "skipped", Optional: step.Optional}
 	}
 
 	// Get compiled upstream with auth strategy
 	compiledUpstream, exists := e.config.Upstreams[step.Step.Upstream]
 	if !exists {
-		return &stepError{stepName: stepName, err: fmt.Errorf("upstream not found"), optional: step.Optional}
+		durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
+		return &stepError{stepName: stepName, err: fmt.Errorf("upstream not found"), optional: step.Optional},
+			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "failed", Optional: step.Optional}
 	}
 
 	// Build environment with completed step results
@@ -176,23 +207,24 @@ func (e *Executor) executeStepWithErrorHandling(
 	env := buildRequestEnv(req, results)
 	resultsMutex.Unlock()
 
-	stepStart := time.Now()
 	slog.Info("step starting",
 		"composition", compositionName,
 		"step", stepName,
+		"wave", waveNum,
 		"upstream", compiledUpstream.Upstream.URL,
 		"optional", step.Optional)
 
 	// Execute step
 	result, err := ExecuteStep(ctx, step, compiledUpstream, env, e.httpClient)
-	stepDuration := time.Since(stepStart)
+	durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
 
 	if err != nil {
 		slog.Warn("step failed",
 			"composition", compositionName,
 			"step", stepName,
+			"wave", waveNum,
 			"optional", step.Optional,
-			"duration", stepDuration,
+			"duration_ms", durationMS,
 			"error", err)
 
 		// Store nil result for failed step (optional steps return null per CONTEXT.md)
@@ -200,7 +232,8 @@ func (e *Executor) executeStepWithErrorHandling(
 		results[stepName] = nil
 		resultsMutex.Unlock()
 
-		return &stepError{stepName: stepName, err: err, optional: step.Optional}
+		return &stepError{stepName: stepName, err: err, optional: step.Optional},
+			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "failed", Optional: step.Optional}
 	}
 
 	// Store successful result
@@ -211,20 +244,22 @@ func (e *Executor) executeStepWithErrorHandling(
 	slog.Info("step complete",
 		"composition", compositionName,
 		"step", stepName,
+		"wave", waveNum,
 		"status", result.Status,
-		"duration", stepDuration)
+		"duration_ms", durationMS)
 
 	// Check if error rule was applied - record in errors for transparency
 	// Per RESEARCH.md Pitfall 5: "Always add matched error rule to `_errors` array"
 	if result != nil && result.ErrorRuleMatched {
 		return &stepError{
-			stepName: stepName,
-			err:      NewErrorRuleMatchedError(result.Status),
-			optional: true, // Error rule matches don't fail composition
-		}
+				stepName: stepName,
+				err:      NewErrorRuleMatchedError(result.Status),
+				optional: true, // Error rule matches don't fail composition
+			},
+			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "success", Optional: step.Optional}
 	}
 
-	return nil
+	return nil, &StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "success", Optional: step.Optional}
 }
 
 // checkDependenciesFailed returns true if any dependency has nil result.
