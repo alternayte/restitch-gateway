@@ -17,10 +17,11 @@ import (
 
 // StepResult holds the response from an upstream service.
 type StepResult struct {
-	Status  int                    // HTTP status code
-	Headers http.Header            // Response headers
-	Body    interface{}            // Parsed JSON body as map[string]interface{} or []interface{}
-	RawBody []byte                 // Original response body
+	Status           int                    // HTTP status code
+	Headers          http.Header            // Response headers
+	Body             interface{}            // Parsed JSON body as map[string]interface{} or []interface{}
+	RawBody          []byte                 // Original response body
+	ErrorRuleMatched bool                   // True if error rule replaced the body
 }
 
 // ExecuteStep executes a single step with timeout hierarchy resolution.
@@ -158,6 +159,23 @@ func ExecuteStepWithTimeout(
 	if err != nil {
 		// Non-JSON or invalid JSON - store as string
 		parsedBody = string(rawBody)
+	}
+
+	// Check error rules against response status
+	// Per CONTEXT.md: "Error matching rules replace the failed step's slot with the configured body value"
+	// Per RESEARCH.md Pitfall 5: "Always add matched error rule to `_errors` array"
+	if replacementBody, matched := matchErrorRule(resp.StatusCode, step.Step.ErrorRules); matched {
+		slog.Debug("error rule matched",
+			"status", resp.StatusCode,
+			"step", step.Step.Name)
+
+		return &StepResult{
+			Status:           resp.StatusCode,
+			Headers:          resp.Header,
+			Body:             replacementBody,
+			RawBody:          rawBody,
+			ErrorRuleMatched: true,
+		}, nil
 	}
 
 	return &StepResult{
