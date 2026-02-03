@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-02-03
 **Current Phase:** 1 - Gateway Foundation
-**Current Plan:** 01 of 3 complete
+**Current Plan:** 02 of 3 complete
 **Status:** In progress
 
 ## Project Reference
@@ -16,26 +16,25 @@
 ## Current Position
 
 **Phase:** 1 of 5 (Gateway Foundation)
-**Plan:** 01 of 3 complete
+**Plan:** 02 of 3 complete
 **Status:** In progress
-**Last activity:** 2026-02-03 - Completed 01-01-PLAN.md (HTTP/HTTPS server with routing)
+**Last activity:** 2026-02-03 - Completed 01-02-PLAN.md (Health endpoints and logging middleware)
 
 **Progress:**
 ```
-[###                                               ] 3% (1/32)
+[######                                            ] 6% (2/32)
 ```
 
 **Next Actions:**
-1. Execute 01-02-PLAN.md (Health endpoints)
-2. Execute 01-03-PLAN.md (Graceful shutdown)
-3. Verify Phase 1 success criteria before moving to Phase 2
+1. Execute 01-03-PLAN.md (Graceful shutdown)
+2. Verify Phase 1 success criteria before moving to Phase 2
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks)
 
 **Phase Completion:**
-- Phase 1: 1/3 plans complete (in progress)
+- Phase 1: 2/3 plans complete (in progress)
 - Phase 2: 0/11 requirements (0%)
 - Phase 3: 0/6 requirements (0%)
 - Phase 4: 0/5 requirements (0%)
@@ -64,11 +63,18 @@
 - Decision: HTTP and HTTPS servers run concurrently in goroutines
 - Rationale: Clean foundation using Go's excellent stdlib, modern security defaults
 
+**2026-02-03 - Plan 01-02 Execution**
+- Decision: Health endpoint returns verbose JSON (status, uptime, version, memory)
+- Decision: Ready endpoint checks gateway state only (upstream checking deferred)
+- Decision: JSON logging by default, text format via --log-format=text flag
+- Decision: Middleware pattern with ResponseWriter wrapper to capture status code
+- Rationale: Standard Kubernetes probe patterns, 12-factor logging to stdout
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
 - [x] Execute Plan 01-01 (HTTP/HTTPS server with routing)
-- [ ] Execute Plan 01-02 (Health endpoints)
+- [x] Execute Plan 01-02 (Health endpoints)
 - [ ] Execute Plan 01-03 (Graceful shutdown)
 - [ ] Verify Phase 1 success criteria before proceeding
 
@@ -88,15 +94,15 @@ None identified.
 
 ### What Just Happened
 
-Completed Plan 01-01: HTTP/HTTPS server foundation with path/method routing. Created:
-- Go module (github.com/restitch/restitch-gateway)
-- HTTP server with 30s timeouts
-- Router with exact/prefix matching, 404/405 handling
-- TLS termination with modern settings
+Completed Plan 01-02: Health endpoints and request logging middleware. Created:
+- /health endpoint returning status, uptime, version, memory (GATE-04)
+- /ready endpoint returning ready/not_ready with proper status codes (GATE-05)
+- Request logging middleware with JSON/text format support
+- Middleware chaining pattern via router.Use()
 
 ### What's Next
 
-Execute Plan 01-02 (health endpoints) and 01-03 (graceful shutdown) to complete Phase 1.
+Execute Plan 01-03 (graceful shutdown) to complete Phase 1.
 
 ### Context for Next Session
 
@@ -105,7 +111,7 @@ If returning after break:
 2. Review "Active TODOs" for immediate next actions
 3. Check "Known Blockers" for anything preventing progress
 4. Review `.planning/ROADMAP.md` for full phase structure
-5. Review completed summary at `.planning/phases/01-gateway-foundation/01-01-SUMMARY.md`
+5. Review completed summaries at `.planning/phases/01-gateway-foundation/01-*-SUMMARY.md`
 
 Key files:
 - `.planning/ROADMAP.md` - Phase structure and success criteria
@@ -113,7 +119,7 @@ Key files:
 - `.planning/research/SUMMARY.md` - Research findings and recommended stack
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint
-- `internal/server/` - Server, router, TLS implementation
+- `internal/server/` - Server, router, TLS, health, middleware implementation
 
 ---
 
