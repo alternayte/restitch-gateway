@@ -1,0 +1,112 @@
+// Package auth provides authentication strategies for upstream services.
+//
+// The auth package implements a Strategy interface that allows different
+// authentication methods to be configured per-upstream in YAML configuration.
+// Supported strategies include:
+//   - Header: Static header injection (e.g., API keys)
+//   - Basic: HTTP Basic Authentication
+//   - Passthrough: Forward client's Authorization header
+//   - OAuth2: OAuth2 client credentials flow
+//
+// All strategies are configured at startup via YAML, with secrets referenced
+// using ${VAR_NAME} environment variable syntax.
+package auth
+
+import (
+	"errors"
+	"net/http"
+)
+
+// Strategy represents an upstream authentication strategy.
+// Each strategy wraps a base RoundTripper to inject authentication
+// headers into outgoing requests.
+type Strategy interface {
+	// RoundTripper returns an http.RoundTripper that injects authentication.
+	// The base RoundTripper is typically http.DefaultTransport or a custom
+	// transport with connection pooling.
+	RoundTripper(base http.RoundTripper) http.RoundTripper
+}
+
+// Config represents auth configuration from YAML.
+// Exactly one strategy per upstream - strategies are mutually exclusive.
+type Config struct {
+	Header      *HeaderConfig      `yaml:"header"`
+	Basic       *BasicConfig       `yaml:"basic"`
+	Passthrough *PassthroughConfig `yaml:"passthrough"`
+	OAuth2      *OAuth2Config      `yaml:"oauth2"`
+}
+
+// Validate ensures exactly zero or one strategy is configured.
+// Multiple strategies are not allowed per upstream.
+func (c *Config) Validate() error {
+	if c == nil {
+		return nil
+	}
+
+	count := 0
+	if c.Header != nil {
+		count++
+	}
+	if c.Basic != nil {
+		count++
+	}
+	if c.Passthrough != nil {
+		count++
+	}
+	if c.OAuth2 != nil {
+		count++
+	}
+
+	if count > 1 {
+		return errors.New("exactly one auth strategy allowed per upstream, found multiple")
+	}
+
+	return nil
+}
+
+// HeaderConfig for static header injection (AUTH-01).
+// Injects a fixed header value into every request to the upstream.
+// Value supports ${VAR} syntax for environment variable expansion.
+type HeaderConfig struct {
+	Name  string `yaml:"name"`  // Header name (e.g., "X-API-Key", "Authorization")
+	Value string `yaml:"value"` // Header value with optional ${VAR} syntax
+}
+
+// BasicConfig for HTTP Basic Auth (AUTH-02).
+// Credentials support ${VAR} syntax for environment variable expansion.
+type BasicConfig struct {
+	Username string `yaml:"username"` // Username with optional ${VAR} syntax
+	Password string `yaml:"password"` // Password with optional ${VAR} syntax
+}
+
+// PassthroughConfig for forwarding client Authorization header (AUTH-03).
+// Forwards the client's Authorization header verbatim to the upstream.
+// No transformation is applied (e.g., "Bearer xyz" stays "Bearer xyz").
+type PassthroughConfig struct {
+	// No fields - presence of this config indicates passthrough mode.
+	// The Authorization header from the incoming request will be forwarded.
+}
+
+// OAuth2Config for OAuth2 client credentials flow (AUTH-04, AUTH-05).
+// Automatically fetches and refreshes tokens using client credentials grant.
+// ClientID and ClientSecret support ${VAR} syntax for environment variable expansion.
+type OAuth2Config struct {
+	TokenURL     string   `yaml:"token_url"`     // Token endpoint URL
+	ClientID     string   `yaml:"client_id"`     // Client ID with optional ${VAR} syntax
+	ClientSecret string   `yaml:"client_secret"` // Client Secret with optional ${VAR} syntax
+	Scopes       []string `yaml:"scopes"`        // Optional scopes to request
+}
+
+// NoneStrategy provides a no-op authentication strategy.
+// It returns the base RoundTripper unchanged.
+type NoneStrategy struct{}
+
+// RoundTripper returns the base RoundTripper unchanged.
+func (s *NoneStrategy) RoundTripper(base http.RoundTripper) http.RoundTripper {
+	return base
+}
+
+// NewNoneStrategy creates a strategy that performs no authentication.
+func NewNoneStrategy() *NoneStrategy {
+	return &NoneStrategy{}
+}
