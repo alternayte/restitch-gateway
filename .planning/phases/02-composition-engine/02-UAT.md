@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 02-composition-engine
 source: [02-01-SUMMARY.md, 02-02-SUMMARY.md, 02-03-SUMMARY.md, 02-04-SUMMARY.md]
 started: 2026-02-03T03:30:00Z
@@ -71,9 +71,16 @@ skipped: 0
   reason: "User reported: it doesnt fail to start when fails when a request is received"
   severity: major
   test: 9
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "BuildDAG called in executor.go:55 at request time instead of during CompileConfig in parser.go"
+  artifacts:
+    - path: "internal/composition/executor.go"
+      issue: "BuildDAG called at line 55 during Execute(), should be pre-built"
+    - path: "internal/composition/parser.go"
+      issue: "CompileConfig does not call BuildDAG to pre-validate"
+  missing:
+    - "Add ExecutionPlan field to CompiledComposition"
+    - "Call BuildDAG during CompileConfig for each composition"
+    - "Update executor to use pre-built plan"
   debug_session: ""
 
 - truth: "Missing step references are detected at config parse time (startup), not request time"
@@ -81,7 +88,12 @@ skipped: 0
   reason: "User reported: doesnt fail at startup but fails when a request is received"
   severity: major
   test: 10
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Same as test 9 - BuildDAG validates step references but is called at request time"
+  artifacts:
+    - path: "internal/composition/executor.go"
+      issue: "BuildDAG called at line 55 during Execute(), should be pre-built"
+    - path: "internal/composition/parser.go"
+      issue: "CompileConfig does not call BuildDAG to pre-validate"
+  missing:
+    - "Same fix as test 9 - move BuildDAG to CompileConfig"
   debug_session: ""
