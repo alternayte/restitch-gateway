@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-02-03
 **Current Phase:** 2 - Composition Engine (IN PROGRESS)
-**Current Plan:** 01 of 3 complete
-**Status:** Plan 02-01 complete
+**Current Plan:** 02 of 3 complete
+**Status:** Plan 02-02 complete
 
 ## Project Reference
 
@@ -11,18 +11,18 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 2 Plan 01 complete. YAML config parsing and expression compilation foundation ready for DAG execution.
+**Current Focus:** Phase 2 Plan 02 complete. DAG construction with automatic dependency inference and cycle detection ready for execution.
 
 ## Current Position
 
 **Phase:** 2 of 5 (Composition Engine) - IN PROGRESS
-**Plan:** 01 of 3 complete
-**Status:** Plan 02-01 complete
-**Last activity:** 2026-02-03 - Completed 02-01-PLAN.md (YAML config parsing and expression compilation)
+**Plan:** 02 of 3 complete
+**Status:** Plan 02-02 complete
+**Last activity:** 2026-02-03 - Completed 02-02-PLAN.md (DAG construction with dependency inference)
 
 **Progress:**
 ```
-[##########                                        ] 22% (7/32)
+[###########                                       ] 25% (8/32)
 ```
 
 **Next Actions:**
@@ -32,11 +32,11 @@
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) ✓ VERIFIED
-- Phase 2: 1/11 requirements (9%) - COMP-01 complete
+- Phase 2: 2/11 requirements (18%) - COMP-01, COMP-04 complete
 - Phase 3: 0/6 requirements (0%)
 - Phase 4: 0/5 requirements (0%)
 - Phase 5: 0/4 requirements (0%)
@@ -85,6 +85,13 @@
 - Decision: CompiledConfig separates parsing from compilation
 - Rationale: Catch expression errors at startup (not request time); avoid expr-lang Pitfall 3 (function registration)
 
+**2026-02-03 - Plan 02-02 Execution**
+- Decision: Kahn's algorithm for topological sort with level detection
+- Decision: AST visitor pattern for dependency extraction from expressions
+- Decision: Automatic dependency inference from steps.X references
+- Decision: Circular dependency detection at config parse time (not request time)
+- Rationale: Standard DAG algorithm with O(V+E) complexity; AST visitor handles all expr syntax correctly; fail fast on cycles
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -94,7 +101,7 @@
 - [x] Verify Phase 1 success criteria (PASSED)
 - [x] Begin Phase 2 planning (Composition Engine)
 - [x] Execute Plan 02-01 (YAML config parsing and expression compilation)
-- [ ] Execute Plan 02-02 (DAG execution)
+- [x] Execute Plan 02-02 (DAG construction with dependency inference)
 - [ ] Execute Plan 02-03 (Response merging)
 
 ### Known Blockers
@@ -113,24 +120,24 @@ None identified.
 
 ### What Just Happened
 
-Phase 2 Plan 01 COMPLETE:
-- YAML configuration schema and parser created (internal/composition/config.go, parser.go)
-- Expression compiler using expr-lang/expr v1.17.7 (internal/composition/expr.go)
-- All expressions compile at parse time (fail fast on syntax errors)
-- CompiledConfig structure ready for DAG building
-- Comprehensive test coverage including end-to-end integration tests
+Phase 2 Plan 02 COMPLETE:
+- DAG construction with automatic dependency inference (internal/composition/deps.go, dag.go)
+- AST visitor pattern extracts step dependencies from expressions
+- Kahn's algorithm for topological sort with wave-based parallelism
+- Circular dependency detection at config parse time
+- ExecutionPlan with wave-grouped steps ready for parallel execution
+- Comprehensive test coverage (27 tests) including edge cases
 
-Plan 02-01 deliverables:
-- Config structs with YAML tags for upstreams and compositions (COMP-01)
-- ParseConfig validates YAML structure and upstream references
-- CompileConfig recursively compiles all step and response expressions
-- Template interpolation with {{ expr }} syntax
-- Dependencies: gopkg.in/yaml.v3, github.com/expr-lang/expr@v1.17.7
+Plan 02-02 deliverables:
+- ExtractDependencies parses expressions for steps.X references (COMP-04)
+- BuildDAG produces ExecutionPlan with parallel execution waves
+- Supports both inferred and explicit dependencies
+- Validates all step references exist before execution
+- Dependencies: uses expr AST parser from 02-01
 
 ### What's Next
 
-Phase 2 Plans 02-03:
-- Plan 02-02: DAG execution with parallel step orchestration (COMP-04, COMP-05, COMP-06)
+Phase 2 Plan 03:
 - Plan 02-03: Response merging with expression evaluation (COMP-10, COMP-11)
 
 ### Context for Next Session
@@ -150,7 +157,7 @@ Key files:
 - `cmd/restitch/main.go` - Application entrypoint
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
 - `internal/client/` - HTTP client with optimized connection pooling
-- `internal/composition/` - YAML config parsing and expression compilation
+- `internal/composition/` - YAML config parsing, expression compilation, DAG construction
 
 ---
 
