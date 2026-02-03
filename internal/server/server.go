@@ -21,6 +21,7 @@ type Server struct {
 	httpServer  *http.Server
 	httpsServer *http.Server
 	ready       atomic.Bool
+	startTime   time.Time
 }
 
 // New creates a new Server with the given configuration.
@@ -28,8 +29,9 @@ func New(config Config) *Server {
 	router := NewRouter()
 
 	s := &Server{
-		config: config,
-		router: router,
+		config:    config,
+		router:    router,
+		startTime: time.Now(),
 	}
 
 	// Create HTTP server with proper timeouts
@@ -84,4 +86,15 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 // Ready returns whether the server is ready to accept requests.
 func (s *Server) Ready() bool {
 	return s.ready.Load()
+}
+
+// SetReady sets the server's ready state.
+// Used during shutdown to indicate the server is no longer accepting traffic.
+func (s *Server) SetReady(ready bool) {
+	s.ready.Store(ready)
+}
+
+// StartTime returns the time when the server was created.
+func (s *Server) StartTime() time.Time {
+	return s.startTime
 }

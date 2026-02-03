@@ -10,8 +10,6 @@ import (
 	"github.com/restitch/restitch-gateway/internal/server"
 )
 
-const version = "0.1.0"
-
 func main() {
 	// Parse command-line flags
 	port := flag.Int("port", 8080, "HTTP server port")
@@ -35,6 +33,10 @@ func main() {
 		LogFormat: *logFormat,
 	})
 
+	// Register health endpoints
+	srv.Router().Handle(http.MethodGet, "/health", server.HealthHandler(srv))
+	srv.Router().Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
+
 	// Register test route
 	srv.Router().Handle(http.MethodGet, "/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -46,9 +48,9 @@ func main() {
 
 	// Print startup message
 	if tlsEnabled {
-		fmt.Printf("restitch v%s listening on :%d (HTTP) and :%d (HTTPS)\n", version, *port, *tlsPort)
+		fmt.Printf("restitch v%s listening on :%d (HTTP) and :%d (HTTPS)\n", server.Version, *port, *tlsPort)
 	} else {
-		fmt.Printf("restitch v%s listening on :%d (HTTP only, no TLS certificate provided)\n", version, *port)
+		fmt.Printf("restitch v%s listening on :%d (HTTP only, no TLS certificate provided)\n", server.Version, *port)
 	}
 
 	// Channel to capture server errors
