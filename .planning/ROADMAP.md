@@ -70,11 +70,12 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 4. User can use Expr syntax to reference values from previous steps in paths, params, and response (e.g., `steps.user.id`)
 5. User receives merged response combining data from all successful steps
 
-**Plans:** 4 plans
+**Plans:** 5 plans
 - [x] 02-01-PLAN.md — YAML config schema, parsing, expression compilation
 - [x] 02-02-PLAN.md — DAG builder, dependency inference from expressions
 - [x] 02-03-PLAN.md — Step executor, parallel execution with errgroup
 - [x] 02-04-PLAN.md — Response merging, HTTP handler, main.go integration
+- [x] 02-05-PLAN.md — Gap closure: validation timing fix (parse-time DAG validation)
 
 **Status:** Complete
 **Completed:** 2026-02-03
