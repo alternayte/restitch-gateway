@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-02-03
 **Current Phase:** 5 - Observability (IN PROGRESS)
-**Current Plan:** 02 of 03 complete
-**Status:** Plan 05-02 COMPLETE - step timing and request completion summary implemented
+**Current Plan:** 03 of 03 complete
+**Status:** Phase 5 plans complete - awaiting verification
 
 ## Project Reference
 
@@ -11,37 +11,37 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 5 IN PROGRESS. Request ID infrastructure (05-01) and step timing (05-02) complete. Upstream health checks (05-03) next.
+**Current Focus:** Phase 5 plans COMPLETE. Request ID tracing, step timing, and upstream health endpoint all implemented. Ready for final verification.
 
 ## Current Position
 
 **Phase:** 5 of 5 (Observability) - IN PROGRESS
-**Plan:** 02 of 03 complete
-**Status:** Step timing and request completion summary implemented
-**Last activity:** 2026-02-03 - Completed 05-02-PLAN.md (step timing collection)
+**Plan:** 03 of 03 complete
+**Status:** All observability plans executed
+**Last activity:** 2026-02-03 - Completed 05-03-PLAN.md (upstream health)
 
 **Progress:**
 ```
-[###############################################   ] 94% (30/32)
-Phase 5 IN PROGRESS - 2 of 3 plans complete
+[###############################################   ] 94% (31/33)
+Phase 5 plans COMPLETE - awaiting verification
 ```
 
 **Next Actions:**
-1. Execute Plan 05-03 (Upstream health checks)
-2. Verify Phase 5 success criteria
+1. Verify Phase 5 success criteria
+2. Complete project!
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks), 3 min for 04-03 (3 tasks), 2 min for 04-04 (3 tasks), 5 min for 05-01 (2 tasks), 4 min for 05-02 (2 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks), 3 min for 04-03 (3 tasks), 2 min for 04-04 (3 tasks), 5 min for 05-01 (2 tasks), 4 min for 05-02 (2 tasks), 4 min for 05-03 (2 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) - COMPLETE
 - Phase 2: 11/11 requirements (100%) - COMPLETE
 - Phase 3: 6/6 requirements (100%) - COMPLETE
 - Phase 4: 5/5 requirements (100%) - COMPLETE
-- Phase 5: 2/4 requirements (50%) - IN PROGRESS
+- Phase 5: 4/4 requirements (100%) - AWAITING VERIFICATION
 
-**Blockers:** 05-03 has import cycle issue (server -> composition, but composition -> server for Router)
+**Blockers:** None currently
 
 ## Accumulated Context
 
@@ -157,7 +157,7 @@ Phase 5 IN PROGRESS - 2 of 3 plans complete
 - Decision: Required step failures still fail-fast with detailed error message
 - Decision: Failed step dependencies cascade as "dependency_failed" skips
 - Decision: Failed steps store nil result (available to dependents)
-- Decision: Error sanitization hides internal details (timeout → "timeout", others → "upstream error")
+- Decision: Error sanitization hides internal details (timeout -> "timeout", others -> "upstream error")
 - Rationale: Per RESEARCH.md Pattern 2 - custom orchestration enables error collection; allErrors tracks across all waves for complete partial response; nil results allow expressions to check for missing data
 
 **2026-02-03 - Plan 04-03 Execution (Partial Response Building)**
@@ -187,6 +187,16 @@ Phase 5 IN PROGRESS - 2 of 3 plans complete
 - Decision: Duration calculated from microseconds/1000 for ms precision
 - Decision: findSlowestStep helper returns map[string]interface{} for structured logging
 - Rationale: Human-readable wave numbers (wave: 1 vs wave: 0); complete timing data for all outcomes; float64 milliseconds for precision; structured map enables JSON logging
+
+**2026-02-03 - Plan 05-03 Execution (Upstream Health Endpoint)**
+- Decision: UpstreamInfo bridge type to avoid import cycle between server and composition
+- Decision: HEAD request by default for minimal overhead (no body)
+- Decision: GET request when health_path configured (assumes health endpoint returns body)
+- Decision: 2xx/3xx = healthy, 4xx/5xx = unhealthy
+- Decision: 10 second timeout for all upstream health checks
+- Decision: /ready independent of upstream health (per CONTEXT.md)
+- Decision: Always return HTTP 200 for monitoring tool compatibility
+- Rationale: Bridge type pattern cleanly avoids import cycle; HEAD is efficient for connectivity check; GET appropriate for dedicated health endpoints; standard HTTP success ranges; timeout prevents hanging; /ready checks gateway state not upstreams
 
 ### Active TODOs
 
@@ -220,12 +230,12 @@ Phase 5 IN PROGRESS - 2 of 3 plans complete
 - [x] Begin Phase 5 planning (Observability)
 - [x] Execute Plan 05-01 (Request ID and enhanced logging) - commits 4f5ca97, 5f2beab
 - [x] Execute Plan 05-02 (Step timing collection) - commits 7654c42, f61a4b8
-- [ ] Execute Plan 05-03 (Upstream health checks)
+- [x] Execute Plan 05-03 (Upstream health checks) - commits bec963b, 3a1b5b8
 - [ ] Verify Phase 5 success criteria
 
 ### Known Blockers
 
-**05-03 Import Cycle:** Plan 05-03 introduces `server -> composition` import for UpstreamHealthHandler, but `composition -> server` already exists for Router. Need architectural resolution (options: move types to shared package, or move health handler to composition package).
+None - import cycle issue in 05-03 resolved via UpstreamInfo bridge type.
 
 ### Research Flags
 
@@ -233,52 +243,59 @@ Phase 5 IN PROGRESS - 2 of 3 plans complete
 **Phase 2:** SKIP research (Expr and YAML libraries have excellent docs) - COMPLETE
 **Phase 3:** Research COMPLETE - OAuth2 patterns documented in 03-RESEARCH.md
 **Phase 4:** Research COMPLETE - Error handling patterns documented in 04-RESEARCH.md
-**Phase 5:** SKIP research (standard observability patterns) - IN PROGRESS
+**Phase 5:** SKIP research (standard observability patterns) - COMPLETE
 
 ## Session Continuity
 
 ### What Just Happened
 
-Plan 05-02 COMPLETE - Step timing and request completion summary:
+Plan 05-03 COMPLETE - Upstream health endpoint implemented:
 
 Plan deliverables:
-- StepTiming struct with name, wave, duration_ms, status, optional fields
-- Step logs include wave number (1-indexed) and duration_ms
-- Request completion log includes step_timings map and slowest_step
-- DAG execution order logged at INFO level
+- HealthPath field in Upstream config for custom health check paths
+- UpstreamHealthResponse and UpstreamStatus types for response structure
+- UpstreamInfo bridge type to avoid import cycle
+- checkUpstreamHealth function with HEAD/GET selection
+- UpstreamHealthHandler for /health/upstreams endpoint
+- Integration in main.go with UpstreamInfo map
 
 Key commits:
-- 7654c42: Step timing collection in executor
-- f61a4b8: Request completion summary in handler
+- bec963b: Upstream config health path and checker
+- 3a1b5b8: Upstream health endpoint and integration
 
-Deviations:
-- Fixed incomplete 05-01 task 2 commit (5f2beab)
-- Reverted broken 05-03 partial changes (import cycle)
+Patterns established:
+- Bridge types for avoiding import cycles
+- Concurrent upstream checks with mutex-protected results
+- HEAD by default, GET with health_path
+
+Deviation: Import cycle required UpstreamInfo bridge type (Rule 3 - Blocking)
 
 ### What's Next
 
-Plan 05-03 (Upstream Health Checks):
-- /health/upstreams endpoint
-- Per-upstream status, latency, last check
-- Configurable health path per upstream
-- BLOCKED: Import cycle issue needs resolution
+Phase 5 verification:
+- All observability plans complete (05-01, 05-02, 05-03)
+- Ready for final verification of Phase 5 success criteria
+
+After Phase 5:
+- Project complete! All 32 v1 requirements implemented
 
 ### Context for Next Session
 
 If returning after break:
 1. Check "Current Position" above for phase/plan status
-2. Review "Known Blockers" for import cycle issue in 05-03
-3. Review `.planning/phases/05-observability/05-03-PLAN.md` for next plan
-4. Options for import cycle: shared types package or move handler
+2. Review "Active TODOs" for immediate next actions
+3. Check "Known Blockers" for anything preventing progress
+4. Review `.planning/ROADMAP.md` for full phase structure
+5. Review completed summaries at `.planning/phases/05-observability/05-0X-SUMMARY.md`
 
 Key files:
 - `.planning/ROADMAP.md` - Phase structure and success criteria
 - `.planning/REQUIREMENTS.md` - All 32 v1 requirements with traceability
 - `.planning/phases/05-observability/05-CONTEXT.md` - Phase 5 decisions
-- `.planning/phases/05-observability/05-02-SUMMARY.md` - This plan's summary
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint with middleware chain
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
+- `internal/server/health.go` - Health handlers including UpstreamHealthHandler
 - `internal/client/` - HTTP client with optimized connection pooling
 - `internal/composition/` - Complete composition engine with step timing
 - `internal/observability/` - Request ID infrastructure (ULID)
