@@ -31,8 +31,13 @@ type StepResult struct {
 //   - Non-2xx status is NOT an error (upstream error passthrough)
 //   - Only returns error for network failure or context cancellation
 //
+// Auth handling:
+//   - If upstream has auth strategy, wraps transport with auth RoundTripper
+//   - Creates new http.Client per request (reuses underlying transport connection pool)
+//   - Auth RoundTripper injects credentials (header, basic, bearer, or passthrough)
+//
 // Per RESEARCH.md Pitfall 7: ALWAYS use http.NewRequestWithContext for cancellation.
-func ExecuteStep(ctx context.Context, step *CompiledStep, upstream *Upstream, env map[string]interface{}, httpClient *http.Client) (*StepResult, error) {
+func ExecuteStep(ctx context.Context, step *CompiledStep, upstream *CompiledUpstream, env map[string]interface{}, baseClient *http.Client) (*StepResult, error) {
 	// Evaluate path expression
 	path, err := evaluatePath(step.PathExpr, env)
 	if err != nil {
@@ -40,7 +45,7 @@ func ExecuteStep(ctx context.Context, step *CompiledStep, upstream *Upstream, en
 	}
 
 	// Build full URL
-	url := strings.TrimRight(upstream.URL, "/") + "/" + strings.TrimLeft(path, "/")
+	url := strings.TrimRight(upstream.Upstream.URL, "/") + "/" + strings.TrimLeft(path, "/")
 
 	// Evaluate body expression if present (for POST/PUT)
 	var body io.Reader
@@ -76,7 +81,24 @@ func ExecuteStep(ctx context.Context, step *CompiledStep, upstream *Upstream, en
 		}
 	}
 
-	// Execute request using the provided HTTP client
+	// Build HTTP client with auth transport if configured
+	// This creates a new http.Client per request but reuses the underlying transport
+	// connection pool. The auth RoundTripper is stateless (strategy state is in the Strategy).
+	httpClient := baseClient
+	if upstream.Auth != nil {
+		transport := baseClient.Transport
+		if transport == nil {
+			transport = http.DefaultTransport
+		}
+		// Wrap transport with auth RoundTripper
+		authTransport := upstream.Auth.RoundTripper(transport)
+		httpClient = &http.Client{
+			Transport: authTransport,
+			Timeout:   baseClient.Timeout,
+		}
+	}
+
+	// Execute request using the HTTP client (potentially with auth)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)

@@ -42,8 +42,9 @@ func TestExecuteStep(t *testing.T) {
 			HeaderExprs: map[string]*CompiledExpr{},
 		}
 
-		upstream := &Upstream{
-			URL: server.URL,
+		upstream := &CompiledUpstream{
+			Upstream: &Upstream{URL: server.URL},
+			Auth:     nil, // No auth for this test
 		}
 
 		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil)
@@ -104,8 +105,9 @@ func TestExecuteStep(t *testing.T) {
 			HeaderExprs: map[string]*CompiledExpr{},
 		}
 
-		upstream := &Upstream{
-			URL: server.URL,
+		upstream := &CompiledUpstream{
+			Upstream: &Upstream{URL: server.URL},
+			Auth:     nil, // No auth for this test
 		}
 
 		// Execute step
@@ -159,8 +161,9 @@ func TestExecuteStep(t *testing.T) {
 			HeaderExprs: map[string]*CompiledExpr{},
 		}
 
-		upstream := &Upstream{
-			URL: server.URL,
+		upstream := &CompiledUpstream{
+			Upstream: &Upstream{URL: server.URL},
+			Auth:     nil, // No auth for this test
 		}
 
 		// Execute step
@@ -203,8 +206,9 @@ func TestExecuteStep(t *testing.T) {
 			HeaderExprs: map[string]*CompiledExpr{},
 		}
 
-		upstream := &Upstream{
-			URL: server.URL,
+		upstream := &CompiledUpstream{
+			Upstream: &Upstream{URL: server.URL},
+			Auth:     nil, // No auth for this test
 		}
 
 		// Execute step
@@ -235,8 +239,9 @@ func TestExecuteStep(t *testing.T) {
 			HeaderExprs: map[string]*CompiledExpr{},
 		}
 
-		upstream := &Upstream{
-			URL: server.URL,
+		upstream := &CompiledUpstream{
+			Upstream: &Upstream{URL: server.URL},
+			Auth:     nil, // No auth for this test
 		}
 
 		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil)
@@ -278,8 +283,9 @@ func TestExecuteStep(t *testing.T) {
 			HeaderExprs: map[string]*CompiledExpr{},
 		}
 
-		upstream := &Upstream{
-			URL: server.URL,
+		upstream := &CompiledUpstream{
+			Upstream: &Upstream{URL: server.URL},
+			Auth:     nil, // No auth for this test
 		}
 
 		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil)

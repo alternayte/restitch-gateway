@@ -120,8 +120,8 @@ func (e *Executor) executeStep(
 		return fmt.Errorf("step %q not found in composition", stepName)
 	}
 
-	// Get upstream configuration
-	upstream, exists := e.config.Config.Upstreams[step.Step.Upstream]
+	// Get compiled upstream with auth strategy
+	compiledUpstream, exists := e.config.Upstreams[step.Step.Upstream]
 	if !exists {
 		return fmt.Errorf("upstream %q not found for step %q", step.Step.Upstream, stepName)
 	}
@@ -136,10 +136,10 @@ func (e *Executor) executeStep(
 	slog.Info("step starting",
 		"composition", compositionName,
 		"step", stepName,
-		"upstream", upstream.URL)
+		"upstream", compiledUpstream.Upstream.URL)
 
-	// Execute step
-	result, err := ExecuteStep(ctx, step, &upstream, env, e.httpClient)
+	// Execute step with compiled upstream (includes auth strategy)
+	result, err := ExecuteStep(ctx, step, compiledUpstream, env, e.httpClient)
 	if err != nil {
 		return fmt.Errorf("step %s: %w", stepName, err)
 	}
