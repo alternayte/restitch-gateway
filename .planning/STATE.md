@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-02-03
 **Current Phase:** 4 - Error Handling & Resilience (IN PROGRESS)
-**Current Plan:** 01 of 05 complete
-**Status:** Error handling foundation complete - config schema and timeout execution ready
+**Current Plan:** 04 of 05 complete
+**Status:** Error rule matching complete - can replace upstream errors with configured responses
 
 ## Project Reference
 
@@ -11,33 +11,33 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 4 IN PROGRESS. Error handling config schema and per-step timeout execution implemented. Next: Optional step orchestration.
+**Current Focus:** Phase 4 IN PROGRESS. Error handling nearly complete - config schema, timeout execution, optional steps, error collection, and error rule matching all working. Next: Partial response signaling.
 
 ## Current Position
 
 **Phase:** 4 of 5 (Error Handling & Resilience) - IN PROGRESS
-**Plan:** 02 of 05 complete
-**Status:** Optional step orchestration complete
-**Last activity:** 2026-02-03 - Completed 04-02-PLAN.md (Optional step orchestration)
+**Plan:** 04 of 05 complete
+**Status:** Error rule matching complete
+**Last activity:** 2026-02-03 - Completed 04-04-PLAN.md (Error rule matching)
 
 **Progress:**
 ```
-[########################################          ] 78% (25/32)
-Phase 4 in progress - error collection and optional step orchestration working
+[##########################################        ] 84% (27/32)
+Phase 4 nearly complete - error rule matching working, last plan pending
 ```
 
 **Next Actions:**
-1. Plan 04-03: Error matching rules
+1. Plan 04-05: Partial response signaling (final Phase 4 plan)
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks), 2 min for 04-04 (3 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) - COMPLETE
 - Phase 2: 11/11 requirements (100%) - COMPLETE
 - Phase 3: 6/6 requirements (100%) - COMPLETE
-- Phase 4: 2/5 requirements (40%)
+- Phase 4: 4/5 requirements (80%)
 - Phase 5: 0/4 requirements (0%)
 
 **Blockers:** None currently
@@ -159,6 +159,13 @@ Phase 4 in progress - error collection and optional step orchestration working
 - Decision: Error sanitization hides internal details (timeout → "timeout", others → "upstream error")
 - Rationale: Per RESEARCH.md Pattern 2 - custom orchestration enables error collection; allErrors tracks across all waves for complete partial response; nil results allow expressions to check for missing data
 
+**2026-02-03 - Plan 04-04 Execution (Error Matching Rules)**
+- Decision: Error rule matches replace body but treat step as successful
+- Decision: Matched errors always recorded in _errors array for transparency
+- Decision: Error rule matches marked as optional=true to avoid failing composition
+- Decision: matchErrorRule checks exact status code matches (no ranges/wildcards)
+- Rationale: Per CONTEXT.md "Error matching rules replace the failed step's slot with the configured body value"; transparency via _errors maintains client awareness; simple list matching defers complexity to future
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -184,7 +191,8 @@ Phase 4 in progress - error collection and optional step orchestration working
 - [x] Begin Phase 4 planning (Resilience)
 - [x] Execute Plan 04-01 (Error handling config and timeout execution)
 - [x] Execute Plan 04-02 (Optional step orchestration)
-- [ ] Execute Plan 04-03 (Error matching rules)
+- [x] Execute Plan 04-04 (Error matching rules)
+- [ ] Execute Plan 04-05 (Partial response signaling)
 
 ### Known Blockers
 
@@ -202,35 +210,33 @@ None identified.
 
 ### What Just Happened
 
-Phase 4 Plan 02 COMPLETE - Optional step orchestration:
+Phase 4 Plan 04 COMPLETE - Error matching rules:
 
-Plan 04-02 deliverables:
-- Error collection types: StepErrorDetail, stepError, SanitizeErrorMessage, BuildErrorsArray, HasRequiredFailure
-- CompositionResult extended with StepErrors and IsPartial fields
-- Executor rewritten: replaced errgroup with sync.WaitGroup
-- allErrors slice tracks failures across all waves
-- Optional step failures collected without failing composition
-- Required step failures still fail-fast with detailed error
-- Dependency skip cascade with "dependency_failed" marker
-- Failed steps store nil results
+Plan 04-04 deliverables:
+- matchErrorRule function matches status codes against ErrorRule.Statuses
+- ErrorRuleMatched field in StepResult tracks replacement
+- ErrRuleMatched sentinel distinguishes rule matches from real errors
+- Error rule integration in ExecuteStepWithTimeout
+- Matched errors recorded in _errors array via executor
+- X-Partial-Response header set when result.IsPartial
 
 Commits:
-- 580001e: Create error types and helpers
-- 3bb129c: Add error fields to CompositionResult
-- 606eb8e: Rewrite executor for optional step support
+- 97b63de: Add error rule matching function
+- 520caee: Add error rule match sentinel
+- 8b086cd: Integrate error rule matching into step execution
 
 Patterns established:
-- executeStepWithErrorHandling returns *stepError (nil on success)
-- checkDependenciesFailed for dependency validation
-- Error aggregation: waveErrors → allErrors after each wave
-- Error sanitization: timeout → "timeout", others → "upstream error"
+- matchErrorRule checks status codes after HTTP response
+- Matched errors return successful StepResult with ErrorRuleMatched=true
+- Executor records matches as optional stepError for _errors tracking
+- SanitizeErrorMessage returns "error rule matched" for transparency
 
 ### What's Next
 
-Phase 4 Plan 03 (Error matching rules):
-- Implement error matching rules (status code list matching)
-- Replace failed step body with configured value
-- Add matched errors to _errors array for transparency
+Phase 4 Plan 05 (Partial response signaling) - FINAL Phase 4 plan:
+- Verify X-Partial-Response header and _errors array integration
+- Document partial response patterns
+- Complete Phase 4 success criteria verification
 
 ### Context for Next Session
 
@@ -247,6 +253,8 @@ Key files:
 - `.planning/phases/04-error-handling-resilience/04-CONTEXT.md` - Phase 4 decisions
 - `.planning/phases/04-error-handling-resilience/04-RESEARCH.md` - Error handling and resilience patterns
 - `.planning/phases/04-error-handling-resilience/04-01-SUMMARY.md` - Error handling foundation summary
+- `.planning/phases/04-error-handling-resilience/04-02-SUMMARY.md` - Optional step orchestration summary
+- `.planning/phases/04-error-handling-resilience/04-04-SUMMARY.md` - Error matching rules summary
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint with composition config loading
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
