@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
+	"github.com/restitch/restitch-gateway/internal/observability"
 	"github.com/restitch/restitch-gateway/internal/server"
 )
 
@@ -70,11 +71,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get request ID from context (set by RequestIDMiddleware)
+	requestID := observability.GetRequestID(r.Context())
+
 	slog.Info("executing composition",
 		"composition", compositionName,
 		"method", r.Method,
 		"path", r.URL.Path,
-		"request_id", r.Header.Get("X-Request-ID"))
+		"request_id", requestID)
 
 	// Execute composition
 	ctx := r.Context()
@@ -127,11 +131,37 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build timing summary for log (per OBS-03)
+	timingSummary := make(map[string]float64)
+	for _, t := range result.StepTimings {
+		timingSummary[t.Name] = t.DurationMS
+	}
+
 	slog.Info("composition complete",
 		"composition", compositionName,
 		"status", response.Status,
 		"partial", result.IsPartial,
-		"errors", len(result.StepErrors))
+		"errors", len(result.StepErrors),
+		"step_timings", timingSummary,
+		"total_steps", len(result.StepTimings),
+		"slowest_step", findSlowestStep(result.StepTimings))
+}
+
+// findSlowestStep returns the name and duration of the slowest step.
+func findSlowestStep(timings []StepTiming) map[string]interface{} {
+	if len(timings) == 0 {
+		return nil
+	}
+	slowest := timings[0]
+	for _, t := range timings[1:] {
+		if t.DurationMS > slowest.DurationMS {
+			slowest = t
+		}
+	}
+	return map[string]interface{}{
+		"name":        slowest.Name,
+		"duration_ms": slowest.DurationMS,
+	}
 }
 
 // matchComposition finds the composition name for a given path and method.
