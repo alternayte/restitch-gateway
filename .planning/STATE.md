@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-02-03
 **Current Phase:** 4 - Error Handling & Resilience (IN PROGRESS)
-**Current Plan:** 04 of 05 complete
-**Status:** Error rule matching complete - can replace upstream errors with configured responses
+**Current Plan:** 04 of 05 complete (03 and 04 complete)
+**Status:** Partial response building and error rule matching complete
 
 ## Project Reference
 
@@ -11,14 +11,14 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 4 IN PROGRESS. Error handling nearly complete - config schema, timeout execution, optional steps, error collection, and error rule matching all working. Next: Partial response signaling.
+**Current Focus:** Phase 4 IN PROGRESS. Error handling nearly complete - config schema, timeout execution, optional steps, partial response building with _errors array, and error rule matching all working. Next: Circuit breaker (final Phase 4 plan).
 
 ## Current Position
 
 **Phase:** 4 of 5 (Error Handling & Resilience) - IN PROGRESS
-**Plan:** 04 of 05 complete
-**Status:** Error rule matching complete
-**Last activity:** 2026-02-03 - Completed 04-04-PLAN.md (Error rule matching)
+**Plan:** 04 of 05 complete (03 and 04 done)
+**Status:** Partial response building and error rule matching complete
+**Last activity:** 2026-02-03 - Completed 04-03-PLAN.md (Partial response building)
 
 **Progress:**
 ```
@@ -27,11 +27,11 @@ Phase 4 nearly complete - error rule matching working, last plan pending
 ```
 
 **Next Actions:**
-1. Plan 04-05: Partial response signaling (final Phase 4 plan)
+1. Plan 04-05: Circuit breaker (final Phase 4 plan)
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks), 2 min for 04-04 (3 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks), 3 min for 04-03 (3 tasks), 2 min for 04-04 (3 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) - COMPLETE
@@ -159,6 +159,13 @@ Phase 4 nearly complete - error rule matching working, last plan pending
 - Decision: Error sanitization hides internal details (timeout → "timeout", others → "upstream error")
 - Rationale: Per RESEARCH.md Pattern 2 - custom orchestration enables error collection; allErrors tracks across all waves for complete partial response; nil results allow expressions to check for missing data
 
+**2026-02-03 - Plan 04-03 Execution (Partial Response Building)**
+- Decision: BuildResponse accepts stepErrors parameter for _errors injection
+- Decision: X-Partial-Response header set only when IsPartial is true
+- Decision: Failed optional steps exposed as null in steps.X expressions
+- Decision: HTTP status remains 200 for partial responses (composition succeeded)
+- Rationale: Per CONTEXT.md "Top-level `_errors` field in response body with failure details"; X-Partial-Response provides HTTP-level signaling; nil step results allow expressions like steps.inventory ?? defaultValue
+
 **2026-02-03 - Plan 04-04 Execution (Error Matching Rules)**
 - Decision: Error rule matches replace body but treat step as successful
 - Decision: Matched errors always recorded in _errors array for transparency
@@ -191,8 +198,9 @@ Phase 4 nearly complete - error rule matching working, last plan pending
 - [x] Begin Phase 4 planning (Resilience)
 - [x] Execute Plan 04-01 (Error handling config and timeout execution)
 - [x] Execute Plan 04-02 (Optional step orchestration)
+- [x] Execute Plan 04-03 (Partial response building)
 - [x] Execute Plan 04-04 (Error matching rules)
-- [ ] Execute Plan 04-05 (Partial response signaling)
+- [ ] Execute Plan 04-05 (Circuit breaker)
 
 ### Known Blockers
 
@@ -210,32 +218,32 @@ None identified.
 
 ### What Just Happened
 
-Phase 4 Plan 04 COMPLETE - Error matching rules:
+Phase 4 Plan 03 COMPLETE - Partial response building:
 
-Plan 04-04 deliverables:
-- matchErrorRule function matches status codes against ErrorRule.Statuses
-- ErrorRuleMatched field in StepResult tracks replacement
-- ErrRuleMatched sentinel distinguishes rule matches from real errors
-- Error rule integration in ExecuteStepWithTimeout
-- Matched errors recorded in _errors array via executor
-- X-Partial-Response header set when result.IsPartial
+Plan 04-03 deliverables:
+- BuildResponse accepts stepErrors parameter and injects _errors into body
+- X-Partial-Response header set when result.IsPartial is true
+- Failed optional steps produce null values in expression evaluation
+- HTTP 200 status maintained for partial responses
+- Logging includes partial status and error count
 
 Commits:
-- 97b63de: Add error rule matching function
-- 520caee: Add error rule match sentinel
-- 8b086cd: Integrate error rule matching into step execution
+- 77c336f: Modify BuildResponse to accept stepErrors and inject _errors array
+- e49f0c1: Handle nil step results in buildRequestEnv
+- a2e7c6c: Update handler to pass errors and set X-Partial-Response header
 
 Patterns established:
-- matchErrorRule checks status codes after HTTP response
-- Matched errors return successful StepResult with ErrorRuleMatched=true
-- Executor records matches as optional stepError for _errors tracking
-- SanitizeErrorMessage returns "error rule matched" for transparency
+- BuildResponse signature: BuildResponse(template, results, request, stepErrors)
+- Header setting before WriteHeader: Content-Type, X-Partial-Response
+- buildRequestEnv explicitly sets nil for failed optional steps
+- Nil results exposed as null in expression evaluation
 
 ### What's Next
 
-Phase 4 Plan 05 (Partial response signaling) - FINAL Phase 4 plan:
-- Verify X-Partial-Response header and _errors array integration
-- Document partial response patterns
+Phase 4 Plan 05 (Circuit breaker) - FINAL Phase 4 plan:
+- Implement circuit breaker pattern for upstream resilience
+- Track failure rates per upstream
+- Automatic open/half-open/closed state transitions
 - Complete Phase 4 success criteria verification
 
 ### Context for Next Session
@@ -254,6 +262,7 @@ Key files:
 - `.planning/phases/04-error-handling-resilience/04-RESEARCH.md` - Error handling and resilience patterns
 - `.planning/phases/04-error-handling-resilience/04-01-SUMMARY.md` - Error handling foundation summary
 - `.planning/phases/04-error-handling-resilience/04-02-SUMMARY.md` - Optional step orchestration summary
+- `.planning/phases/04-error-handling-resilience/04-03-SUMMARY.md` - Partial response building summary
 - `.planning/phases/04-error-handling-resilience/04-04-SUMMARY.md` - Error matching rules summary
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint with composition config loading
