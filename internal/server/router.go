@@ -16,8 +16,9 @@ type route struct {
 
 // Router handles HTTP request routing by path pattern and method.
 type Router struct {
-	mu     sync.RWMutex
-	routes []route
+	mu          sync.RWMutex
+	routes      []route
+	middlewares []func(http.Handler) http.Handler
 }
 
 // NewRouter creates a new Router instance.
@@ -25,6 +26,14 @@ func NewRouter() *Router {
 	return &Router{
 		routes: make([]route, 0),
 	}
+}
+
+// Use adds a middleware to the router.
+// Middlewares are applied in the order they are added, wrapping the router.
+func (r *Router) Use(middleware func(http.Handler) http.Handler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.middlewares = append(r.middlewares, middleware)
 }
 
 // Handle registers a handler for the given method and pattern.
@@ -45,6 +54,21 @@ func (r *Router) Handle(method string, pattern string, handler http.HandlerFunc)
 // Routes are matched in order: exact matches first, then prefix matches.
 // Returns 404 for unmatched paths, 405 for wrong method on matched path.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	r.mu.RLock()
+	middlewares := r.middlewares
+	r.mu.RUnlock()
+
+	// Build handler chain with middlewares
+	var handler http.Handler = http.HandlerFunc(r.routeRequest)
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		handler = middlewares[i](handler)
+	}
+
+	handler.ServeHTTP(w, req)
+}
+
+// routeRequest performs the actual route matching and dispatching.
+func (r *Router) routeRequest(w http.ResponseWriter, req *http.Request) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

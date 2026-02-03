@@ -33,6 +33,9 @@ func main() {
 		LogFormat: *logFormat,
 	})
 
+	// Apply logging middleware
+	srv.Router().Use(server.NewLoggingMiddleware(server.LogFormat(*logFormat)))
+
 	// Register health endpoints
 	srv.Router().Handle(http.MethodGet, "/health", server.HealthHandler(srv))
 	srv.Router().Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
@@ -53,7 +56,7 @@ func main() {
 		fmt.Printf("restitch v%s listening on :%d (HTTP only, no TLS certificate provided)\n", server.Version, *port)
 	}
 
-	// Channel to capture server errors
+	// Channel to capture server startup errors
 	errChan := make(chan error, 2)
 
 	// Start HTTP server in goroutine
