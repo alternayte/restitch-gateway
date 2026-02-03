@@ -9,7 +9,7 @@
 
 Restitch delivers a production-ready REST API composition gateway through 5 phases. Phase 1 establishes HTTP infrastructure. Phase 2 implements the core composition engine with DAG-based parallel execution. Phase 3 adds authentication for real backend integrations. Phase 4 adds graceful degradation for production reliability. Phase 5 completes observability for operations.
 
-Each phase delivers a complete, verifiable capability. Dependencies flow naturally: gateway infrastructure → composition engine → authentication → error handling → observability.
+Each phase delivers a complete, verifiable capability. Dependencies flow naturally: gateway infrastructure -> composition engine -> authentication -> error handling -> observability.
 
 ## Phases
 
@@ -70,7 +70,13 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 4. User can use Expr syntax to reference values from previous steps in paths, params, and response (e.g., `steps.user.id`)
 5. User receives merged response combining data from all successful steps
 
-**Status:** Pending
+**Plans:** 4 plans
+- [ ] 02-01-PLAN.md — YAML config schema, parsing, expression compilation
+- [ ] 02-02-PLAN.md — DAG builder, dependency inference from expressions
+- [ ] 02-03-PLAN.md — Step executor, parallel execution with errgroup
+- [ ] 02-04-PLAN.md — Response merging, HTTP handler, main.go integration
+
+**Status:** Planned
 
 ---
 
@@ -151,7 +157,7 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 | Phase | Name | Requirements | Status | Completion |
 |-------|------|--------------|--------|------------|
 | 1 | Gateway Foundation | 6 | Complete | 100% |
-| 2 | Composition Engine | 11 | Pending | 0% |
+| 2 | Composition Engine | 11 | Planned | 0% |
 | 3 | Upstream Authentication | 6 | Pending | 0% |
 | 4 | Error Handling & Resilience | 5 | Pending | 0% |
 | 5 | Observability | 4 | Pending | 0% |
@@ -164,13 +170,13 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 
 ```
 Phase 1: Gateway Foundation
-    ↓
+    |
 Phase 2: Composition Engine
-    ↓
+    |
 Phase 3: Upstream Authentication
-    ↓
+    |
 Phase 4: Error Handling & Resilience
-    ↓
+    |
 Phase 5: Observability
 ```
 
@@ -192,7 +198,7 @@ Research identified critical patterns and pitfalls that inform phase execution:
 - Graceful goroutine cleanup (defer body close, io.Copy drain)
 
 **Phase 2 core technologies:**
-- goccy/go-yaml v1.19.2 for YAML parsing (go-yaml/yaml archived April 2025)
+- gopkg.in/yaml.v3 for YAML parsing
 - expr-lang/expr v1.17.7 for expression evaluation
 - golang.org/x/sync/errgroup for parallel DAG execution
 
@@ -223,4 +229,4 @@ See `.planning/research/SUMMARY.md` for complete analysis.
 
 ---
 
-*Last updated: 2026-02-03 (Phase 1 complete)*
+*Last updated: 2026-02-03 (Phase 2 planned)*
