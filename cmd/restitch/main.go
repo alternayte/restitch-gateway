@@ -75,8 +75,16 @@ func main() {
 		}()
 	}
 
-	// Wait for an error (servers run until error or signal)
-	err := <-errChan
-	fmt.Fprintf(os.Stderr, "%v\n", err)
-	os.Exit(1)
+	// Wait for either a server error or shutdown signal
+	select {
+	case err := <-errChan:
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	case <-srv.WaitForShutdownSignal():
+		// Shutdown signal received, perform graceful shutdown
+		if err := srv.Shutdown(srv.ShutdownContext()); err != nil {
+			fmt.Fprintf(os.Stderr, "shutdown error: %v\n", err)
+			os.Exit(1)
+		}
+	}
 }
