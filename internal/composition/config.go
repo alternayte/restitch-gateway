@@ -14,7 +14,11 @@
 // syntax errors.
 package composition
 
-import "github.com/restitch/restitch-gateway/internal/auth"
+import (
+	"time"
+
+	"github.com/restitch/restitch-gateway/internal/auth"
+)
 
 // Config represents the complete composition configuration loaded from YAML.
 // It defines all upstreams and compositions available to the gateway.
@@ -26,8 +30,9 @@ type Config struct {
 // Upstream represents a named backend service that steps can call.
 // Auth configuration is optional - if omitted, no authentication is applied.
 type Upstream struct {
-	URL  string       `yaml:"url"`
-	Auth *auth.Config `yaml:"auth"` // Optional auth configuration (AUTH-06)
+	URL     string        `yaml:"url"`
+	Auth    *auth.Config  `yaml:"auth"`    // Optional auth configuration (AUTH-06)
+	Timeout time.Duration `yaml:"timeout"` // Default timeout for all steps using this upstream (0 means use 30s default)
 }
 
 // Composition represents a multi-step API composition with a response template.
@@ -43,13 +48,23 @@ type Composition struct {
 // Steps can depend on other steps either implicitly (via expression usage)
 // or explicitly (via DependsOn).
 type Step struct {
-	Name      string            `yaml:"name"`       // Unique step name within composition
-	Upstream  string            `yaml:"upstream"`   // Reference to named upstream
-	Path      string            `yaml:"path"`       // Path template with expressions
-	Method    string            `yaml:"method"`     // HTTP method (defaults to GET)
-	Headers   map[string]string `yaml:"headers"`    // Header templates (defaults to empty)
-	Body      string            `yaml:"body"`       // Request body template for POST/PUT
-	DependsOn []string          `yaml:"depends_on"` // Explicit dependencies (optional)
+	Name       string            `yaml:"name"`        // Unique step name within composition
+	Upstream   string            `yaml:"upstream"`    // Reference to named upstream
+	Path       string            `yaml:"path"`        // Path template with expressions
+	Method     string            `yaml:"method"`      // HTTP method (defaults to GET)
+	Headers    map[string]string `yaml:"headers"`     // Header templates (defaults to empty)
+	Body       string            `yaml:"body"`        // Request body template for POST/PUT
+	DependsOn  []string          `yaml:"depends_on"`  // Explicit dependencies (optional)
+	Optional   bool              `yaml:"optional"`    // Whether step failure allows composition to continue (defaults to false)
+	Timeout    *time.Duration    `yaml:"timeout"`     // Step timeout override (nil means use upstream default)
+	ErrorRules []ErrorRule       `yaml:"error_rules"` // Error matching rules (nil for no rules)
+}
+
+// ErrorRule defines a rule for matching upstream error status codes
+// and replacing the response body with a configured value.
+type ErrorRule struct {
+	Statuses []int       `yaml:"statuses"` // List of status codes to match (e.g., [404, 410])
+	Body     interface{} `yaml:"body"`     // Replacement body value
 }
 
 // ResponseTemplate defines the structure of the composition response.
