@@ -1,9 +1,9 @@
 # Project State: Restitch
 
 **Last Updated:** 2026-02-03
-**Current Phase:** 3 - Upstream Authentication (COMPLETE)
-**Current Plan:** 05 of 05 complete
-**Status:** Phase 3 COMPLETE - all auth strategies integrated
+**Current Phase:** 4 - Error Handling & Resilience (IN PROGRESS)
+**Current Plan:** 01 of 05 complete
+**Status:** Error handling foundation complete - config schema and timeout execution ready
 
 ## Project Reference
 
@@ -11,33 +11,33 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 3 COMPLETE. All authentication strategies (header, basic, passthrough, OAuth2) implemented and integrated into composition engine. Ready for Phase 4 (Resilience).
+**Current Focus:** Phase 4 IN PROGRESS. Error handling config schema and per-step timeout execution implemented. Next: Optional step orchestration.
 
 ## Current Position
 
-**Phase:** 3 of 5 (Upstream Authentication) - COMPLETE
-**Plan:** 05 of 05 complete
-**Status:** All auth strategies integrated into composition engine
-**Last activity:** 2026-02-03 - Completed 03-05-PLAN.md (Strategy factory and integration)
+**Phase:** 4 of 5 (Error Handling & Resilience) - IN PROGRESS
+**Plan:** 01 of 05 complete
+**Status:** Error handling foundation complete
+**Last activity:** 2026-02-03 - Completed 04-01-PLAN.md (Error handling config and timeout execution)
 
 **Progress:**
 ```
-[####################################              ] 72% (23/32)
-Phase 3 COMPLETE - auth strategies wired into composition engine
+[#######################################           ] 75% (24/32)
+Phase 4 started - config schema and timeout execution ready
 ```
 
 **Next Actions:**
-1. Begin Phase 4 planning (Resilience: timeout, retry, circuit breaker)
+1. Plan 04-02: Optional step orchestration (error collection, dependency skip logic)
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) - COMPLETE
 - Phase 2: 11/11 requirements (100%) - COMPLETE
 - Phase 3: 6/6 requirements (100%) - COMPLETE
-- Phase 4: 0/5 requirements (0%)
+- Phase 4: 1/5 requirements (20%)
 - Phase 5: 0/4 requirements (0%)
 
 **Blockers:** None currently
@@ -142,6 +142,13 @@ Phase 3 COMPLETE - auth strategies wired into composition engine
 - Decision: Per-request http.Client with auth transport, reuses underlying connection pool
 - Rationale: Fail-fast validation at startup; passthrough needs Authorization forwarded; transport is stateless so new Client is safe
 
+**2026-02-03 - Plan 04-01 Execution (Error Handling Config and Timeout)**
+- Decision: Steps required by default (Optional field defaults to false)
+- Decision: Timeout hierarchy: step > upstream > 30s default
+- Decision: Step timeout as pointer (*time.Duration) to distinguish "not set" from "set to 0"
+- Decision: Defer cancel() immediately after context creation for resource cleanup
+- Rationale: Per CONTEXT.md "Steps required by default"; hierarchy allows fine-grained control; pointer enables nil fallback; defer prevents resource leaks per RESEARCH.md
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -164,7 +171,9 @@ Phase 3 COMPLETE - auth strategies wired into composition engine
 - [x] Execute Plan 03-03 (Passthrough authentication strategy)
 - [x] Execute Plan 03-04 (OAuth2 client credentials strategy)
 - [x] Execute Plan 03-05 (Strategy factory and integration)
-- [ ] Begin Phase 4 planning (Resilience)
+- [x] Begin Phase 4 planning (Resilience)
+- [x] Execute Plan 04-01 (Error handling config and timeout execution)
+- [ ] Execute Plan 04-02 (Optional step orchestration)
 
 ### Known Blockers
 
@@ -182,32 +191,34 @@ None identified.
 
 ### What Just Happened
 
-Phase 3 COMPLETE - Strategy factory and integration:
+Phase 4 Plan 01 COMPLETE - Error handling foundation:
 
-Plan 03-05 deliverables:
-- Build() factory method on auth.Config for strategy creation
-- CompiledUpstream struct containing Upstream + auth.Strategy
-- CompileConfig updated to accept context and build auth strategies at startup
-- ExecuteStep updated to use CompiledUpstream with auth RoundTripper
-- Handler passthrough error handling (401 Unauthorized with WWW-Authenticate)
-- Authorization header propagation for passthrough support
+Plan 04-01 deliverables:
+- Extended config schema: Optional, Timeout, ErrorRules fields on Step
+- Timeout field on Upstream for default per-upstream timeout
+- CompiledStep and CompiledUpstream have timeout and optional fields
+- DefaultStepTimeout constant (30 seconds)
+- ExecuteStepWithTimeout function with context.WithTimeout
+- resolveTimeout hierarchy (step > upstream > 30s default)
+- Timeout error detection via errors.Is(context.DeadlineExceeded)
 
 Commits:
-- 4ea29d4: Build auth strategies during config compilation
-- 8dc402f: Apply auth RoundTripper per upstream in step execution
-- fd30b16: Handle passthrough auth errors in handler
+- 94edaed: Add error handling config types
+- f0258e5: Add compiled config fields and timeout resolution
+- 3f529ee: Implement step timeout execution
 
 Patterns established:
-- Auth strategy factory: Config.Build() creates appropriate strategy
-- Per-upstream auth: Each upstream can have different auth configuration
-- Fail-fast auth validation: Missing env vars or invalid OAuth2 detected at startup
+- Timeout hierarchy pattern: step override > upstream default > global default
+- Context derivation from parent with defer cancel() for resource cleanup
+- Timeout error wrapping with duration for debugging
 
 ### What's Next
 
-Phase 4 (Resilience):
-- Research partial response UX if needed
-- Plan timeout, retry, and circuit breaker patterns
-- Integrate with composition execution
+Phase 4 Plan 02 (Optional step orchestration):
+- Modify DAG executor to handle optional step failures
+- Error collection instead of fail-fast for optional steps
+- Dependency skip logic when dependencies fail
+- Build _errors array for partial responses
 
 ### Context for Next Session
 
@@ -216,14 +227,14 @@ If returning after break:
 2. Review "Active TODOs" for immediate next actions
 3. Check "Known Blockers" for anything preventing progress
 4. Review `.planning/ROADMAP.md` for full phase structure
-5. Review completed summaries at `.planning/phases/03-upstream-authentication/03-0X-SUMMARY.md`
+5. Review completed summaries at `.planning/phases/04-error-handling-resilience/04-01-SUMMARY.md`
 
 Key files:
 - `.planning/ROADMAP.md` - Phase structure and success criteria
 - `.planning/REQUIREMENTS.md` - All 32 v1 requirements with traceability
-- `.planning/phases/03-upstream-authentication/03-CONTEXT.md` - Phase 3 decisions
-- `.planning/phases/03-upstream-authentication/03-RESEARCH.md` - OAuth2 and auth patterns
-- `.planning/phases/03-upstream-authentication/03-05-SUMMARY.md` - Integration summary
+- `.planning/phases/04-error-handling-resilience/04-CONTEXT.md` - Phase 4 decisions
+- `.planning/phases/04-error-handling-resilience/04-RESEARCH.md` - Error handling and resilience patterns
+- `.planning/phases/04-error-handling-resilience/04-01-SUMMARY.md` - Error handling foundation summary
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint with composition config loading
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
