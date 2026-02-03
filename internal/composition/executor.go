@@ -214,6 +214,16 @@ func (e *Executor) executeStepWithErrorHandling(
 		"status", result.Status,
 		"duration", stepDuration)
 
+	// Check if error rule was applied - record in errors for transparency
+	// Per RESEARCH.md Pitfall 5: "Always add matched error rule to `_errors` array"
+	if result != nil && result.ErrorRuleMatched {
+		return &stepError{
+			stepName: stepName,
+			err:      NewErrorRuleMatchedError(result.Status),
+			optional: true, // Error rule matches don't fail composition
+		}
+	}
+
 	return nil
 }
 

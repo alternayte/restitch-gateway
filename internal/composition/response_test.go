@@ -123,7 +123,7 @@ func TestBuildResponse(t *testing.T) {
 			// Create minimal request
 			req, _ := http.NewRequest("GET", "http://example.com/test", nil)
 
-			resp, err := BuildResponse(tt.template, tt.stepResults, req)
+			resp, err := BuildResponse(tt.template, tt.stepResults, req, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("BuildResponse() error = %v, wantErr %v", err, tt.wantErr)
 				return
