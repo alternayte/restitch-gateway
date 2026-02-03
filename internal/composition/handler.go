@@ -102,7 +102,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Build response from template
 	comp := h.config.Compositions[compositionName]
-	response, err := BuildResponse(comp.Response, result.Steps, r)
+	response, err := BuildResponse(comp.Response, result.Steps, r, result.StepErrors)
 	if err != nil {
 		slog.Error("response template evaluation failed",
 			"composition", compositionName,
@@ -113,6 +113,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Write response
 	w.Header().Set("Content-Type", response.ContentType)
+	// Set X-Partial-Response header if any errors occurred
+	// Per CONTEXT.md: "HTTP 200 with `X-Partial-Response: true` header when any step fails"
+	if result.IsPartial {
+		w.Header().Set("X-Partial-Response", "true")
+	}
 	w.WriteHeader(response.Status)
 
 	if err := json.NewEncoder(w).Encode(response.Body); err != nil {

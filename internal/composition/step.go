@@ -170,6 +170,7 @@ func ExecuteStepWithTimeout(
 
 // buildRequestEnv creates the environment for expression evaluation.
 // It includes the incoming request data and results from completed steps.
+// Nil results (from failed optional steps) are included as nil values.
 func buildRequestEnv(req *http.Request, stepResults map[string]*StepResult) map[string]interface{} {
 	// Parse query parameters
 	query := make(map[string]string)
@@ -197,13 +198,20 @@ func buildRequestEnv(req *http.Request, stepResults map[string]*StepResult) map[
 	}
 
 	// Add step results if any
+	// Nil results from failed optional steps are included as nil
+	// Per CONTEXT.md: "Failed optional steps return `null` for `steps.X` in expressions"
 	if len(stepResults) > 0 {
 		steps := make(map[string]interface{})
 		for name, result := range stepResults {
-			steps[name] = map[string]interface{}{
-				"status":  result.Status,
-				"headers": convertHeaders(result.Headers),
-				"body":    result.Body,
+			if result == nil {
+				// Failed optional step - null in expressions
+				steps[name] = nil
+			} else {
+				steps[name] = map[string]interface{}{
+					"status":  result.Status,
+					"headers": convertHeaders(result.Headers),
+					"body":    result.Body,
+				}
 			}
 		}
 		env["steps"] = steps
@@ -378,6 +386,23 @@ func evaluateHeader(headerExpr *CompiledExpr, env map[string]interface{}) (strin
 
 	// Convert result to string
 	return fmt.Sprintf("%v", result), nil
+}
+
+// matchErrorRule checks if a status code matches any error rule.
+// Returns the replacement body and true if matched, nil and false otherwise.
+// Per CONTEXT.md: "Error matching rules replace the failed step's slot with the configured body value"
+func matchErrorRule(statusCode int, rules []ErrorRule) (interface{}, bool) {
+	if rules == nil {
+		return nil, false
+	}
+	for _, rule := range rules {
+		for _, status := range rule.Statuses {
+			if status == statusCode {
+				return rule.Body, true
+			}
+		}
+	}
+	return nil, false
 }
 
 // interpolateTemplate replaces {{ expr }} patterns with evaluated values.
