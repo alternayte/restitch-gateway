@@ -1,9 +1,9 @@
 # Project State: Restitch
 
 **Last Updated:** 2026-02-03
-**Current Phase:** 4 - Error Handling & Resilience (IN PROGRESS)
-**Current Plan:** 04 of 05 complete (03 and 04 complete)
-**Status:** Partial response building and error rule matching complete
+**Current Phase:** 4 - Error Handling & Resilience (COMPLETE)
+**Current Plan:** 04 of 04 complete
+**Status:** Phase 4 COMPLETE - all error handling and resilience features implemented
 
 ## Project Reference
 
@@ -11,23 +11,23 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 4 IN PROGRESS. Error handling nearly complete - config schema, timeout execution, optional steps, partial response building with _errors array, and error rule matching all working. Next: Circuit breaker (final Phase 4 plan).
+**Current Focus:** Phase 4 COMPLETE. Error handling foundation, optional step orchestration, partial response building, and error rule matching all implemented. Ready for Phase 5 (Observability).
 
 ## Current Position
 
-**Phase:** 4 of 5 (Error Handling & Resilience) - IN PROGRESS
-**Plan:** 04 of 05 complete (03 and 04 done)
-**Status:** Partial response building and error rule matching complete
-**Last activity:** 2026-02-03 - Completed 04-03-PLAN.md (Partial response building)
+**Phase:** 4 of 5 (Error Handling & Resilience) - COMPLETE
+**Plan:** 04 of 04 complete
+**Status:** All error handling features verified
+**Last activity:** 2026-02-03 - Completed Phase 4 verification (20/20 must-haves passed)
 
 **Progress:**
 ```
-[##########################################        ] 84% (27/32)
-Phase 4 nearly complete - error rule matching working, last plan pending
+[############################################      ] 88% (28/32)
+Phase 4 COMPLETE - error handling and resilience working
 ```
 
 **Next Actions:**
-1. Plan 04-05: Circuit breaker (final Phase 4 plan)
+1. Begin Phase 5 planning (Observability)
 
 ## Performance Metrics
 
@@ -37,7 +37,7 @@ Phase 4 nearly complete - error rule matching working, last plan pending
 - Phase 1: 6/6 requirements (100%) - COMPLETE
 - Phase 2: 11/11 requirements (100%) - COMPLETE
 - Phase 3: 6/6 requirements (100%) - COMPLETE
-- Phase 4: 4/5 requirements (80%)
+- Phase 4: 5/5 requirements (100%) - COMPLETE
 - Phase 5: 0/4 requirements (0%)
 
 **Blockers:** None currently
@@ -195,12 +195,14 @@ Phase 4 nearly complete - error rule matching working, last plan pending
 - [x] Execute Plan 03-03 (Passthrough authentication strategy)
 - [x] Execute Plan 03-04 (OAuth2 client credentials strategy)
 - [x] Execute Plan 03-05 (Strategy factory and integration)
+- [x] Verify Phase 3 success criteria (PASSED)
 - [x] Begin Phase 4 planning (Resilience)
 - [x] Execute Plan 04-01 (Error handling config and timeout execution)
 - [x] Execute Plan 04-02 (Optional step orchestration)
 - [x] Execute Plan 04-03 (Partial response building)
 - [x] Execute Plan 04-04 (Error matching rules)
-- [ ] Execute Plan 04-05 (Circuit breaker)
+- [x] Verify Phase 4 success criteria (PASSED - 20/20 must-haves)
+- [ ] Begin Phase 5 planning (Observability)
 
 ### Known Blockers
 
@@ -211,40 +213,44 @@ None identified.
 **Phase 1:** SKIP research (standard Go patterns, well-documented) - COMPLETE
 **Phase 2:** SKIP research (Expr and YAML libraries have excellent docs) - COMPLETE
 **Phase 3:** Research COMPLETE - OAuth2 patterns documented in 03-RESEARCH.md
-**Phase 4:** MAY NEED research for partial response UX (200 vs 207 Multi-Status decision)
+**Phase 4:** Research COMPLETE - Error handling patterns documented in 04-RESEARCH.md
 **Phase 5:** SKIP research (standard observability patterns)
 
 ## Session Continuity
 
 ### What Just Happened
 
-Phase 4 Plan 03 COMPLETE - Partial response building:
+Phase 4 COMPLETE - All error handling and resilience features verified:
 
-Plan 04-03 deliverables:
-- BuildResponse accepts stepErrors parameter and injects _errors into body
-- X-Partial-Response header set when result.IsPartial is true
-- Failed optional steps produce null values in expression evaluation
-- HTTP 200 status maintained for partial responses
-- Logging includes partial status and error count
+Plan deliverables:
+- 04-01: Config schema with Optional, Timeout, ErrorRules; step timeout execution with context.WithTimeout
+- 04-02: Error types (StepErrorDetail), executor rewritten with sync.WaitGroup for optional step support
+- 04-03: Partial response building with _errors array injection, X-Partial-Response header
+- 04-04: Error rule matching for status code replacement, matches recorded in _errors
 
-Commits:
-- 77c336f: Modify BuildResponse to accept stepErrors and inject _errors array
-- e49f0c1: Handle nil step results in buildRequestEnv
-- a2e7c6c: Update handler to pass errors and set X-Partial-Response header
+Verification: 20/20 must-haves passed (100%)
+
+Key commits:
+- 94edaed, f0258e5, 3f529ee: Error handling config and timeout
+- 580001e, 3bb129c, 606eb8e: Optional step orchestration
+- 77c336f, e49f0c1, a2e7c6c: Partial response building
+- 97b63de, 520caee, 8b086cd: Error matching rules
 
 Patterns established:
-- BuildResponse signature: BuildResponse(template, results, request, stepErrors)
-- Header setting before WriteHeader: Content-Type, X-Partial-Response
-- buildRequestEnv explicitly sets nil for failed optional steps
-- Nil results exposed as null in expression evaluation
+- Timeout hierarchy: step > upstream > 30s default
+- sync.WaitGroup replaces errgroup for optional step support
+- allErrors aggregates errors across all waves
+- X-Partial-Response header for partial response signaling
+- _errors array injected into response body
+- Error rule matches recorded transparently
 
 ### What's Next
 
-Phase 4 Plan 05 (Circuit breaker) - FINAL Phase 4 plan:
-- Implement circuit breaker pattern for upstream resilience
-- Track failure rates per upstream
-- Automatic open/half-open/closed state transitions
-- Complete Phase 4 success criteria verification
+Phase 5 (Observability):
+- Structured JSON logging for all requests
+- Request ID, method, path, status, duration in logs
+- Per-step timing for waterfall debugging
+- DAG execution order logging
 
 ### Context for Next Session
 
@@ -253,22 +259,19 @@ If returning after break:
 2. Review "Active TODOs" for immediate next actions
 3. Check "Known Blockers" for anything preventing progress
 4. Review `.planning/ROADMAP.md` for full phase structure
-5. Review completed summaries at `.planning/phases/04-error-handling-resilience/04-01-SUMMARY.md`
+5. Review completed summaries at `.planning/phases/04-error-handling-resilience/04-0X-SUMMARY.md`
 
 Key files:
 - `.planning/ROADMAP.md` - Phase structure and success criteria
 - `.planning/REQUIREMENTS.md` - All 32 v1 requirements with traceability
 - `.planning/phases/04-error-handling-resilience/04-CONTEXT.md` - Phase 4 decisions
 - `.planning/phases/04-error-handling-resilience/04-RESEARCH.md` - Error handling and resilience patterns
-- `.planning/phases/04-error-handling-resilience/04-01-SUMMARY.md` - Error handling foundation summary
-- `.planning/phases/04-error-handling-resilience/04-02-SUMMARY.md` - Optional step orchestration summary
-- `.planning/phases/04-error-handling-resilience/04-03-SUMMARY.md` - Partial response building summary
-- `.planning/phases/04-error-handling-resilience/04-04-SUMMARY.md` - Error matching rules summary
+- `.planning/phases/04-error-handling-resilience/04-VERIFICATION.md` - Phase 4 verification report
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint with composition config loading
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
 - `internal/client/` - HTTP client with optimized connection pooling
-- `internal/composition/` - Complete composition engine with auth integration
+- `internal/composition/` - Complete composition engine with error handling
 - `internal/config/env.go` - Environment variable expansion with validation
 - `internal/auth/` - All authentication strategies (header, basic, passthrough, oauth2)
 

@@ -32,11 +32,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Error Handling
 
-- [ ] **ERR-01**: Compositions define error matching rules on step status codes
-- [ ] **ERR-02**: Matched errors return configured status code and body
-- [ ] **ERR-03**: Steps can be marked as optional (non-blocking on failure)
-- [ ] **ERR-04**: Optional step failures return partial response with remaining data
-- [ ] **ERR-05**: Upstream timeouts are configurable per step
+- [x] **ERR-01**: Compositions define error matching rules on step status codes
+- [x] **ERR-02**: Matched errors return configured status code and body
+- [x] **ERR-03**: Steps can be marked as optional (non-blocking on failure)
+- [x] **ERR-04**: Optional step failures return partial response with remaining data
+- [x] **ERR-05**: Upstream timeouts are configurable per step
 
 ### Gateway Core
 
@@ -127,11 +127,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-04 | Phase 3 - Upstream Authentication | Complete |
 | AUTH-05 | Phase 3 - Upstream Authentication | Complete |
 | AUTH-06 | Phase 3 - Upstream Authentication | Complete |
-| ERR-01 | Phase 4 - Error Handling & Resilience | Pending |
-| ERR-02 | Phase 4 - Error Handling & Resilience | Pending |
-| ERR-03 | Phase 4 - Error Handling & Resilience | Pending |
-| ERR-04 | Phase 4 - Error Handling & Resilience | Pending |
-| ERR-05 | Phase 4 - Error Handling & Resilience | Pending |
+| ERR-01 | Phase 4 - Error Handling & Resilience | Complete |
+| ERR-02 | Phase 4 - Error Handling & Resilience | Complete |
+| ERR-03 | Phase 4 - Error Handling & Resilience | Complete |
+| ERR-04 | Phase 4 - Error Handling & Resilience | Complete |
+| ERR-05 | Phase 4 - Error Handling & Resilience | Complete |
 | OBS-01 | Phase 5 - Observability | Pending |
 | OBS-02 | Phase 5 - Observability | Pending |
 | OBS-03 | Phase 5 - Observability | Pending |
@@ -152,4 +152,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 (Phase 3 complete - 23 requirements verified)*
+*Last updated: 2026-02-03 (Phase 4 complete - 28 requirements verified)*
