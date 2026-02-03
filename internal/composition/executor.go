@@ -13,7 +13,9 @@ import (
 
 // CompositionResult holds results from all steps in a composition.
 type CompositionResult struct {
-	Steps map[string]*StepResult
+	Steps      map[string]*StepResult
+	StepErrors []StepErrorDetail // Errors from failed optional steps
+	IsPartial  bool              // True if any step failed
 }
 
 // Executor runs compositions according to their DAG execution plans.
