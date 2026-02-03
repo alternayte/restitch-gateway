@@ -11,6 +11,7 @@ import (
 
 	"github.com/restitch/restitch-gateway/internal/client"
 	"github.com/restitch/restitch-gateway/internal/composition"
+	"github.com/restitch/restitch-gateway/internal/observability"
 	"github.com/restitch/restitch-gateway/internal/server"
 )
 
@@ -38,7 +39,10 @@ func main() {
 		LogFormat: *logFormat,
 	})
 
-	// Apply logging middleware
+	// Apply middleware chain:
+	// 1. RequestIDMiddleware first - generates/extracts request ID, stores in context
+	// 2. LoggingMiddleware second - reads request ID from context for logging
+	srv.Router().Use(observability.RequestIDMiddleware)
 	srv.Router().Use(server.NewLoggingMiddleware(server.LogFormat(*logFormat)))
 
 	// Load composition config if available
