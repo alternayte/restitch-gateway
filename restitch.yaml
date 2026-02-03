@@ -1,0 +1,29 @@
+upstreams:
+  jsonplaceholder:
+    url: "https://jsonplaceholder.typicode.com"
+  dummyjson:
+    url: "https://dummyjson.com"
+
+compositions:
+  user-with-posts:
+    path: "/api/user-posts"
+    method: GET
+    steps:
+      - name: user
+        upstream: jsonplaceholder
+        path: "/users/{{ req.query.id }}"
+      - name: posts
+        upstream: jsonplaceholder
+        path: "/posts?userId={{ steps.user.body.id }}"
+      - name: quotes
+        upstream: dummyjson
+        path: "/quotes/{{ steps.user.body.id }}"
+    response:
+      status: 200
+      body:
+        user: 
+          id: "{{ steps.user.body.id }}"
+          name: "{{ steps.user.body.name }}"
+          quote: "{{ steps.quotes.body.quote }}"
+        posts: "{{ steps.posts.body }}"
+        post_count: "{{ len(steps.posts.body) }}"
