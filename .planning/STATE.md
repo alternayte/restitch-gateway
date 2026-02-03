@@ -16,28 +16,28 @@
 ## Current Position
 
 **Phase:** 4 of 5 (Error Handling & Resilience) - IN PROGRESS
-**Plan:** 01 of 05 complete
-**Status:** Error handling foundation complete
-**Last activity:** 2026-02-03 - Completed 04-01-PLAN.md (Error handling config and timeout execution)
+**Plan:** 02 of 05 complete
+**Status:** Optional step orchestration complete
+**Last activity:** 2026-02-03 - Completed 04-02-PLAN.md (Optional step orchestration)
 
 **Progress:**
 ```
-[#######################################           ] 75% (24/32)
-Phase 4 started - config schema and timeout execution ready
+[########################################          ] 78% (25/32)
+Phase 4 in progress - error collection and optional step orchestration working
 ```
 
 **Next Actions:**
-1. Plan 04-02: Optional step orchestration (error collection, dependency skip logic)
+1. Plan 04-03: Error matching rules
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks), 4 min for 02-04 (3 tasks), 2 min for 02-05 (3 tasks, gap closure), 2 min for 03-01 (3 tasks), 2 min for 03-02 (2 tasks), 2 min for 03-03 (2 tasks), 3 min for 03-04 (2 tasks), 5 min for 03-05 (3 tasks), 3 min for 04-01 (3 tasks), 3 min for 04-02 (3 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) - COMPLETE
 - Phase 2: 11/11 requirements (100%) - COMPLETE
 - Phase 3: 6/6 requirements (100%) - COMPLETE
-- Phase 4: 1/5 requirements (20%)
+- Phase 4: 2/5 requirements (40%)
 - Phase 5: 0/4 requirements (0%)
 
 **Blockers:** None currently
@@ -149,6 +149,16 @@ Phase 4 started - config schema and timeout execution ready
 - Decision: Defer cancel() immediately after context creation for resource cleanup
 - Rationale: Per CONTEXT.md "Steps required by default"; hierarchy allows fine-grained control; pointer enables nil fallback; defer prevents resource leaks per RESEARCH.md
 
+**2026-02-03 - Plan 04-02 Execution (Optional Step Orchestration)**
+- Decision: Replace errgroup with sync.WaitGroup for optional step support
+- Decision: allErrors slice declared at start of Execute, aggregated after each wave
+- Decision: Optional step failures collected in waveErrors, composition continues
+- Decision: Required step failures still fail-fast with detailed error message
+- Decision: Failed step dependencies cascade as "dependency_failed" skips
+- Decision: Failed steps store nil result (available to dependents)
+- Decision: Error sanitization hides internal details (timeout → "timeout", others → "upstream error")
+- Rationale: Per RESEARCH.md Pattern 2 - custom orchestration enables error collection; allErrors tracks across all waves for complete partial response; nil results allow expressions to check for missing data
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -173,7 +183,8 @@ Phase 4 started - config schema and timeout execution ready
 - [x] Execute Plan 03-05 (Strategy factory and integration)
 - [x] Begin Phase 4 planning (Resilience)
 - [x] Execute Plan 04-01 (Error handling config and timeout execution)
-- [ ] Execute Plan 04-02 (Optional step orchestration)
+- [x] Execute Plan 04-02 (Optional step orchestration)
+- [ ] Execute Plan 04-03 (Error matching rules)
 
 ### Known Blockers
 
@@ -191,34 +202,35 @@ None identified.
 
 ### What Just Happened
 
-Phase 4 Plan 01 COMPLETE - Error handling foundation:
+Phase 4 Plan 02 COMPLETE - Optional step orchestration:
 
-Plan 04-01 deliverables:
-- Extended config schema: Optional, Timeout, ErrorRules fields on Step
-- Timeout field on Upstream for default per-upstream timeout
-- CompiledStep and CompiledUpstream have timeout and optional fields
-- DefaultStepTimeout constant (30 seconds)
-- ExecuteStepWithTimeout function with context.WithTimeout
-- resolveTimeout hierarchy (step > upstream > 30s default)
-- Timeout error detection via errors.Is(context.DeadlineExceeded)
+Plan 04-02 deliverables:
+- Error collection types: StepErrorDetail, stepError, SanitizeErrorMessage, BuildErrorsArray, HasRequiredFailure
+- CompositionResult extended with StepErrors and IsPartial fields
+- Executor rewritten: replaced errgroup with sync.WaitGroup
+- allErrors slice tracks failures across all waves
+- Optional step failures collected without failing composition
+- Required step failures still fail-fast with detailed error
+- Dependency skip cascade with "dependency_failed" marker
+- Failed steps store nil results
 
 Commits:
-- 94edaed: Add error handling config types
-- f0258e5: Add compiled config fields and timeout resolution
-- 3f529ee: Implement step timeout execution
+- 580001e: Create error types and helpers
+- 3bb129c: Add error fields to CompositionResult
+- 606eb8e: Rewrite executor for optional step support
 
 Patterns established:
-- Timeout hierarchy pattern: step override > upstream default > global default
-- Context derivation from parent with defer cancel() for resource cleanup
-- Timeout error wrapping with duration for debugging
+- executeStepWithErrorHandling returns *stepError (nil on success)
+- checkDependenciesFailed for dependency validation
+- Error aggregation: waveErrors → allErrors after each wave
+- Error sanitization: timeout → "timeout", others → "upstream error"
 
 ### What's Next
 
-Phase 4 Plan 02 (Optional step orchestration):
-- Modify DAG executor to handle optional step failures
-- Error collection instead of fail-fast for optional steps
-- Dependency skip logic when dependencies fail
-- Build _errors array for partial responses
+Phase 4 Plan 03 (Error matching rules):
+- Implement error matching rules (status code list matching)
+- Replace failed step body with configured value
+- Add matched errors to _errors array for transparency
 
 ### Context for Next Session
 
