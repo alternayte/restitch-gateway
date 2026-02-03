@@ -483,4 +483,27 @@ func TestInterpolateTemplate(t *testing.T) {
 			t.Errorf("Expected /users/123/orders/456, got %s", result)
 		}
 	})
+
+	t.Run("interpolate with step results", func(t *testing.T) {
+		env := map[string]interface{}{
+			"steps": map[string]interface{}{
+				"user": map[string]interface{}{
+					"status": 200,
+					"body": map[string]interface{}{
+						"id":   float64(123), // JSON unmarshals numbers as float64
+						"name": "Alice",
+					},
+				},
+			},
+		}
+
+		result, err := interpolateTemplate("/orders?user_id={{ steps.user.body.id }}", env)
+		if err != nil {
+			t.Fatalf("Interpolation failed: %v", err)
+		}
+
+		if result != "/orders?user_id=123" {
+			t.Errorf("Expected /orders?user_id=123, got %s", result)
+		}
+	})
 }

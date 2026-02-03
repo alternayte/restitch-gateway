@@ -231,14 +231,15 @@ func evaluatePath(pathExpr *CompiledExpr, env map[string]interface{}) (string, e
 		return "", fmt.Errorf("path expression is nil")
 	}
 
+	// If template string with embedded expressions, interpolate them
+	// Check this FIRST before checking Program, because templates have Program==nil
+	if strings.Contains(pathExpr.Raw, "{{") {
+		return interpolateTemplate(pathExpr.Raw, env)
+	}
+
 	// If no program (literal string), return raw value
 	if pathExpr.Program == nil {
 		return pathExpr.Raw, nil
-	}
-
-	// If template string with embedded expressions, interpolate them
-	if strings.Contains(pathExpr.Raw, "{{") {
-		return interpolateTemplate(pathExpr.Raw, env)
 	}
 
 	// Single expression - evaluate it
@@ -320,6 +321,8 @@ func interpolateTemplate(template string, env map[string]interface{}) (string, e
 
 	for _, exprStr := range exprs {
 		// Compile and evaluate the expression
+		// Note: We compile at runtime here because env structure varies per request
+		// BuildBaseEnvironment is used at config parse time for validation only
 		compiled, err := CompileExpression(exprStr, env)
 		if err != nil {
 			return "", fmt.Errorf("failed to compile expression %q: %w", exprStr, err)
@@ -331,12 +334,13 @@ func interpolateTemplate(template string, env map[string]interface{}) (string, e
 		}
 
 		// Replace the {{ expr }} pattern with the value
+		// Try both with and without spaces
 		placeholder := "{{ " + exprStr + " }}"
-		result = strings.ReplaceAll(result, placeholder, fmt.Sprintf("%v", value))
-
-		// Also try without spaces around expression
 		placeholderNoSpace := "{{" + exprStr + "}}"
-		result = strings.ReplaceAll(result, placeholderNoSpace, fmt.Sprintf("%v", value))
+
+		valueStr := fmt.Sprintf("%v", value)
+		result = strings.ReplaceAll(result, placeholder, valueStr)
+		result = strings.ReplaceAll(result, placeholderNoSpace, valueStr)
 	}
 
 	return result, nil
