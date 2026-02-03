@@ -34,7 +34,12 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 4. User can query /ready endpoint and receive 200 OK when gateway can accept traffic
 5. User can send SIGTERM signal and observe connections drain before shutdown
 
-**Status:** Pending
+**Plans:** 3 plans
+- [ ] 01-01-PLAN.md — Project foundation, HTTP/HTTPS server, path/method routing
+- [ ] 01-02-PLAN.md — Health/ready endpoints, request logging middleware
+- [ ] 01-03-PLAN.md — Graceful shutdown, HTTP client foundation
+
+**Status:** Planned
 
 ---
 
@@ -144,7 +149,7 @@ Each phase delivers a complete, verifiable capability. Dependencies flow natural
 
 | Phase | Name | Requirements | Status | Completion |
 |-------|------|--------------|--------|------------|
-| 1 | Gateway Foundation | 6 | Pending | 0% |
+| 1 | Gateway Foundation | 6 | Planned | 0% |
 | 2 | Composition Engine | 11 | Pending | 0% |
 | 3 | Upstream Authentication | 6 | Pending | 0% |
 | 4 | Error Handling & Resilience | 5 | Pending | 0% |
