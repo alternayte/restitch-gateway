@@ -2,8 +2,8 @@
 
 **Last Updated:** 2026-02-03
 **Current Phase:** 2 - Composition Engine (IN PROGRESS)
-**Current Plan:** 02 of 3 complete
-**Status:** Plan 02-02 complete
+**Current Plan:** 03 of 4 complete
+**Status:** Plan 02-03 complete
 
 ## Project Reference
 
@@ -11,18 +11,18 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 2 Plan 02 complete. DAG construction with automatic dependency inference and cycle detection ready for execution.
+**Current Focus:** Phase 2 Plan 03 complete. Step execution and DAG executor with parallel execution using errgroup. Ready for response merging.
 
 ## Current Position
 
 **Phase:** 2 of 5 (Composition Engine) - IN PROGRESS
-**Plan:** 02 of 3 complete
-**Status:** Plan 02-02 complete
-**Last activity:** 2026-02-03 - Completed 02-02-PLAN.md (DAG construction with dependency inference)
+**Plan:** 03 of 4 complete
+**Status:** Plan 02-03 complete
+**Last activity:** 2026-02-03 - Completed 02-03-PLAN.md (Step execution and DAG executor)
 
 **Progress:**
 ```
-[###########                                       ] 25% (8/32)
+[############                                      ] 28% (9/32)
 ```
 
 **Next Actions:**
@@ -32,11 +32,11 @@
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks), 3 min for 02-02 (2 tasks), 9 min for 02-03 (2 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) ✓ VERIFIED
-- Phase 2: 2/11 requirements (18%) - COMP-01, COMP-04 complete
+- Phase 2: 5/11 requirements (45%) - COMP-01, COMP-04, COMP-05, COMP-06, COMP-10 complete
 - Phase 3: 0/6 requirements (0%)
 - Phase 4: 0/5 requirements (0%)
 - Phase 5: 0/4 requirements (0%)
@@ -92,6 +92,13 @@
 - Decision: Circular dependency detection at config parse time (not request time)
 - Rationale: Standard DAG algorithm with O(V+E) complexity; AST visitor handles all expr syntax correctly; fail fast on cycles
 
+**2026-02-03 - Plan 02-03 Execution**
+- Decision: Upstream HTTP errors (500, 404) are passthrough - not step failures per CONTEXT.md
+- Decision: Network/context errors trigger fail-fast via errgroup cancellation
+- Decision: Header propagation uses case-insensitive lookup (HTTP headers canonicalized)
+- Decision: Template interpolation checked BEFORE Program check (templates have Program==nil)
+- Rationale: Upstream errors are results (Phase 2 completes all steps); network failures are true errors; HTTP header standard behavior; correct template detection order
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -102,7 +109,8 @@
 - [x] Begin Phase 2 planning (Composition Engine)
 - [x] Execute Plan 02-01 (YAML config parsing and expression compilation)
 - [x] Execute Plan 02-02 (DAG construction with dependency inference)
-- [ ] Execute Plan 02-03 (Response merging)
+- [x] Execute Plan 02-03 (Step execution and DAG executor)
+- [ ] Execute Plan 02-04 (Response merging and HTTP handler integration)
 
 ### Known Blockers
 
@@ -120,25 +128,26 @@ None identified.
 
 ### What Just Happened
 
-Phase 2 Plan 02 COMPLETE:
-- DAG construction with automatic dependency inference (internal/composition/deps.go, dag.go)
-- AST visitor pattern extracts step dependencies from expressions
-- Kahn's algorithm for topological sort with wave-based parallelism
-- Circular dependency detection at config parse time
-- ExecutionPlan with wave-grouped steps ready for parallel execution
-- Comprehensive test coverage (27 tests) including edge cases
+Phase 2 Plan 03 COMPLETE:
+- Step execution with HTTP client integration (internal/composition/step.go, executor.go)
+- Parallel DAG execution using errgroup.WithContext for fail-fast
+- Header propagation: X-Request-ID, X-Correlation-ID, traceparent, Accept, Accept-Language
+- UUID generation for X-Request-ID if not present
+- Template interpolation for {{ expr }} patterns in paths/bodies/headers
+- Upstream error passthrough (non-2xx as StepResult, not failure)
+- Comprehensive test coverage (20 tests) including parallel execution verification
 
-Plan 02-02 deliverables:
-- ExtractDependencies parses expressions for steps.X references (COMP-04)
-- BuildDAG produces ExecutionPlan with parallel execution waves
-- Supports both inferred and explicit dependencies
-- Validates all step references exist before execution
-- Dependencies: uses expr AST parser from 02-01
+Plan 02-03 deliverables:
+- ExecuteStep makes HTTP requests to upstreams with evaluated expressions (COMP-05, COMP-10)
+- Executor runs compositions with wave-by-wave parallel execution (COMP-06)
+- Dependencies added: github.com/google/uuid, golang.org/x/sync/errgroup
+- DrainAndClose pattern for connection reuse from Phase 1
+- buildRequestEnv constructs environment with req data and step results
 
 ### What's Next
 
-Phase 2 Plan 03:
-- Plan 02-03: Response merging with expression evaluation (COMP-10, COMP-11)
+Phase 2 Plan 04:
+- Plan 02-04: Response merging with HTTP handler integration (COMP-09, COMP-11)
 
 ### Context for Next Session
 
@@ -157,7 +166,7 @@ Key files:
 - `cmd/restitch/main.go` - Application entrypoint
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
 - `internal/client/` - HTTP client with optimized connection pooling
-- `internal/composition/` - YAML config parsing, expression compilation, DAG construction
+- `internal/composition/` - YAML config parsing, expression compilation, DAG construction, step execution, parallel executor
 
 ---
 
