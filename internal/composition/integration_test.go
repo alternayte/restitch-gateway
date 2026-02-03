@@ -1,6 +1,7 @@
 package composition
 
 import (
+	"context"
 	"os"
 	"testing"
 )
@@ -68,7 +69,7 @@ compositions:
 	}
 
 	// Test 2: Compile all expressions
-	compiled, err := CompileConfig(cfg)
+	compiled, err := CompileConfig(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("CompileConfig failed: %v", err)
 	}
@@ -170,7 +171,7 @@ compositions:
 	}
 
 	// Compile expressions - should FAIL at parse time
-	_, err = CompileConfig(cfg)
+	_, err = CompileConfig(context.Background(), cfg)
 	if err == nil {
 		t.Fatal("CompileConfig should fail for invalid expression syntax")
 	}

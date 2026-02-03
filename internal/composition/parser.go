@@ -1,9 +1,11 @@
 package composition
 
 import (
+	"context"
 	"fmt"
 	"os"
 
+	"github.com/restitch/restitch-gateway/internal/auth"
 	"gopkg.in/yaml.v3"
 )
 
@@ -49,6 +51,13 @@ func LoadConfigFile(path string) (*Config, error) {
 type CompiledConfig struct {
 	Config       *Config
 	Compositions map[string]*CompiledComposition
+	Upstreams    map[string]*CompiledUpstream // Compiled upstreams with auth strategies
+}
+
+// CompiledUpstream holds an upstream definition plus its compiled auth strategy.
+type CompiledUpstream struct {
+	Upstream *Upstream
+	Auth     auth.Strategy // nil for no auth
 }
 
 // CompiledComposition holds compiled expressions for a single composition.
@@ -74,17 +83,46 @@ type CompiledResponse struct {
 	ContentType string                   // Content-Type header value
 }
 
-// CompileConfig takes a parsed config and compiles all expressions.
+// CompileConfig takes a parsed config and compiles all expressions and auth strategies.
 // This MUST be called before using the configuration to serve requests.
 //
 // All expressions are compiled at parse time (not request time) to fail fast
 // on syntax errors per CONTEXT.md decisions.
 //
-// Returns an error if any expression has invalid syntax.
-func CompileConfig(cfg *Config) (*CompiledConfig, error) {
+// Auth strategies are built at compile time to:
+//   - Fail fast on missing/invalid environment variables (credentials)
+//   - Fail fast on invalid OAuth2 credentials (initial token fetch)
+//   - Validate mutual exclusivity of auth strategies per upstream
+//
+// Returns an error if any expression has invalid syntax or auth config is invalid.
+func CompileConfig(ctx context.Context, cfg *Config) (*CompiledConfig, error) {
 	compiled := &CompiledConfig{
 		Config:       cfg,
 		Compositions: make(map[string]*CompiledComposition),
+		Upstreams:    make(map[string]*CompiledUpstream),
+	}
+
+	// Build auth strategies for each upstream (fail-fast on invalid config)
+	for name, upstream := range cfg.Upstreams {
+		var strategy auth.Strategy = nil
+		if upstream.Auth != nil {
+			// Validate mutual exclusivity
+			if err := upstream.Auth.Validate(); err != nil {
+				return nil, fmt.Errorf("upstream %s: %w", name, err)
+			}
+			// Build strategy (expands env vars, validates credentials)
+			var err error
+			strategy, err = upstream.Auth.Build(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("upstream %s auth: %w", name, err)
+			}
+		}
+		// Keep reference to original upstream
+		upstreamCopy := upstream
+		compiled.Upstreams[name] = &CompiledUpstream{
+			Upstream: &upstreamCopy,
+			Auth:     strategy,
+		}
 	}
 
 	for compName, comp := range cfg.Compositions {

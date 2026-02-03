@@ -379,7 +379,7 @@ upstreams:
 		panic(err)
 	}
 
-	compiled, err := CompileConfig(cfg)
+	compiled, err := CompileConfig(context.Background(), cfg)
 	if err != nil {
 		panic(err)
 	}

@@ -35,6 +35,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"net/http"
 )
@@ -131,4 +132,26 @@ func (s *NoneStrategy) RoundTripper(base http.RoundTripper) http.RoundTripper {
 // NewNoneStrategy creates a strategy that performs no authentication.
 func NewNoneStrategy() *NoneStrategy {
 	return &NoneStrategy{}
+}
+
+// Build creates the appropriate Strategy based on which config option is set.
+// Returns nil if no auth is configured.
+// Returns an error if environment variable expansion fails or credentials are invalid.
+func (c *Config) Build(ctx context.Context) (Strategy, error) {
+	if c == nil {
+		return nil, nil
+	}
+
+	switch {
+	case c.Header != nil:
+		return NewHeaderStrategy(c.Header)
+	case c.Basic != nil:
+		return NewBasicStrategy(c.Basic)
+	case c.Passthrough != nil:
+		return NewPassthroughStrategy(c.Passthrough)
+	case c.OAuth2 != nil:
+		return NewOAuth2Strategy(ctx, c.OAuth2)
+	default:
+		return nil, nil // No auth configured
+	}
 }

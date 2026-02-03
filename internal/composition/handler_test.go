@@ -1,6 +1,7 @@
 package composition
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -63,7 +64,7 @@ compositions:
 		t.Fatalf("ParseConfig failed: %v", err)
 	}
 
-	compiledCfg, err := CompileConfig(cfg)
+	compiledCfg, err := CompileConfig(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("CompileConfig failed: %v", err)
 	}

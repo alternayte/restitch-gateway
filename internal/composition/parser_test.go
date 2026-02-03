@@ -1,6 +1,7 @@
 package composition
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -200,7 +201,7 @@ compositions:
 		t.Fatalf("ParseConfig failed: %v", err)
 	}
 
-	compiled, err := CompileConfig(cfg)
+	compiled, err := CompileConfig(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("CompileConfig failed: %v", err)
 	}
@@ -262,7 +263,7 @@ compositions:
 		t.Fatalf("ParseConfig failed: %v", err)
 	}
 
-	_, err = CompileConfig(cfg)
+	_, err = CompileConfig(context.Background(), cfg)
 	if err == nil {
 		t.Fatal("expected error for invalid expression")
 	}
@@ -295,7 +296,7 @@ compositions:
 		t.Fatalf("ParseConfig failed: %v", err)
 	}
 
-	_, err = CompileConfig(cfg)
+	_, err = CompileConfig(context.Background(), cfg)
 	if err == nil {
 		t.Fatal("expected error for invalid response expression")
 	}
@@ -335,7 +336,7 @@ compositions:
 		t.Fatalf("ParseConfig failed: %v", err)
 	}
 
-	compiled, err := CompileConfig(cfg)
+	compiled, err := CompileConfig(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("CompileConfig failed: %v", err)
 	}
@@ -396,7 +397,7 @@ compositions:
 		t.Fatalf("ParseConfig failed: %v", err)
 	}
 
-	_, err = CompileConfig(cfg)
+	_, err = CompileConfig(context.Background(), cfg)
 	if err == nil {
 		t.Fatal("expected error for circular dependency, got nil")
 	}
@@ -432,11 +433,173 @@ compositions:
 		t.Fatalf("ParseConfig failed: %v", err)
 	}
 
-	_, err = CompileConfig(cfg)
+	_, err = CompileConfig(context.Background(), cfg)
 	if err == nil {
 		t.Fatal("expected error for missing step reference, got nil")
 	}
 	if !strings.Contains(err.Error(), "non-existent") && !strings.Contains(err.Error(), "not found") {
 		t.Errorf("expected 'non-existent' or 'not found' error, got: %v", err)
+	}
+}
+
+func TestCompileConfig_AuthHeaderStrategy(t *testing.T) {
+	// Set up test env var
+	t.Setenv("TEST_API_KEY", "test-key-123")
+
+	yaml := `
+upstreams:
+  api:
+    url: "http://localhost:8080"
+    auth:
+      header:
+        name: "X-API-Key"
+        value: "${TEST_API_KEY}"
+
+compositions:
+  test:
+    path: "/test"
+    steps:
+      - name: step1
+        upstream: api
+        path: "/data"
+    response:
+      status: 200
+      body: {}
+`
+
+	cfg, err := ParseConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	compiled, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig failed: %v", err)
+	}
+
+	// Verify upstream has compiled auth strategy
+	upstream, exists := compiled.Upstreams["api"]
+	if !exists {
+		t.Fatal("upstream api not found in compiled config")
+	}
+
+	if upstream.Auth == nil {
+		t.Error("expected auth strategy to be compiled")
+	}
+}
+
+func TestCompileConfig_AuthMissingEnvVar(t *testing.T) {
+	yaml := `
+upstreams:
+  api:
+    url: "http://localhost:8080"
+    auth:
+      header:
+        name: "X-API-Key"
+        value: "${NONEXISTENT_VAR}"
+
+compositions:
+  test:
+    path: "/test"
+    steps:
+      - name: step1
+        upstream: api
+        path: "/data"
+    response:
+      status: 200
+      body: {}
+`
+
+	cfg, err := ParseConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	_, err = CompileConfig(context.Background(), cfg)
+	if err == nil {
+		t.Fatal("expected error for missing env var")
+	}
+
+	if !strings.Contains(err.Error(), "NONEXISTENT_VAR") {
+		t.Errorf("error should mention missing env var, got: %v", err)
+	}
+}
+
+func TestCompileConfig_AuthMultipleStrategies(t *testing.T) {
+	yaml := `
+upstreams:
+  api:
+    url: "http://localhost:8080"
+    auth:
+      header:
+        name: "X-API-Key"
+        value: "key123"
+      basic:
+        username: "user"
+        password: "pass"
+
+compositions:
+  test:
+    path: "/test"
+    steps:
+      - name: step1
+        upstream: api
+        path: "/data"
+    response:
+      status: 200
+      body: {}
+`
+
+	cfg, err := ParseConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	_, err = CompileConfig(context.Background(), cfg)
+	if err == nil {
+		t.Fatal("expected error for multiple auth strategies")
+	}
+
+	if !strings.Contains(err.Error(), "one auth strategy") || !strings.Contains(err.Error(), "multiple") {
+		t.Errorf("error should mention multiple auth strategies, got: %v", err)
+	}
+}
+
+func TestCompileConfig_NoAuth(t *testing.T) {
+	yaml := `
+upstreams:
+  api:
+    url: "http://localhost:8080"
+
+compositions:
+  test:
+    path: "/test"
+    steps:
+      - name: step1
+        upstream: api
+        path: "/data"
+    response:
+      status: 200
+      body: {}
+`
+
+	cfg, err := ParseConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	compiled, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig failed: %v", err)
+	}
+
+	// Verify upstream has no auth strategy (nil)
+	upstream, exists := compiled.Upstreams["api"]
+	if !exists {
+		t.Fatal("upstream api not found in compiled config")
+	}
+
+	if upstream.Auth != nil {
+		t.Error("expected no auth strategy for upstream without auth config")
 	}
 }

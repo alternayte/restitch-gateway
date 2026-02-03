@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -50,7 +51,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		compiledCfg, err := composition.CompileConfig(cfg)
+		compiledCfg, err := composition.CompileConfig(context.Background(), cfg)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to compile config: %v\n", err)
 			os.Exit(1)
