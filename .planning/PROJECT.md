@@ -12,22 +12,37 @@ Two binaries:
 
 Frontend teams can compose data from multiple backend services without writing, deploying, or maintaining BFF code.
 
+## Current State
+
+**Version:** v1.0 MVP (shipped 2026-02-03)
+
+**Codebase:**
+- 8,475 lines of Go
+- Tech stack: Go 1.21+, expr-lang/expr v1.17.7, gopkg.in/yaml.v3, oklog/ulid
+- 93 files across cmd/, internal/, and .planning/
+
+**Capabilities:**
+- YAML-configured compositions with DAG-based parallel execution
+- Expr language for dynamic path/param/response evaluation
+- 4 auth strategies: header, basic, passthrough, OAuth2 client credentials
+- Graceful degradation with optional steps and partial responses
+- Structured JSON logging with request ID tracing and per-step timing
+- Health endpoints (/health, /ready, /health/upstreams)
+- Graceful shutdown with connection draining
+
 ## Requirements
 
 ### Validated
 
-(None yet — ship to validate)
+- GATE-01 through GATE-06 — Gateway core (routing, TLS, health, shutdown) — v1.0
+- COMP-01 through COMP-11 — Composition engine (YAML, DAG, parallel, Expr, merging) — v1.0
+- AUTH-01 through AUTH-06 — Upstream auth (header, basic, passthrough, OAuth2) — v1.0
+- ERR-01 through ERR-05 — Error handling (rules, optional, partial, timeout) — v1.0
+- OBS-01 through OBS-04 — Observability (logging, request ID, timing, DAG order) — v1.0
 
 ### Active
 
-- [ ] Composition engine resolves DAG of steps with parallel execution
-- [ ] Expr language evaluates dynamic values in paths, params, and response shaping
-- [ ] Upstream auth: header (static API key/token)
-- [ ] Upstream auth: basic (username/password)
-- [ ] Upstream auth: passthrough (forward caller's auth)
-- [ ] Upstream auth: oauth2_client_credentials (automatic token fetch/refresh)
-- [ ] Error handling with graceful degradation (fallback responses when upstreams fail)
-- [ ] YAML configuration for compositions
+(Pending next milestone planning)
 
 ### Out of Scope
 
@@ -57,9 +72,9 @@ Frontend teams can compose data from multiple backend services without writing, 
 
 **Example execution flow:**
 ```
-Request → user step → ┬→ orders step ─┬→ merge → respond
-                      └→ loyalty step ─┘
-                         (parallel)
+Request -> user step -> +-> orders step -+-> merge -> respond
+                        +-> loyalty step -+
+                           (parallel)
 ```
 
 **Target users:**
@@ -67,26 +82,27 @@ Request → user step → ┬→ orders step ─┬→ merge → respond
 - Backend devs (create compositions for their domain)
 - Frontend devs (use visual editor for exploration, mostly consumers)
 
-**Studio usage patterns (future):**
-- Day 1: Import specs, register services, build compositions
-- Day 2+: Monitor latency waterfalls, debug failures, tune caches, audit changes
-
 ## Constraints
 
 - **Language**: Gateway in Go (performance at edge)
 - **Config format**: YAML with Expr language for dynamic evaluation
-- **Path**: Internal dogfooding → Open source → Commercial product
+- **Path**: Internal dogfooding -> Open source -> Commercial product
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Go for gateway | Performance-critical data plane, goroutines for parallel step execution | — Pending |
-| Expr for dynamic values | Established expression language, avoids custom DSL | — Pending |
-| YAML for config | Human-readable, git-friendly, familiar to platform engineers | — Pending |
-| Studio as separate binary | Optional component, can run gateway standalone | — Pending |
-| Skip hot-reload for v1 | 200ms restart acceptable, reduces complexity | — Pending |
-| Skip inbound auth for v1 | Internal use behind VPN/mesh, simple API key sufficient | — Pending |
+| Go for gateway | Performance-critical data plane, goroutines for parallel step execution | Good |
+| Expr for dynamic values | Established expression language, avoids custom DSL | Good |
+| YAML for config | Human-readable, git-friendly, familiar to platform engineers | Good |
+| Studio as separate binary | Optional component, can run gateway standalone | Good |
+| Skip hot-reload for v1 | 200ms restart acceptable, reduces complexity | Good |
+| Skip inbound auth for v1 | Internal use behind VPN/mesh, simple API key sufficient | Good |
+| Steps required by default | Explicit optional marking for graceful degradation | Good |
+| Fail-fast config validation | Parse-time DAG validation catches errors at startup | Good |
+| HTTP 200 for partial | Composition succeeded, partial data is valid | Good |
+| MaxIdleConnsPerHost: 100 | Avoids 4-5x latency penalty from default 2 | Good |
+| UpstreamInfo bridge type | Avoids import cycle between server and composition | Good |
 
 ---
-*Last updated: 2026-02-03 after initialization*
+*Last updated: 2026-02-03 after v1.0 milestone*
