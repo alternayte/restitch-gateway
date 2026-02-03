@@ -45,8 +45,12 @@ func main() {
 	srv.Router().Use(observability.RequestIDMiddleware)
 	srv.Router().Use(server.NewLoggingMiddleware(server.LogFormat(*logFormat)))
 
+	// Create HTTP client for upstream calls (reuse Phase 1's optimized client)
+	httpClient := client.New()
+
 	// Load composition config if available
 	var compositionHandler *composition.Handler
+	var upstreamInfos map[string]server.UpstreamInfo
 	if _, err := os.Stat(*configFile); err == nil {
 		// Config file exists - load and compile it
 		cfg, err := composition.LoadConfigFile(*configFile)
@@ -66,24 +70,33 @@ func main() {
 			"upstreams", len(compiledCfg.Config.Upstreams),
 			"compositions", len(compiledCfg.Config.Compositions))
 
-		// Create HTTP client for upstream calls (reuse Phase 1's optimized client)
-		httpClient := client.New()
-
 		// Create composition handler
 		compositionHandler = composition.NewHandler(compiledCfg, httpClient.HTTPClient())
 
 		// Register composition routes BEFORE health endpoints
 		// This ensures composition routes take precedence
 		compositionHandler.RegisterRoutes(srv.Router())
+
+		// Build upstream info map for health checks (avoids import cycle)
+		upstreamInfos = make(map[string]server.UpstreamInfo)
+		for name, upstream := range compiledCfg.Config.Upstreams {
+			upstreamInfos[name] = server.UpstreamInfo{
+				URL:        upstream.URL,
+				HealthPath: upstream.HealthPath,
+			}
+		}
 	} else {
 		// Config file doesn't exist - start without compositions
 		slog.Warn("no composition config found, starting with health endpoints only",
 			"config_file", *configFile)
+		// Empty upstreams map for health endpoint
+		upstreamInfos = make(map[string]server.UpstreamInfo)
 	}
 
 	// Register health endpoints
 	srv.Router().Handle(http.MethodGet, "/health", server.HealthHandler(srv))
 	srv.Router().Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
+	srv.Router().Handle(http.MethodGet, "/health/upstreams", server.UpstreamHealthHandler(upstreamInfos, httpClient.HTTPClient()))
 
 	// Register test route
 	srv.Router().Handle(http.MethodGet, "/ping", func(w http.ResponseWriter, r *http.Request) {
