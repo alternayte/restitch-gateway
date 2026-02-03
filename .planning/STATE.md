@@ -1,9 +1,9 @@
 # Project State: Restitch
 
 **Last Updated:** 2026-02-03
-**Current Phase:** 1 - Gateway Foundation (COMPLETE)
-**Current Plan:** All plans complete, verified
-**Status:** Ready for Phase 2
+**Current Phase:** 2 - Composition Engine (IN PROGRESS)
+**Current Plan:** 01 of 3 complete
+**Status:** Plan 02-01 complete
 
 ## Project Reference
 
@@ -11,18 +11,18 @@
 
 **What We're Building:** REST API composition gateway (restitch-gateway) that eliminates hand-written BFF layers through declarative YAML configuration. Think Apollo Router for REST APIs.
 
-**Current Focus:** Phase 1 complete. Ready to begin Phase 2 (Composition Engine).
+**Current Focus:** Phase 2 Plan 01 complete. YAML config parsing and expression compilation foundation ready for DAG execution.
 
 ## Current Position
 
-**Phase:** 1 of 5 (Gateway Foundation) - COMPLETE
-**Plan:** 03 of 3 complete
-**Status:** Phase complete
-**Last activity:** 2026-02-03 - Completed 01-03-PLAN.md (Graceful shutdown and HTTP client)
+**Phase:** 2 of 5 (Composition Engine) - IN PROGRESS
+**Plan:** 01 of 3 complete
+**Status:** Plan 02-01 complete
+**Last activity:** 2026-02-03 - Completed 02-01-PLAN.md (YAML config parsing and expression compilation)
 
 **Progress:**
 ```
-[#########                                         ] 19% (6/32)
+[##########                                        ] 22% (7/32)
 ```
 
 **Next Actions:**
@@ -32,11 +32,11 @@
 
 ## Performance Metrics
 
-**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks)
+**Velocity:** 4 min for 01-01 (3 tasks), 3 min for 01-02 (2 tasks), 3 min for 01-03 (2 tasks), 5 min for 02-01 (3 tasks)
 
 **Phase Completion:**
 - Phase 1: 6/6 requirements (100%) ✓ VERIFIED
-- Phase 2: 0/11 requirements (0%)
+- Phase 2: 1/11 requirements (9%) - COMP-01 complete
 - Phase 3: 0/6 requirements (0%)
 - Phase 4: 0/5 requirements (0%)
 - Phase 5: 0/4 requirements (0%)
@@ -78,6 +78,13 @@
 - Decision: DrainAndClose helper ensures proper connection pool return
 - Rationale: Signal handling via channel + select allows coordination with error channel; HTTP client configured per research findings
 
+**2026-02-03 - Plan 02-01 Execution**
+- Decision: All expressions compile at parse time (fail fast on syntax errors)
+- Decision: Template-style {{ expr }} delimiters per CONTEXT.md
+- Decision: BuildBaseEnvironment for consistent compile/runtime environments
+- Decision: CompiledConfig separates parsing from compilation
+- Rationale: Catch expression errors at startup (not request time); avoid expr-lang Pitfall 3 (function registration)
+
 ### Active TODOs
 
 - [x] Create Phase 1 execution plan
@@ -85,7 +92,10 @@
 - [x] Execute Plan 01-02 (Health endpoints)
 - [x] Execute Plan 01-03 (Graceful shutdown)
 - [x] Verify Phase 1 success criteria (PASSED)
-- [ ] Begin Phase 2 planning (Composition Engine)
+- [x] Begin Phase 2 planning (Composition Engine)
+- [x] Execute Plan 02-01 (YAML config parsing and expression compilation)
+- [ ] Execute Plan 02-02 (DAG execution)
+- [ ] Execute Plan 02-03 (Response merging)
 
 ### Known Blockers
 
@@ -103,25 +113,25 @@ None identified.
 
 ### What Just Happened
 
-Phase 1 Gateway Foundation COMPLETE and VERIFIED:
-- All 3 plans executed (01-01, 01-02, 01-03)
-- All 6 requirements verified (GATE-01 through GATE-06)
-- Verification report: `.planning/phases/01-gateway-foundation/01-VERIFICATION.md`
+Phase 2 Plan 01 COMPLETE:
+- YAML configuration schema and parser created (internal/composition/config.go, parser.go)
+- Expression compiler using expr-lang/expr v1.17.7 (internal/composition/expr.go)
+- All expressions compile at parse time (fail fast on syntax errors)
+- CompiledConfig structure ready for DAG building
+- Comprehensive test coverage including end-to-end integration tests
 
-Phase 1 deliverables:
-- HTTP/HTTPS server with TLS termination (GATE-01, GATE-02, GATE-03)
-- /health and /ready endpoints (GATE-04, GATE-05)
-- Graceful shutdown with 30s connection draining (GATE-06)
-- Request logging middleware (JSON/text)
-- HTTP client with MaxIdleConnsPerHost: 100 ready for Phase 2
+Plan 02-01 deliverables:
+- Config structs with YAML tags for upstreams and compositions (COMP-01)
+- ParseConfig validates YAML structure and upstream references
+- CompileConfig recursively compiles all step and response expressions
+- Template interpolation with {{ expr }} syntax
+- Dependencies: gopkg.in/yaml.v3, github.com/expr-lang/expr@v1.17.7
 
 ### What's Next
 
-Phase 2: Composition Engine - Begin planning for:
-- YAML configuration loading (COMP-01)
-- Expr expression evaluation (COMP-07, COMP-08, COMP-09)
-- DAG-based parallel execution (COMP-04, COMP-05, COMP-06)
-- Response composition (COMP-10, COMP-11)
+Phase 2 Plans 02-03:
+- Plan 02-02: DAG execution with parallel step orchestration (COMP-04, COMP-05, COMP-06)
+- Plan 02-03: Response merging with expression evaluation (COMP-10, COMP-11)
 
 ### Context for Next Session
 
@@ -135,11 +145,12 @@ If returning after break:
 Key files:
 - `.planning/ROADMAP.md` - Phase structure and success criteria
 - `.planning/REQUIREMENTS.md` - All 32 v1 requirements with traceability
-- `.planning/research/SUMMARY.md` - Research findings and recommended stack
+- `.planning/phases/02-composition-engine/02-RESEARCH.md` - Phase 2 research findings
 - `.planning/config.json` - Project configuration (mode: yolo, depth: standard)
 - `cmd/restitch/main.go` - Application entrypoint
 - `internal/server/` - Server, router, TLS, health, middleware, shutdown
 - `internal/client/` - HTTP client with optimized connection pooling
+- `internal/composition/` - YAML config parsing and expression compilation
 
 ---
 
