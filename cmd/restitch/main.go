@@ -4,9 +4,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 
+	"github.com/restitch/restitch-gateway/internal/client"
+	"github.com/restitch/restitch-gateway/internal/composition"
 	"github.com/restitch/restitch-gateway/internal/server"
 )
 
@@ -17,6 +20,7 @@ func main() {
 	logFormat := flag.String("log-format", "json", "Log format: json or text")
 	certFile := flag.String("cert", "", "Path to TLS certificate file")
 	keyFile := flag.String("key", "", "Path to TLS private key file")
+	configFile := flag.String("config", "restitch.yaml", "path to composition config file")
 
 	flag.Parse()
 
@@ -35,6 +39,42 @@ func main() {
 
 	// Apply logging middleware
 	srv.Router().Use(server.NewLoggingMiddleware(server.LogFormat(*logFormat)))
+
+	// Load composition config if available
+	var compositionHandler *composition.Handler
+	if _, err := os.Stat(*configFile); err == nil {
+		// Config file exists - load and compile it
+		cfg, err := composition.LoadConfigFile(*configFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load config file %s: %v\n", *configFile, err)
+			os.Exit(1)
+		}
+
+		compiledCfg, err := composition.CompileConfig(cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to compile config: %v\n", err)
+			os.Exit(1)
+		}
+
+		slog.Info("loaded composition config",
+			"file", *configFile,
+			"upstreams", len(compiledCfg.Config.Upstreams),
+			"compositions", len(compiledCfg.Config.Compositions))
+
+		// Create HTTP client for upstream calls (reuse Phase 1's optimized client)
+		httpClient := client.New()
+
+		// Create composition handler
+		compositionHandler = composition.NewHandler(compiledCfg, httpClient.HTTPClient())
+
+		// Register composition routes BEFORE health endpoints
+		// This ensures composition routes take precedence
+		compositionHandler.RegisterRoutes(srv.Router())
+	} else {
+		// Config file doesn't exist - start without compositions
+		slog.Warn("no composition config found, starting with health endpoints only",
+			"config_file", *configFile)
+	}
 
 	// Register health endpoints
 	srv.Router().Handle(http.MethodGet, "/health", server.HealthHandler(srv))

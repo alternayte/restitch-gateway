@@ -85,6 +85,12 @@ func (c *Client) Transport() *http.Transport {
 	return c.httpClient.Transport.(*http.Transport)
 }
 
+// HTTPClient returns the underlying http.Client.
+// This is useful when a component needs the standard http.Client interface.
+func (c *Client) HTTPClient() *http.Client {
+	return c.httpClient
+}
+
 // DrainAndClose properly drains and closes a response body to return the
 // connection to the pool. This MUST be called after reading the response,
 // typically in a defer statement.
