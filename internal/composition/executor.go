@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 // CompositionResult holds results from all steps in a composition.
@@ -38,14 +36,18 @@ func NewExecutor(config *CompiledConfig, httpClient *http.Client) *Executor {
 // It executes steps according to the DAG execution plan:
 //   - Independent steps (same wave) execute in parallel
 //   - Dependent steps wait for their dependencies to complete
-//   - First error cancels all remaining steps (fail-fast)
+//   - Optional step failures are collected, composition continues
+//   - Required step failures fail-fast and cancel remaining steps
 //
 // Per CONTEXT.md execution behavior:
-//   - Fail fast on required step failure
+//   - Fail fast on required step failure only
+//   - Optional step failures collected in StepErrors
+//   - Failed optional steps have nil result (available to dependents)
+//   - Dependent steps skip when their dependency failed
 //   - Upstream error passthrough (handled by ExecuteStep)
 //   - Logs show step start/complete events
 //
-// Returns CompositionResult with all step results, or error if any step fails.
+// Returns CompositionResult with step results and collected errors.
 func (e *Executor) Execute(ctx context.Context, compositionName string, req *http.Request) (*CompositionResult, error) {
 	// Look up composition
 	comp, exists := e.config.Compositions[compositionName]
@@ -65,6 +67,7 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 	// Execute waves sequentially
 	results := make(map[string]*StepResult)
 	resultsMutex := sync.Mutex{}
+	var allErrors []stepError // Collects errors across all waves
 
 	for waveIdx, wave := range plan.Waves {
 		slog.Debug("starting wave",
@@ -73,24 +76,43 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 
 		waveStart := time.Now()
 
-		// Execute all steps in this wave in parallel using errgroup
-		g, waveCtx := errgroup.WithContext(ctx)
+		var wg sync.WaitGroup
+		var waveErrors []stepError
+		var errorsMu sync.Mutex
 
 		for _, stepName := range wave {
 			stepName := stepName // Capture loop variable
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
 
-			g.Go(func() error {
-				return e.executeStep(waveCtx, compositionName, stepName, comp, req, results, &resultsMutex)
-			})
+				stepErr := e.executeStepWithErrorHandling(ctx, compositionName, stepName, comp, req, results, &resultsMutex)
+				if stepErr != nil {
+					errorsMu.Lock()
+					waveErrors = append(waveErrors, *stepErr)
+					errorsMu.Unlock()
+				}
+			}()
 		}
 
-		// Wait for wave to complete or first error
-		if err := g.Wait(); err != nil {
-			slog.Error("wave failed",
-				"wave", waveIdx,
-				"error", err)
-			return nil, err // Fail fast - context cancels remaining goroutines
+		wg.Wait()
+
+		// Check for required failures - fail fast
+		if HasRequiredFailure(waveErrors) {
+			// Collect all errors for logging but only fail on required
+			allErrors = append(allErrors, waveErrors...)
+
+			// Find the first required error to return
+			for _, stepErr := range waveErrors {
+				if !stepErr.optional {
+					slog.Error("required step failed in wave", "wave", waveIdx, "step", stepErr.stepName, "error", stepErr.err)
+					return nil, fmt.Errorf("required step %q failed: %w", stepErr.stepName, stepErr.err)
+				}
+			}
 		}
+
+		// Aggregate wave errors into allErrors for partial response
+		allErrors = append(allErrors, waveErrors...)
 
 		waveDuration := time.Since(waveStart)
 		slog.Debug("wave complete",
@@ -103,12 +125,15 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 		"steps", len(results))
 
 	return &CompositionResult{
-		Steps: results,
+		Steps:      results,
+		StepErrors: BuildErrorsArray(allErrors),
+		IsPartial:  len(allErrors) > 0,
 	}, nil
 }
 
-// executeStep executes a single step with proper locking and error handling.
-func (e *Executor) executeStep(
+// executeStepWithErrorHandling executes a single step with optional step error handling.
+// Returns stepError if step failed, nil if step succeeded.
+func (e *Executor) executeStepWithErrorHandling(
 	ctx context.Context,
 	compositionName string,
 	stepName string,
@@ -116,16 +141,34 @@ func (e *Executor) executeStep(
 	req *http.Request,
 	results map[string]*StepResult,
 	resultsMutex *sync.Mutex,
-) error {
+) *stepError {
 	step, exists := comp.Steps[stepName]
 	if !exists {
-		return fmt.Errorf("step %q not found in composition", stepName)
+		return &stepError{stepName: stepName, err: fmt.Errorf("step not found"), optional: false}
+	}
+
+	// Check if dependencies failed (result is nil)
+	// Per CONTEXT.md: "If a step with dependents fails, dependent steps are skipped"
+	resultsMutex.Lock()
+	depFailed := checkDependenciesFailed(step, results)
+	resultsMutex.Unlock()
+
+	if depFailed {
+		// Mark as skipped, add nil result
+		resultsMutex.Lock()
+		results[stepName] = nil
+		resultsMutex.Unlock()
+		return &stepError{
+			stepName: stepName,
+			err:      fmt.Errorf("dependency_failed"),
+			optional: true, // Skipped steps don't fail composition
+		}
 	}
 
 	// Get compiled upstream with auth strategy
 	compiledUpstream, exists := e.config.Upstreams[step.Step.Upstream]
 	if !exists {
-		return fmt.Errorf("upstream %q not found for step %q", step.Step.Upstream, stepName)
+		return &stepError{stepName: stepName, err: fmt.Errorf("upstream not found"), optional: step.Optional}
 	}
 
 	// Build environment with completed step results
@@ -133,27 +176,38 @@ func (e *Executor) executeStep(
 	env := buildRequestEnv(req, results)
 	resultsMutex.Unlock()
 
-	// Log step start
 	stepStart := time.Now()
 	slog.Info("step starting",
 		"composition", compositionName,
 		"step", stepName,
-		"upstream", compiledUpstream.Upstream.URL)
+		"upstream", compiledUpstream.Upstream.URL,
+		"optional", step.Optional)
 
-	// Execute step with compiled upstream (includes auth strategy)
+	// Execute step
 	result, err := ExecuteStep(ctx, step, compiledUpstream, env, e.httpClient)
-	if err != nil {
-		return fmt.Errorf("step %s: %w", stepName, err)
-	}
-
 	stepDuration := time.Since(stepStart)
 
-	// Store result
+	if err != nil {
+		slog.Warn("step failed",
+			"composition", compositionName,
+			"step", stepName,
+			"optional", step.Optional,
+			"duration", stepDuration,
+			"error", err)
+
+		// Store nil result for failed step (optional steps return null per CONTEXT.md)
+		resultsMutex.Lock()
+		results[stepName] = nil
+		resultsMutex.Unlock()
+
+		return &stepError{stepName: stepName, err: err, optional: step.Optional}
+	}
+
+	// Store successful result
 	resultsMutex.Lock()
 	results[stepName] = result
 	resultsMutex.Unlock()
 
-	// Log step complete
 	slog.Info("step complete",
 		"composition", compositionName,
 		"step", stepName,
@@ -161,6 +215,16 @@ func (e *Executor) executeStep(
 		"duration", stepDuration)
 
 	return nil
+}
+
+// checkDependenciesFailed returns true if any dependency has nil result.
+func checkDependenciesFailed(step *CompiledStep, results map[string]*StepResult) bool {
+	for _, depName := range step.Step.DependsOn {
+		if result, exists := results[depName]; !exists || result == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // countSteps counts total steps across all waves.
