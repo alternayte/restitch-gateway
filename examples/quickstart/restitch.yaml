@@ -1,0 +1,33 @@
+# Quick start example — run with: go run ./cmd/mockupstream &
+# then: ./bin/restitch -config examples/quickstart/restitch.yaml
+
+upstreams:
+  mock:
+    url: "http://localhost:8081"
+
+compositions:
+  user-posts:
+    path: "/api/user-posts"
+    method: GET
+    steps:
+      - name: user
+        upstream: mock
+        path: "/users/{{ req.query.id }}"
+      - name: orders
+        upstream: mock
+        path: "/orders?userId={{ steps.user.body.id }}"
+    response:
+      body:
+        user: "{{ steps.user.body }}"
+        orders: "{{ steps.orders.body }}"
+
+  echo:
+    path: "/api/echo"
+    method: GET
+    steps:
+      - name: e
+        upstream: mock
+        path: "/echo"
+    response:
+      body:
+        echo: "{{ steps.e.body }}"
