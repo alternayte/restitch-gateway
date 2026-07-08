@@ -3,8 +3,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -41,16 +43,19 @@ func main() {
 
 	httpClient := client.New()
 
-	// Load composition config if available
+	// Load composition config
 	var compositionHandler *composition.Handler
 	var upstreamInfos map[string]server.UpstreamInfo
-	if _, err := os.Stat(*configFile); err == nil {
-		cfg, err := composition.LoadConfigFile(*configFile)
-		if err != nil {
-			slog.Error("failed to load config file", "file", *configFile, "error", err)
-			os.Exit(1)
-		}
 
+	cfg, err := composition.LoadConfigFile(*configFile)
+	if errors.Is(err, fs.ErrNotExist) {
+		slog.Warn("no composition config found, starting with health endpoints only",
+			"config_file", *configFile)
+		upstreamInfos = make(map[string]server.UpstreamInfo)
+	} else if err != nil {
+		slog.Error("failed to load config file", "file", *configFile, "error", err)
+		os.Exit(1)
+	} else {
 		compiledCfg, err := composition.CompileConfig(context.Background(), cfg)
 		if err != nil {
 			slog.Error("failed to compile config", "error", err)
@@ -72,10 +77,6 @@ func main() {
 				HealthPath: upstream.HealthPath,
 			}
 		}
-	} else {
-		slog.Warn("no composition config found, starting with health endpoints only",
-			"config_file", *configFile)
-		upstreamInfos = make(map[string]server.UpstreamInfo)
 	}
 
 	srv.Router().Handle(http.MethodGet, "/health", server.HealthHandler(srv))
