@@ -83,6 +83,8 @@ func main() {
 	srv.Router().Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
 	srv.Router().Handle(http.MethodGet, "/health/upstreams", server.UpstreamHealthHandler(upstreamInfos, httpClient.HTTPClient()))
 
+	srv.Router().Finalize()
+
 	tlsEnabled := *certFile != "" && *keyFile != ""
 
 	if tlsEnabled {
