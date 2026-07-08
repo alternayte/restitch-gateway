@@ -120,20 +120,6 @@ type OAuth2Config struct {
 	Scopes       []string `yaml:"scopes"`        // Optional scopes to request
 }
 
-// NoneStrategy provides a no-op authentication strategy.
-// It returns the base RoundTripper unchanged.
-type NoneStrategy struct{}
-
-// RoundTripper returns the base RoundTripper unchanged.
-func (s *NoneStrategy) RoundTripper(base http.RoundTripper) http.RoundTripper {
-	return base
-}
-
-// NewNoneStrategy creates a strategy that performs no authentication.
-func NewNoneStrategy() *NoneStrategy {
-	return &NoneStrategy{}
-}
-
 // Build creates the appropriate Strategy based on which config option is set.
 // Returns nil if no auth is configured.
 // Returns an error if environment variable expansion fails or credentials are invalid.

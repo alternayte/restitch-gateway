@@ -3,6 +3,7 @@ package composition
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // CompositionResponse is the final response to send to client.
@@ -123,7 +124,7 @@ func evaluateExpressionString(s string, env map[string]interface{}) (interface{}
 
 	// Check if the entire string is a single expression
 	// If so, return the evaluated value directly (preserve type)
-	trimmed := trimSpaces(s)
+	trimmed := strings.TrimSpace(s)
 	if len(exprs) == 1 && len(trimmed) > 4 && trimmed[:2] == "{{" && trimmed[len(trimmed)-2:] == "}}" {
 		// Single expression - evaluate and return as-is
 		compiled, err := CompileExpression(exprs[0], env)

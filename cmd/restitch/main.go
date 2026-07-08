@@ -98,12 +98,6 @@ func main() {
 	srv.Router().Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
 	srv.Router().Handle(http.MethodGet, "/health/upstreams", server.UpstreamHealthHandler(upstreamInfos, httpClient.HTTPClient()))
 
-	// Register test route
-	srv.Router().Handle(http.MethodGet, "/ping", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("pong"))
-	})
-
 	// Check if TLS is configured
 	tlsEnabled := *certFile != "" && *keyFile != ""
 

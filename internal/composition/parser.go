@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
@@ -295,10 +296,10 @@ func compileBodyExpressions(body interface{}, env map[string]interface{}, path s
 // embedded expressions.
 func compileTemplateString(template string, env map[string]interface{}) (*CompiledExpr, error) {
 	// Check if the entire string is a single expression
-	template = trimSpaces(template)
+	template = strings.TrimSpace(template)
 	if len(template) > 4 && template[:2] == "{{" && template[len(template)-2:] == "}}" {
 		// Single expression - compile directly
-		exprContent := trimSpaces(template[2 : len(template)-2])
+		exprContent := strings.TrimSpace(template[2 : len(template)-2])
 		return CompileExpression(exprContent, env)
 	}
 
@@ -319,22 +320,6 @@ func compileTemplateString(template string, env map[string]interface{}) (*Compil
 
 	// Store the template for later interpolation
 	return &CompiledExpr{Raw: template}, nil
-}
-
-// trimSpaces removes leading and trailing whitespace.
-func trimSpaces(s string) string {
-	start := 0
-	end := len(s)
-
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
-		start++
-	}
-
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
-		end--
-	}
-
-	return s[start:end]
 }
 
 // validateAndApplyDefaults validates the configuration and applies default values.
