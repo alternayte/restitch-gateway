@@ -60,7 +60,7 @@ func main() {
 			"upstreams", len(compiledCfg.Config.Upstreams),
 			"compositions", len(compiledCfg.Config.Compositions))
 
-		compositionHandler := composition.NewHandler(compiledCfg)
+		compositionHandler := composition.NewHandler(compiledCfg, nil)
 		compositionHandler.RegisterRoutes(srv.Router())
 	}
 

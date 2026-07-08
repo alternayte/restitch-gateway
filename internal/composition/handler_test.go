@@ -71,7 +71,7 @@ compositions:
 	}
 
 	// Create handler
-	handler := NewHandler(compiledCfg)
+	handler := NewHandler(compiledCfg, nil)
 
 	// Create router and register routes
 	router := server.NewRouter()
@@ -158,7 +158,7 @@ compositions:
 		t.Fatalf("CompileConfig: %v", err)
 	}
 
-	handler := NewHandler(compiledCfg)
+	handler := NewHandler(compiledCfg, nil)
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
 	router.Finalize()
@@ -227,7 +227,7 @@ compositions:
 	}
 
 	// Create handler
-	handler := NewHandler(compiledCfg)
+	handler := NewHandler(compiledCfg, nil)
 
 	// Create router and register routes
 	router := server.NewRouter()
@@ -306,7 +306,7 @@ compositions:
 	}
 
 	// Create handler
-	handler := NewHandler(compiledCfg)
+	handler := NewHandler(compiledCfg, nil)
 
 	// Create router and register routes
 	router := server.NewRouter()
@@ -376,7 +376,7 @@ compositions:
 	}
 
 	// Create handler
-	handler := NewHandler(compiledCfg)
+	handler := NewHandler(compiledCfg, nil)
 
 	// Create router and register routes
 	router := server.NewRouter()
@@ -444,7 +444,7 @@ compositions:
 		t.Fatalf("CompileConfig: %v", err)
 	}
 
-	handler := NewHandler(compiledCfg)
+	handler := NewHandler(compiledCfg, nil)
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
 	router.Finalize()
@@ -513,7 +513,7 @@ compositions:
 `
 	cfg, _ := ParseConfig([]byte(configYAML))
 	compiled, _ := CompileConfig(context.Background(), cfg)
-	handler := NewHandler(compiled)
+	handler := NewHandler(compiled, nil)
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
 	router.Finalize()
@@ -562,7 +562,7 @@ compositions:
 `
 	cfg, _ := ParseConfig([]byte(configYAML))
 	compiled, _ := CompileConfig(context.Background(), cfg)
-	handler := NewHandler(compiled)
+	handler := NewHandler(compiled, nil)
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
 	router.Finalize()
@@ -612,7 +612,7 @@ compositions:
 `
 	cfg, _ := ParseConfig([]byte(configYAML))
 	compiled, _ := CompileConfig(context.Background(), cfg)
-	handler := NewHandler(compiled)
+	handler := NewHandler(compiled, nil)
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
 	router.Finalize()
@@ -649,7 +649,7 @@ compositions:
 `
 	cfg, _ := ParseConfig([]byte(configYAML))
 	compiled, _ := CompileConfig(context.Background(), cfg)
-	handler := NewHandler(compiled)
+	handler := NewHandler(compiled, nil)
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
 	router.Finalize()

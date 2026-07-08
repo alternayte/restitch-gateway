@@ -2,6 +2,8 @@ package composition
 
 import (
 	"net/http"
+
+	"github.com/restitch/restitch-gateway/internal/inbound"
 )
 
 // buildRequestEnv creates the environment for expression evaluation.
@@ -28,6 +30,11 @@ func buildRequestEnv(req *http.Request, params map[string]string, body any, step
 		params = map[string]string{}
 	}
 
+	var authClaims any
+	if claims := inbound.GetClaims(req.Context()); claims != nil {
+		authClaims = map[string]any(claims)
+	}
+
 	reqData := map[string]any{
 		"method":    req.Method,
 		"path":      req.URL.Path,
@@ -36,6 +43,7 @@ func buildRequestEnv(req *http.Request, params map[string]string, body any, step
 		"query_all": queryAll,
 		"headers":   headers,
 		"body":      body,
+		"auth":      authClaims,
 	}
 
 	env := map[string]any{
@@ -72,6 +80,7 @@ func BuildBaseEnvironment(stepNames []string) map[string]any {
 		"query_all": map[string][]string{},
 		"headers":   map[string]string{},
 		"body":      nil,
+		"auth":      nil,
 	}
 
 	env := map[string]any{

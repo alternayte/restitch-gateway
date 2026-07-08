@@ -30,36 +30,64 @@ type Config struct {
 // Upstream represents a named backend service that steps can call.
 // Auth configuration is optional - if omitted, no authentication is applied.
 type Upstream struct {
-	URL              string        `yaml:"url"`
-	Auth             *auth.Config  `yaml:"auth"`
-	Timeout          time.Duration `yaml:"timeout"`
-	HealthPath       string        `yaml:"health_path"`
-	MaxResponseBytes int64         `yaml:"max_response_bytes"`
+	URL              string         `yaml:"url"`
+	Auth             *auth.Config   `yaml:"auth"`
+	Timeout          time.Duration  `yaml:"timeout"`
+	HealthPath       string         `yaml:"health_path"`
+	MaxResponseBytes int64          `yaml:"max_response_bytes"`
+	Retry            *RetryConfig   `yaml:"retry"`
+	CircuitBreaker   *BreakerConfig `yaml:"circuit_breaker"`
+}
+
+// RetryConfig configures retry behavior for an upstream or step.
+type RetryConfig struct {
+	MaxAttempts        int           `yaml:"max_attempts"`
+	Interval           time.Duration `yaml:"interval"`
+	MaxBackoff         time.Duration `yaml:"max_backoff"`
+	BackoffOn          []int         `yaml:"backoff_on"`
+	DropOn             []int         `yaml:"drop_on"`
+	RetryNonIdempotent bool          `yaml:"retry_non_idempotent"`
+}
+
+// BreakerConfig configures circuit breaker for an upstream.
+type BreakerConfig struct {
+	MaxFailures int           `yaml:"max_failures"`
+	Interval    time.Duration `yaml:"interval"`
+	Timeout     time.Duration `yaml:"timeout"`
+}
+
+// CacheConfig configures per-step response caching.
+type CacheConfig struct {
+	TTL time.Duration `yaml:"ttl"`
 }
 
 // Composition represents a multi-step API composition with a response template.
 // Compositions are matched to incoming requests by path and method.
 type Composition struct {
-	Path     string           `yaml:"path"`     // Route path pattern
-	Method   string           `yaml:"method"`   // HTTP method (defaults to GET)
-	Steps    []Step           `yaml:"steps"`    // Execution steps
-	Response ResponseTemplate `yaml:"response"` // Response template
+	Path     string           `yaml:"path"`
+	Method   string           `yaml:"method"`
+	Public   bool             `yaml:"public"`
+	Steps    []Step           `yaml:"steps"`
+	Response ResponseTemplate `yaml:"response"`
 }
 
 // Step represents a single upstream request in a composition.
 // Steps can depend on other steps either implicitly (via expression usage)
 // or explicitly (via DependsOn).
 type Step struct {
-	Name       string            `yaml:"name"`        // Unique step name within composition
-	Upstream   string            `yaml:"upstream"`    // Reference to named upstream
-	Path       string            `yaml:"path"`        // Path template with expressions
-	Method     string            `yaml:"method"`      // HTTP method (defaults to GET)
-	Headers    map[string]string `yaml:"headers"`     // Header templates (defaults to empty)
-	Body       string            `yaml:"body"`        // Request body template for POST/PUT
-	DependsOn  []string          `yaml:"depends_on"`  // Explicit dependencies (optional)
-	Optional   bool              `yaml:"optional"`    // Whether step failure allows composition to continue (defaults to false)
-	Timeout    *time.Duration    `yaml:"timeout"`     // Step timeout override (nil means use upstream default)
-	ErrorRules []ErrorRule       `yaml:"error_rules"` // Error matching rules (nil for no rules)
+	Name       string            `yaml:"name"`
+	Upstream   string            `yaml:"upstream"`
+	Path       string            `yaml:"path"`
+	Method     string            `yaml:"method"`
+	Headers    map[string]string `yaml:"headers"`
+	Body       string            `yaml:"body"`
+	DependsOn  []string          `yaml:"depends_on"`
+	Optional   bool              `yaml:"optional"`
+	Timeout    *time.Duration    `yaml:"timeout"`
+	ErrorRules []ErrorRule       `yaml:"error_rules"`
+	Retry      *RetryConfig      `yaml:"retry"`
+	Cache      *CacheConfig      `yaml:"cache"`
+	Coalesce   bool              `yaml:"coalesce"`
 }
 
 // ErrorRule defines a rule for matching upstream error status codes

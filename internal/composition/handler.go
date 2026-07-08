@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
+	"github.com/restitch/restitch-gateway/internal/inbound"
 	"github.com/restitch/restitch-gateway/internal/server"
 )
 
@@ -18,17 +19,20 @@ var paramPattern = regexp.MustCompile(`\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
 
 // Handler handles HTTP requests for compositions.
 type Handler struct {
-	executor *Executor
-	config   *CompiledConfig
+	executor      *Executor
+	config        *CompiledConfig
+	authenticator *inbound.Authenticator
 }
 
 // NewHandler creates a new composition handler.
-func NewHandler(config *CompiledConfig) *Handler {
+// authenticator may be nil when inbound auth is not configured.
+func NewHandler(config *CompiledConfig, authenticator *inbound.Authenticator) *Handler {
 	executor := NewExecutor(config)
 
 	return &Handler{
-		executor: executor,
-		config:   config,
+		executor:      executor,
+		config:        config,
+		authenticator: authenticator,
 	}
 }
 
@@ -38,14 +42,13 @@ func (h *Handler) RegisterRoutes(router *server.Router) {
 	for compName, comp := range h.config.Config.Compositions {
 		name := compName
 
-		// Extract {param} names from the path pattern
 		matches := paramPattern.FindAllStringSubmatch(comp.Path, -1)
 		paramNames := make([]string, 0, len(matches))
 		for _, m := range matches {
 			paramNames = append(paramNames, m[1])
 		}
 
-		router.Handle(comp.Method, comp.Path, func(w http.ResponseWriter, r *http.Request) {
+		var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			params := make(map[string]string, len(paramNames))
 			for _, p := range paramNames {
 				params[p] = r.PathValue(p)
@@ -53,10 +56,17 @@ func (h *Handler) RegisterRoutes(router *server.Router) {
 			h.serveComposition(w, r, name, params)
 		})
 
+		if !comp.Public && h.authenticator != nil {
+			handler = h.authenticator.Middleware(handler)
+		}
+
+		router.Handle(comp.Method, comp.Path, handler.ServeHTTP)
+
 		slog.Info("registered composition route",
 			"composition", name,
 			"method", comp.Method,
-			"path", comp.Path)
+			"path", comp.Path,
+			"public", comp.Public)
 	}
 }
 
