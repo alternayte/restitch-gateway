@@ -6,14 +6,14 @@ import (
 	"time"
 )
 
-// responseWriter wraps http.ResponseWriter to capture the status code.
+// responseWriter wraps http.ResponseWriter to capture the status code and bytes written.
 type responseWriter struct {
 	http.ResponseWriter
-	statusCode int
-	written    bool
+	statusCode   int
+	written      bool
+	bytesWritten int
 }
 
-// newResponseWriter creates a new responseWriter wrapping the given http.ResponseWriter.
 func newResponseWriter(w http.ResponseWriter) *responseWriter {
 	return &responseWriter{
 		ResponseWriter: w,
@@ -21,7 +21,6 @@ func newResponseWriter(w http.ResponseWriter) *responseWriter {
 	}
 }
 
-// WriteHeader captures the status code before writing it.
 func (rw *responseWriter) WriteHeader(code int) {
 	if !rw.written {
 		rw.statusCode = code
@@ -30,15 +29,15 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// Write calls WriteHeader with 200 if not already called, then writes the body.
 func (rw *responseWriter) Write(b []byte) (int, error) {
 	if !rw.written {
 		rw.WriteHeader(http.StatusOK)
 	}
-	return rw.ResponseWriter.Write(b)
+	n, err := rw.ResponseWriter.Write(b)
+	rw.bytesWritten += n
+	return n, err
 }
 
-// Flush implements http.Flusher when the wrapped writer supports it.
 func (rw *responseWriter) Flush() {
 	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
@@ -59,6 +58,7 @@ func NewLoggingMiddleware() func(http.Handler) http.Handler {
 				"path", r.URL.Path,
 				"status", rw.statusCode,
 				"duration_ms", float64(time.Since(start).Nanoseconds())/1e6,
+				"bytes_written", rw.bytesWritten,
 				"remote_addr", r.RemoteAddr,
 				"user_agent", r.UserAgent(),
 			)

@@ -9,7 +9,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
+	"time"
 
+	"github.com/restitch/restitch-gateway/internal/admin"
 	"github.com/restitch/restitch-gateway/internal/composition"
 	"github.com/restitch/restitch-gateway/internal/observability"
 	"github.com/restitch/restitch-gateway/internal/server"
@@ -36,18 +39,23 @@ func runCmd(args []string) int {
 		TLSPort: *tlsPort,
 	})
 
-	srv.Router().Use(observability.RequestIDMiddleware)
-	srv.Router().Use(server.NewLoggingMiddleware())
-
 	cfg, loadErr := composition.LoadConfigFile(*configFile)
 	if errors.Is(loadErr, iofs.ErrNotExist) {
 		slog.Warn("no composition config found, starting with health endpoints only",
 			"config_file", *configFile)
+
+		router := server.NewRouter()
+		router.Use(observability.RequestIDMiddleware)
+		router.Use(server.NewLoggingMiddleware())
+		router.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
+		router.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
+		router.Finalize()
+		srv.SetHandler(router)
 	} else if loadErr != nil {
 		slog.Error("failed to load config file", "file", *configFile, "error", loadErr)
 		return 1
 	} else {
-		compiledCfg, err := composition.CompileConfig(context.Background(), cfg)
+		compiled, err := composition.CompileConfig(context.Background(), cfg)
 		if err != nil {
 			slog.Error("failed to compile config", "error", err)
 			return 1
@@ -55,17 +63,103 @@ func runCmd(args []string) int {
 
 		slog.Info("loaded composition config",
 			"file", *configFile,
-			"upstreams", len(compiledCfg.Config.Upstreams),
-			"compositions", len(compiledCfg.Config.Compositions))
+			"upstreams", len(compiled.Config.Upstreams),
+			"compositions", len(compiled.Config.Compositions))
 
-		compositionHandler := composition.NewHandler(compiledCfg, nil)
-		compositionHandler.RegisterRoutes(srv.Router())
+		pipe := &Pipeline{
+			Compiled: compiled,
+			Executor: composition.NewExecutor(compiled),
+		}
+
+		handler := composition.NewHandler(compiled, nil)
+		router := server.NewRouter()
+		handler.RegisterRoutes(router)
+		router.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
+		router.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
+		router.Finalize()
+		pipe.Handler = router
+
+		swapper := newSwapper(pipe)
+
+		outerRouter := server.NewRouter()
+		outerRouter.Use(observability.RequestIDMiddleware)
+		outerRouter.Use(server.NewLoggingMiddleware())
+		outerRouter.Use(recoveryMiddleware)
+		outerRouter.Handle("", "/", swapper.ServeHTTP)
+		// Actually, we need a catch-all. Let me use the swapper directly with middleware wrapping.
+
+		wrapped := applyMiddleware(swapper,
+			observability.RequestIDMiddleware,
+			server.NewLoggingMiddleware(),
+			recoveryMiddleware,
+		)
+		srv.SetHandler(wrapped)
+
+		// Admin server
+		ring := admin.NewRingBuffer(500)
+		stats := admin.NewStats()
+		var reloadMu sync.Mutex
+
+		adminSrv := admin.New(admin.Config{
+			Enabled: true,
+			Port:    9090,
+		}, admin.Deps{
+			Version:    version,
+			ConfigPath: *configFile,
+			ConfigHash: func() string { return swapper.Current().Hash },
+			Requests:   ring,
+			Stats:      stats,
+			Validate: func(yamlBytes []byte) []string {
+				_, err := composition.ParseConfig(yamlBytes)
+				if err != nil {
+					return []string{err.Error()}
+				}
+				return nil
+			},
+			Reload: func() (string, error) {
+				reloadMu.Lock()
+				defer reloadMu.Unlock()
+
+				newCfg, err := composition.LoadConfigFile(*configFile)
+				if err != nil {
+					return "", err
+				}
+				newCompiled, err := composition.CompileConfig(context.Background(), newCfg)
+				if err != nil {
+					return "", err
+				}
+
+				newPipe := &Pipeline{
+					Compiled: newCompiled,
+					Executor: composition.NewExecutor(newCompiled),
+				}
+				newHandler := composition.NewHandler(newCompiled, nil)
+				newRouter := server.NewRouter()
+				newHandler.RegisterRoutes(newRouter)
+				newRouter.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
+				newRouter.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
+				newRouter.Finalize()
+				newPipe.Handler = newRouter
+
+				hash := configHash(*configFile)
+				newPipe.Hash = hash
+
+				old := swapper.Swap(newPipe)
+				if old != nil {
+					time.AfterFunc(30*time.Second, old.Close)
+				}
+
+				slog.Info("config reloaded", "hash", hash)
+				return hash, nil
+			},
+		})
+		adminSrv.Start()
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			adminSrv.Shutdown(ctx)
+		}()
 	}
-
-	srv.Router().Handle(http.MethodGet, "/health", server.HealthHandler(srv))
-	srv.Router().Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
-
-	srv.Router().Finalize()
 
 	tlsEnabled := *certFile != "" && *keyFile != ""
 
@@ -106,4 +200,23 @@ func runCmd(args []string) int {
 	}
 
 	return 0
+}
+
+func applyMiddleware(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
+	for i := len(mws) - 1; i >= 0; i-- {
+		h = mws[i](h)
+	}
+	return h
+}
+
+func recoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				slog.ErrorContext(r.Context(), "panic recovered", "error", err)
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }

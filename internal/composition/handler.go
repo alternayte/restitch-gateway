@@ -24,6 +24,11 @@ type Handler struct {
 	authenticator *inbound.Authenticator
 }
 
+// Executor returns the handler's executor for lifecycle management.
+func (h *Handler) Executor() *Executor {
+	return h.executor
+}
+
 // NewHandler creates a new composition handler.
 // authenticator may be nil when inbound auth is not configured.
 func NewHandler(config *CompiledConfig, authenticator *inbound.Authenticator) *Handler {

@@ -58,6 +58,12 @@ func (s *Server) Router() *Router {
 	return s.router
 }
 
+// SetHandler overrides the server's handler (used when wrapping with middleware).
+func (s *Server) SetHandler(h http.Handler) {
+	s.httpServer.Handler = h
+	s.httpsServer.Handler = h
+}
+
 // ListenAndServe starts the HTTP server. Ready is set only after the
 // listener is bound, so /ready never returns 200 before the port is open.
 func (s *Server) ListenAndServe() error {
