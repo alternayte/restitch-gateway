@@ -2,11 +2,16 @@ package composition
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/restitch/restitch-gateway/internal/auth"
+	upstreampkg "github.com/restitch/restitch-gateway/internal/upstream"
 )
 
 // StepStatus represents the outcome of a step execution.
@@ -37,13 +42,24 @@ type CompositionResult struct {
 
 // Executor runs compositions according to their DAG execution plans.
 type Executor struct {
-	config *CompiledConfig
+	config    *CompiledConfig
+	coalescer *upstreampkg.Coalescer
+	cache     *upstreampkg.StepCache
 }
 
 // NewExecutor creates a new composition executor.
 func NewExecutor(config *CompiledConfig) *Executor {
 	return &Executor{
-		config: config,
+		config:    config,
+		coalescer: upstreampkg.NewCoalescer(),
+		cache:     upstreampkg.NewStepCache(),
+	}
+}
+
+// Close cleans up executor resources (cache janitor).
+func (e *Executor) Close() {
+	if e.cache != nil {
+		e.cache.Close()
 	}
 }
 
@@ -186,7 +202,67 @@ func (e *Executor) executeStepWithErrorHandling(
 		"upstream", up.BaseURL,
 		"optional", step.Optional)
 
-	result, err := ExecuteStep(ctx, step, up, env)
+	// Build cache/coalesce key from evaluated URL + auth identity
+	var cacheKey string
+	if step.Step.Cache != nil || step.Step.Coalesce {
+		evalPath, _ := step.PathPart.EvalString(env, EscapeNone)
+		if step.QueryPart != nil {
+			q, _ := step.QueryPart.EvalString(env, EscapeNone)
+			evalPath += "?" + q
+		}
+		fullURL := strings.TrimRight(up.BaseURL, "/") + "/" + strings.TrimLeft(evalPath, "/")
+		authID := auth.ClientAuthorization(ctx)
+		cacheKey = upstreampkg.CoalesceKey(step.Step.Method, fullURL, authID)
+	}
+
+	// Cache check (before coalesce and execute)
+	if step.Step.Cache != nil && step.Step.Method == "GET" {
+		if cached, ok := e.cache.Get(cacheKey); ok {
+			parsedBody, _ := parseJSONBody(cached.Body, cached.Headers.Get("Content-Type"))
+			if parsedBody == nil {
+				parsedBody = string(cached.Body)
+			}
+			result := &StepResult{
+				Status:  cached.Status,
+				Headers: cached.Headers,
+				Body:    parsedBody,
+				RawBody: cached.Body,
+			}
+			durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
+			resultsMutex.Lock()
+			results[stepName] = result
+			resultsMutex.Unlock()
+			slog.InfoContext(ctx, "step complete (cached)",
+				"composition", compositionName,
+				"step", stepName,
+				"wave", waveNum,
+				"status", result.Status,
+				"duration_ms", durationMS)
+			return nil, &StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepSuccess, Optional: step.Optional}
+		}
+	}
+
+	// Execute step (with optional coalescing)
+	var result *StepResult
+	var err error
+
+	executeStep := func() (*StepResult, error) {
+		return ExecuteStep(ctx, step, up, env)
+	}
+
+	if step.Step.Coalesce && step.Step.Method == "GET" {
+		v, _, coalesceErr := e.coalescer.Do(cacheKey, func() (any, error) {
+			return executeStep()
+		})
+		if coalesceErr != nil {
+			err = coalesceErr
+		} else if v != nil {
+			result = v.(*StepResult)
+		}
+	} else {
+		result, err = executeStep()
+	}
+
 	durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
 
 	if err != nil {
@@ -204,6 +280,19 @@ func (e *Executor) executeStepWithErrorHandling(
 
 		return &stepError{stepName: stepName, err: err, optional: step.Optional},
 			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepFailed, Optional: step.Optional}
+	}
+
+	// Cache fill (status < 500, not error-rule-matched)
+	if step.Step.Cache != nil && step.Step.Method == "GET" && result.Status < 500 && !result.ErrorRuleMatched {
+		body := result.RawBody
+		if body == nil {
+			body, _ = json.Marshal(result.Body)
+		}
+		e.cache.Set(cacheKey, &upstreampkg.CachedResponse{
+			Status:  result.Status,
+			Headers: result.Headers.Clone(),
+			Body:    body,
+		}, step.Step.Cache.TTL)
 	}
 
 	resultsMutex.Lock()

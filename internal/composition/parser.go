@@ -106,10 +106,37 @@ func CompileConfig(ctx context.Context, cfg *Config) (*CompiledConfig, error) {
 			}
 		}
 
-		compiled.Upstreams[name] = upstream.Build(
-			name, up.URL, up.Timeout, up.MaxResponseBytes, up.HealthPath,
-			upstream.TransportConfig{}, strategy,
-		)
+		var retryCfg *upstream.RetryConfig
+		if up.Retry != nil {
+			retryCfg = &upstream.RetryConfig{
+				MaxAttempts:        up.Retry.MaxAttempts,
+				Interval:           up.Retry.Interval,
+				MaxBackoff:         up.Retry.MaxBackoff,
+				BackoffOn:          up.Retry.BackoffOn,
+				DropOn:             up.Retry.DropOn,
+				RetryNonIdempotent: up.Retry.RetryNonIdempotent,
+			}
+		}
+		var breakerCfg *upstream.BreakerConfig
+		if up.CircuitBreaker != nil {
+			breakerCfg = &upstream.BreakerConfig{
+				MaxFailures: up.CircuitBreaker.MaxFailures,
+				Interval:    up.CircuitBreaker.Interval,
+				Timeout:     up.CircuitBreaker.Timeout,
+			}
+		}
+
+		compiled.Upstreams[name] = upstream.Build(upstream.BuildConfig{
+			Name:             name,
+			BaseURL:          up.URL,
+			Timeout:          up.Timeout,
+			MaxResponseBytes: up.MaxResponseBytes,
+			HealthPath:       up.HealthPath,
+			Transport:        upstream.TransportConfig{},
+			Auth:             strategy,
+			Retry:            retryCfg,
+			Breaker:          breakerCfg,
+		})
 	}
 
 	for compName, comp := range cfg.Compositions {

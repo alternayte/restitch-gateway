@@ -17,7 +17,8 @@ func WithClientAuthorization(ctx context.Context, value string) context.Context 
 	return context.WithValue(ctx, clientAuthKey{}, value)
 }
 
-func clientAuthorization(ctx context.Context) string {
+// ClientAuthorization returns the stored Authorization header value from the context.
+func ClientAuthorization(ctx context.Context) string {
 	if v, ok := ctx.Value(clientAuthKey{}).(string); ok {
 		return v
 	}
@@ -45,7 +46,7 @@ type passthroughRoundTripper struct {
 
 // RoundTrip reads Authorization from request context (not headers).
 func (rt *passthroughRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	authValue := clientAuthorization(req.Context())
+	authValue := ClientAuthorization(req.Context())
 	if authValue == "" {
 		return nil, ErrMissingAuthHeader
 	}

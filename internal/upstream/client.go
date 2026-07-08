@@ -64,25 +64,44 @@ func BuildTransport(tc TransportConfig) *http.Transport {
 	}
 }
 
+// BuildConfig holds all configuration needed to build an upstream client.
+type BuildConfig struct {
+	Name             string
+	BaseURL          string
+	Timeout          time.Duration
+	MaxResponseBytes int64
+	HealthPath       string
+	Transport        TransportConfig
+	Auth             auth.Strategy
+	Retry            *RetryConfig
+	Breaker          *BreakerConfig
+}
+
 // Build assembles a per-upstream *http.Client with the RoundTripper chain:
-// auth → transport. Timeout: 0 — deadlines come from step context.
-func Build(name, baseURL string, timeout time.Duration, maxResponseBytes int64, healthPath string, tc TransportConfig, authStrategy auth.Strategy) *Upstream {
-	transport := BuildTransport(tc)
+// retry → breaker → auth → transport. Timeout: 0 — deadlines come from step context.
+func Build(cfg BuildConfig) *Upstream {
+	transport := BuildTransport(cfg.Transport)
 
 	var rt http.RoundTripper = transport
-	if authStrategy != nil {
-		rt = authStrategy.RoundTripper(rt)
+	if cfg.Auth != nil {
+		rt = cfg.Auth.RoundTripper(rt)
+	}
+	if cfg.Breaker != nil {
+		rt = newBreakerTripper(rt, *cfg.Breaker, cfg.Name)
+	}
+	if cfg.Retry != nil {
+		rt = newRetryTripper(rt, *cfg.Retry, cfg.Name)
 	}
 
 	return &Upstream{
-		Name:    name,
-		BaseURL: baseURL,
+		Name:    cfg.Name,
+		BaseURL: cfg.BaseURL,
 		Client: &http.Client{
 			Transport: rt,
-			Timeout:   0, // deadlines via per-step context
+			Timeout:   0,
 		},
-		MaxResponseBytes: maxResponseBytes,
-		Timeout:          timeout,
-		HealthPath:       healthPath,
+		MaxResponseBytes: cfg.MaxResponseBytes,
+		Timeout:          cfg.Timeout,
+		HealthPath:       cfg.HealthPath,
 	}
 }

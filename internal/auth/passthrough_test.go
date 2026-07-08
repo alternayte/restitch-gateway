@@ -87,12 +87,12 @@ func TestPassthroughStrategy_OriginalRequestUnmodified(t *testing.T) {
 
 func TestWithClientAuthorization(t *testing.T) {
 	ctx := context.Background()
-	if v := clientAuthorization(ctx); v != "" {
+	if v := ClientAuthorization(ctx); v != "" {
 		t.Errorf("expected empty, got %q", v)
 	}
 
 	ctx = WithClientAuthorization(ctx, "Bearer abc")
-	if v := clientAuthorization(ctx); v != "Bearer abc" {
+	if v := ClientAuthorization(ctx); v != "Bearer abc" {
 		t.Errorf("expected 'Bearer abc', got %q", v)
 	}
 }
