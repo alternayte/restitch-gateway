@@ -9,9 +9,8 @@ import (
 
 // Config holds server configuration options.
 type Config struct {
-	Port      int    // HTTP server port
-	TLSPort   int    // HTTPS server port
-	LogFormat string // Log format: "json" or "text"
+	Port    int // HTTP server port
+	TLSPort int // HTTPS server port
 }
 
 // Server represents the restitch HTTP/HTTPS server.

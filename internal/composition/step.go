@@ -166,7 +166,7 @@ func ExecuteStepWithTimeout(
 	// Per CONTEXT.md: "Error matching rules replace the failed step's slot with the configured body value"
 	// Per RESEARCH.md Pitfall 5: "Always add matched error rule to `_errors` array"
 	if replacementBody, matched := matchErrorRule(resp.StatusCode, step.Step.ErrorRules); matched {
-		slog.Debug("error rule matched",
+		slog.DebugContext(stepCtx, "error rule matched",
 			"status", resp.StatusCode,
 			"step", step.Step.Name)
 
