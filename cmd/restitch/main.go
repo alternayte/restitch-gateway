@@ -139,10 +139,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	case <-srv.WaitForShutdownSignal():
-		// Shutdown signal received, perform graceful shutdown
-		if err := srv.Shutdown(srv.ShutdownContext()); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), server.ShutdownTimeout)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "shutdown error: %v\n", err)
 			os.Exit(1)
 		}
+		slog.Info("shutdown complete")
 	}
 }
