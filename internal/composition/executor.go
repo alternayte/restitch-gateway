@@ -9,6 +9,15 @@ import (
 	"time"
 )
 
+// StepStatus represents the outcome of a step execution.
+type StepStatus = string
+
+const (
+	StepSuccess StepStatus = "success"
+	StepFailed  StepStatus = "failed"
+	StepSkipped StepStatus = "skipped"
+)
+
 // StepTiming records execution timing for a single step.
 type StepTiming struct {
 	Name       string  `json:"name"`
@@ -140,7 +149,7 @@ func (e *Executor) executeStepWithErrorHandling(
 	if !exists {
 		durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
 		return &stepError{stepName: stepName, err: fmt.Errorf("step not found"), optional: false},
-			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "failed", Optional: false}
+			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepFailed, Optional: false}
 	}
 
 	resultsMutex.Lock()
@@ -157,14 +166,14 @@ func (e *Executor) executeStepWithErrorHandling(
 				err:      fmt.Errorf("dependency_failed"),
 				optional: true,
 			},
-			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "skipped", Optional: step.Optional}
+			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepSkipped, Optional: step.Optional}
 	}
 
 	compiledUpstream, exists := e.config.Upstreams[step.Step.Upstream]
 	if !exists {
 		durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
 		return &stepError{stepName: stepName, err: fmt.Errorf("upstream not found"), optional: step.Optional},
-			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "failed", Optional: step.Optional}
+			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepFailed, Optional: step.Optional}
 	}
 
 	resultsMutex.Lock()
@@ -195,7 +204,7 @@ func (e *Executor) executeStepWithErrorHandling(
 		resultsMutex.Unlock()
 
 		return &stepError{stepName: stepName, err: err, optional: step.Optional},
-			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "failed", Optional: step.Optional}
+			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepFailed, Optional: step.Optional}
 	}
 
 	resultsMutex.Lock()
@@ -215,10 +224,10 @@ func (e *Executor) executeStepWithErrorHandling(
 				err:      NewErrorRuleMatchedError(result.Status),
 				optional: true,
 			},
-			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "success", Optional: step.Optional}
+			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepSuccess, Optional: step.Optional}
 	}
 
-	return nil, &StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "success", Optional: step.Optional}
+	return nil, &StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepSuccess, Optional: step.Optional}
 }
 
 // checkDependenciesFailed returns true if any dependency (inferred or explicit) has nil result.
