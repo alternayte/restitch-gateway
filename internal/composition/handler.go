@@ -81,7 +81,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	comp := h.config.Compositions[compositionName]
-	response, err := BuildResponse(comp.Response, result.Steps, r, result.StepErrors)
+
+	failedSteps := make(map[string]bool)
+	for name, res := range result.Steps {
+		if res == nil {
+			failedSteps[name] = true
+		}
+	}
+
+	response, err := BuildResponse(comp.Response, result.Steps, r, result.StepErrors, failedSteps)
 	if err != nil {
 		slog.ErrorContext(ctx, "response template evaluation failed",
 			"composition", compositionName,
@@ -92,7 +100,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", response.ContentType)
 	if result.IsPartial {
+		w.Header().Set("X-Restitch-Complete", "false")
 		w.Header().Set("X-Partial-Response", "true")
+	} else {
+		w.Header().Set("X-Restitch-Complete", "true")
 	}
 	w.WriteHeader(response.Status)
 

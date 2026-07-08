@@ -379,3 +379,103 @@ compositions:
 		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 }
+
+// TestHandler_PartialResponse_OptionalStepInTemplate is the permanent D1
+// regression test. An optional step to a dead upstream fails; the response
+// template references {{ steps.loyalty.body.points }} — must return 200
+// with null for that field, X-Restitch-Complete: false, and _errors.
+func TestHandler_PartialResponse_OptionalStepInTemplate(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"id":   1,
+			"name": "Alice",
+		})
+	}))
+	defer mockServer.Close()
+
+	configYAML := `
+upstreams:
+  mock:
+    url: ` + mockServer.URL + `
+  dead:
+    url: "http://127.0.0.1:1"
+
+compositions:
+  partial:
+    path: /p
+    steps:
+      - name: user
+        upstream: mock
+        path: /users/1
+      - name: loyalty
+        upstream: dead
+        path: /x
+        optional: true
+    response:
+      status: 200
+      body:
+        user: "{{ steps.user.body }}"
+        points: "{{ steps.loyalty.body.points }}"
+`
+
+	cfg, err := ParseConfig([]byte(configYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+
+	compiledCfg, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig: %v", err)
+	}
+
+	handler := NewHandler(compiledCfg, &http.Client{})
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+	router.Finalize()
+
+	req := httptest.NewRequest("GET", "/p", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	if w.Header().Get("X-Restitch-Complete") != "false" {
+		t.Errorf("X-Restitch-Complete = %q, want false", w.Header().Get("X-Restitch-Complete"))
+	}
+
+	if w.Header().Get("X-Partial-Response") != "true" {
+		t.Errorf("X-Partial-Response = %q, want true", w.Header().Get("X-Partial-Response"))
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+
+	if body["user"] == nil {
+		t.Error("user field should be populated")
+	}
+
+	if body["points"] != nil {
+		t.Errorf("points should be null for failed optional step, got %v", body["points"])
+	}
+
+	errors, ok := body["_errors"].([]any)
+	if !ok || len(errors) == 0 {
+		t.Fatalf("expected _errors array, got %v", body["_errors"])
+	}
+
+	foundLoyalty := false
+	for _, e := range errors {
+		eMap, ok := e.(map[string]any)
+		if ok && eMap["step"] == "loyalty" {
+			foundLoyalty = true
+		}
+	}
+	if !foundLoyalty {
+		t.Errorf("_errors should contain loyalty step, got %v", errors)
+	}
+}

@@ -123,7 +123,7 @@ func TestBuildResponse(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "http://example.com/test", nil)
 
-			resp, err := BuildResponse(tt.template, tt.stepResults, req, nil)
+			resp, err := BuildResponse(tt.template, tt.stepResults, req, nil, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("BuildResponse() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -201,7 +201,7 @@ func TestEvaluateBodyNode(t *testing.T) {
 				t.Fatalf("compileBodyNode failed: %v", err)
 			}
 
-			got, err := evaluateBodyNode(node, tt.env)
+			got, err := evaluateBodyNode(node, tt.env, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("evaluateBodyNode() error = %v, wantErr %v", err, tt.wantErr)
 				return

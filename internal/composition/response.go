@@ -13,7 +13,10 @@ type CompositionResponse struct {
 }
 
 // BuildResponse evaluates response template with step results.
-func BuildResponse(template *CompiledResponse, results map[string]*StepResult, req *http.Request, stepErrors []StepErrorDetail) (*CompositionResponse, error) {
+// failedSteps contains step names that failed or were skipped — used for
+// nil-safe evaluation per K3: on eval error, if the template's deps
+// intersect failedSteps, return nil instead of an error.
+func BuildResponse(template *CompiledResponse, results map[string]*StepResult, req *http.Request, stepErrors []StepErrorDetail, failedSteps map[string]bool) (*CompositionResponse, error) {
 	env := buildRequestEnv(req, nil, nil, results)
 
 	status := 200
@@ -33,7 +36,7 @@ func BuildResponse(template *CompiledResponse, results map[string]*StepResult, r
 		}
 	}
 
-	body, err := evaluateBodyNode(template.Body, env)
+	body, err := evaluateBodyNode(template.Body, env, failedSteps)
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate response body: %w", err)
 	}
@@ -52,19 +55,31 @@ func BuildResponse(template *CompiledResponse, results map[string]*StepResult, r
 }
 
 // evaluateBodyNode recursively evaluates a compiled body tree.
-func evaluateBodyNode(node *CompiledBodyNode, env map[string]any) (any, error) {
+// On eval error, if the template's deps intersect failedSteps, return nil
+// (for IsSingle) or "" (for interpolation) instead of propagating the error.
+func evaluateBodyNode(node *CompiledBodyNode, env map[string]any, failedSteps map[string]bool) (any, error) {
 	if node == nil {
 		return nil, nil
 	}
 
 	if node.Tmpl != nil {
-		return node.Tmpl.EvalValue(env)
+		val, err := node.Tmpl.EvalValue(env)
+		if err != nil {
+			if hasFailedDep(node.Tmpl.Deps, failedSteps) {
+				if node.Tmpl.IsSingle {
+					return nil, nil
+				}
+				return "", nil
+			}
+			return nil, err
+		}
+		return val, nil
 	}
 
 	if node.Map != nil {
 		result := make(map[string]interface{}, len(node.Map))
 		for key, child := range node.Map {
-			val, err := evaluateBodyNode(child, env)
+			val, err := evaluateBodyNode(child, env, failedSteps)
 			if err != nil {
 				return nil, fmt.Errorf("field %s: %w", key, err)
 			}
@@ -76,7 +91,7 @@ func evaluateBodyNode(node *CompiledBodyNode, env map[string]any) (any, error) {
 	if node.List != nil {
 		result := make([]interface{}, len(node.List))
 		for i, child := range node.List {
-			val, err := evaluateBodyNode(child, env)
+			val, err := evaluateBodyNode(child, env, failedSteps)
 			if err != nil {
 				return nil, fmt.Errorf("index %d: %w", i, err)
 			}
@@ -86,4 +101,14 @@ func evaluateBodyNode(node *CompiledBodyNode, env map[string]any) (any, error) {
 	}
 
 	return node.Literal, nil
+}
+
+// hasFailedDep checks if any of the template's deps are in the failed set.
+func hasFailedDep(deps []string, failedSteps map[string]bool) bool {
+	for _, d := range deps {
+		if failedSteps[d] {
+			return true
+		}
+	}
+	return false
 }
