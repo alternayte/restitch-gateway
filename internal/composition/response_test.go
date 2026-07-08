@@ -5,37 +5,43 @@ import (
 	"testing"
 )
 
+func mustCompileBodyNode(t *testing.T, body any) *CompiledBodyNode {
+	t.Helper()
+	env := BuildBaseEnvironment([]string{"user", "posts", "item1", "item2"})
+	node, err := compileBodyNode(body, env)
+	if err != nil {
+		t.Fatalf("compileBodyNode failed: %v", err)
+	}
+	return node
+}
+
 func TestBuildResponse(t *testing.T) {
 	tests := []struct {
-		name         string
-		template     *CompiledResponse
-		stepResults  map[string]*StepResult
-		wantStatus   int
-		wantBodyJSON string // Expected JSON representation
-		wantErr      bool
+		name        string
+		template    *CompiledResponse
+		stepResults map[string]*StepResult
+		wantStatus  int
+		wantErr     bool
 	}{
 		{
 			name: "simple static response",
 			template: &CompiledResponse{
-				StatusExpr: nil, // static 200
-				BodyTemplate: map[string]interface{}{
+				Body: mustCompileBodyNode(t, map[string]any{
 					"message": "hello",
 					"count":   42,
-				},
+				}),
 				ContentType: "application/json",
 			},
-			stepResults:  map[string]*StepResult{},
-			wantStatus:   200,
-			wantBodyJSON: `{"count":42,"message":"hello"}`,
+			stepResults: map[string]*StepResult{},
+			wantStatus:  200,
 		},
 		{
 			name: "response with step results",
 			template: &CompiledResponse{
-				StatusExpr: nil,
-				BodyTemplate: map[string]interface{}{
+				Body: mustCompileBodyNode(t, map[string]any{
 					"user":  "{{ steps.user.body }}",
 					"posts": "{{ steps.posts.body }}",
-				},
+				}),
 				ContentType: "application/json",
 			},
 			stepResults: map[string]*StepResult{
@@ -54,22 +60,20 @@ func TestBuildResponse(t *testing.T) {
 					},
 				},
 			},
-			wantStatus:   200,
-			wantBodyJSON: `{"posts":[{"id":101},{"id":102}],"user":{"id":1,"name":"Alice"}}`,
+			wantStatus: 200,
 		},
 		{
 			name: "nested template structure",
 			template: &CompiledResponse{
-				StatusExpr: nil,
-				BodyTemplate: map[string]interface{}{
-					"data": map[string]interface{}{
+				Body: mustCompileBodyNode(t, map[string]any{
+					"data": map[string]any{
 						"user":  "{{ steps.user.body }}",
 						"total": "{{ len(steps.posts.body) }}",
 					},
-					"meta": map[string]interface{}{
+					"meta": map[string]any{
 						"status": "ok",
 					},
-				},
+				}),
 				ContentType: "application/json",
 			},
 			stepResults: map[string]*StepResult{
@@ -88,19 +92,17 @@ func TestBuildResponse(t *testing.T) {
 					},
 				},
 			},
-			wantStatus:   200,
-			wantBodyJSON: `{"data":{"total":2,"user":{"id":1,"name":"Alice"}},"meta":{"status":"ok"}}`,
+			wantStatus: 200,
 		},
 		{
 			name: "array in template",
 			template: &CompiledResponse{
-				StatusExpr: nil,
-				BodyTemplate: map[string]interface{}{
-					"items": []interface{}{
+				Body: mustCompileBodyNode(t, map[string]any{
+					"items": []any{
 						"{{ steps.item1.body }}",
 						"{{ steps.item2.body }}",
 					},
-				},
+				}),
 				ContentType: "application/json",
 			},
 			stepResults: map[string]*StepResult{
@@ -113,14 +115,12 @@ func TestBuildResponse(t *testing.T) {
 					Body:   map[string]interface{}{"name": "second"},
 				},
 			},
-			wantStatus:   200,
-			wantBodyJSON: `{"items":[{"name":"first"},{"name":"second"}]}`,
+			wantStatus: 200,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create minimal request
 			req, _ := http.NewRequest("GET", "http://example.com/test", nil)
 
 			resp, err := BuildResponse(tt.template, tt.stepResults, req, nil)
@@ -137,9 +137,6 @@ func TestBuildResponse(t *testing.T) {
 				t.Errorf("BuildResponse() status = %d, want %d", resp.Status, tt.wantStatus)
 			}
 
-			// For body comparison, we need to marshal to JSON and compare
-			// This is a simple string comparison test - in real tests we'd use json.Marshal
-			// For now, just verify the body is not nil
 			if resp.Body == nil {
 				t.Errorf("BuildResponse() body is nil")
 			}
@@ -147,69 +144,66 @@ func TestBuildResponse(t *testing.T) {
 	}
 }
 
-func TestEvaluateTemplate(t *testing.T) {
+func TestEvaluateBodyNode(t *testing.T) {
 	tests := []struct {
 		name     string
-		template interface{}
-		env      map[string]interface{}
-		want     interface{}
+		body     any
+		env      map[string]any
+		wantNil  bool
 		wantErr  bool
 	}{
 		{
-			name:     "literal string",
-			template: "hello",
-			env:      map[string]interface{}{},
-			want:     "hello",
+			name: "literal string",
+			body: "hello",
+			env:  map[string]any{},
 		},
 		{
-			name:     "literal number",
-			template: 42,
-			env:      map[string]interface{}{},
-			want:     42,
+			name: "literal number",
+			body: 42,
+			env:  map[string]any{},
 		},
 		{
 			name: "simple expression",
-			template: "{{ name }}",
-			env: map[string]interface{}{
+			body: "{{ name }}",
+			env: map[string]any{
 				"name": "Alice",
 			},
-			want: "Alice",
 		},
 		{
 			name: "nested map",
-			template: map[string]interface{}{
+			body: map[string]any{
 				"user": "{{ user.name }}",
 				"age":  "{{ user.age }}",
 			},
-			env: map[string]interface{}{
-				"user": map[string]interface{}{
+			env: map[string]any{
+				"user": map[string]any{
 					"name": "Alice",
 					"age":  float64(30),
 				},
 			},
-			want: map[string]interface{}{
-				"user": "Alice",
-				"age":  float64(30),
-			},
 		},
 		{
 			name: "array of expressions",
-			template: []interface{}{
+			body: []any{
 				"{{ items[0] }}",
 				"{{ items[1] }}",
 			},
-			env: map[string]interface{}{
-				"items": []interface{}{"first", "second"},
+			env: map[string]any{
+				"items": []any{"first", "second"},
 			},
-			want: []interface{}{"first", "second"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := evaluateTemplate(tt.template, tt.env)
+			node, err := compileBodyNode(tt.body, tt.env)
+			if err != nil {
+				t.Fatalf("compileBodyNode failed: %v", err)
+			}
+
+			got, err := evaluateBodyNode(node, tt.env)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("evaluateTemplate() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("evaluateBodyNode() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
@@ -217,9 +211,8 @@ func TestEvaluateTemplate(t *testing.T) {
 				return
 			}
 
-			// Basic type check
-			if got == nil && tt.want != nil {
-				t.Errorf("evaluateTemplate() = nil, want %v", tt.want)
+			if got == nil && !tt.wantNil {
+				t.Errorf("evaluateBodyNode() = nil, want non-nil")
 			}
 		})
 	}
