@@ -1,7 +1,9 @@
 package composition
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -64,19 +66,42 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.executor.Execute(ctx, compositionName, r)
 	if err != nil {
+		// Client disconnected — don't write a response
+		if r.Context().Err() != nil {
+			slog.InfoContext(ctx, "client canceled",
+				"composition", compositionName)
+			return
+		}
+
 		if auth.IsMissingAuthHeaderError(err) {
 			slog.WarnContext(ctx, "passthrough auth missing client authorization",
 				"composition", compositionName,
 				"path", r.URL.Path)
 			w.Header().Set("WWW-Authenticate", "Bearer")
-			h.writeError(w, http.StatusUnauthorized, fmt.Errorf("authorization header required"))
+			h.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authorization header required"})
 			return
 		}
 
 		slog.ErrorContext(ctx, "composition execution failed",
 			"composition", compositionName,
 			"error", err)
-		h.writeError(w, http.StatusBadGateway, err)
+
+		var reqErr *RequiredStepError
+		if errors.As(err, &reqErr) {
+			if errors.Is(reqErr.Err, context.DeadlineExceeded) {
+				h.writeJSON(w, http.StatusGatewayTimeout, map[string]string{
+					"error": "upstream timeout",
+					"step":  reqErr.Step,
+				})
+			} else {
+				h.writeJSON(w, http.StatusBadGateway, map[string]string{
+					"error": "upstream error",
+					"step":  reqErr.Step,
+				})
+			}
+		} else {
+			h.writeJSON(w, http.StatusBadGateway, map[string]string{"error": "upstream error"})
+		}
 		return
 	}
 
@@ -94,7 +119,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "response template evaluation failed",
 			"composition", compositionName,
 			"error", err)
-		h.writeError(w, http.StatusInternalServerError, err)
+		h.writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}
 
@@ -163,17 +188,12 @@ func (h *Handler) matchComposition(path, method string) string {
 
 // routeKey creates a unique key for route mapping.
 func (h *Handler) routeKey(path, method string) string {
-	return fmt.Sprintf("%s:%s", method, path)
+	return method + ":" + path
 }
 
-// writeError writes an error response in JSON format.
-func (h *Handler) writeError(w http.ResponseWriter, status int, err error) {
+// writeJSON writes a JSON response with the given status code.
+func (h *Handler) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-
-	errorResponse := map[string]string{
-		"error": err.Error(),
-	}
-
-	json.NewEncoder(w).Encode(errorResponse)
+	json.NewEncoder(w).Encode(v)
 }

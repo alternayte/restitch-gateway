@@ -111,7 +111,7 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 			for _, stepErr := range waveErrors {
 				if !stepErr.optional {
 					slog.ErrorContext(ctx, "required step failed in wave", "wave", waveIdx, "step", stepErr.stepName, "error", stepErr.err)
-					return nil, fmt.Errorf("required step %q failed: %w", stepErr.stepName, stepErr.err)
+					return nil, &RequiredStepError{Step: stepErr.stepName, Err: stepErr.err}
 				}
 			}
 		}
