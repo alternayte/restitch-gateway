@@ -1,0 +1,13 @@
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - ineffassign
+    - misspell
+    - unconvert
+
+run:
+  exclude-dirs:
+    - studio
