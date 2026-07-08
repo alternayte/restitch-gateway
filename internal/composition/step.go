@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/restitch/restitch-gateway/internal/client"
+	upstreampkg "github.com/restitch/restitch-gateway/internal/upstream"
 )
 
 // StepResult holds the response from an upstream service.
@@ -26,17 +26,17 @@ type StepResult struct {
 }
 
 // ExecuteStep executes a single step with timeout hierarchy resolution.
-func ExecuteStep(ctx context.Context, step *CompiledStep, upstream *CompiledUpstream, env map[string]interface{}, baseClient *http.Client) (*StepResult, error) {
-	timeout := resolveTimeout(step, upstream)
-	return ExecuteStepWithTimeout(ctx, step, upstream, env, baseClient, timeout)
+func ExecuteStep(ctx context.Context, step *CompiledStep, up *upstreampkg.Upstream, env map[string]interface{}) (*StepResult, error) {
+	timeout := resolveTimeout(step, up)
+	return ExecuteStepWithTimeout(ctx, step, up, env, timeout)
 }
 
-func resolveTimeout(step *CompiledStep, upstream *CompiledUpstream) time.Duration {
+func resolveTimeout(step *CompiledStep, up *upstreampkg.Upstream) time.Duration {
 	if step.Step.Timeout != nil && *step.Step.Timeout > 0 {
 		return *step.Step.Timeout
 	}
-	if upstream.Timeout > 0 {
-		return upstream.Timeout
+	if up.Timeout > 0 {
+		return up.Timeout
 	}
 	return DefaultStepTimeout
 }
@@ -45,15 +45,13 @@ func resolveTimeout(step *CompiledStep, upstream *CompiledUpstream) time.Duratio
 func ExecuteStepWithTimeout(
 	parentCtx context.Context,
 	step *CompiledStep,
-	upstream *CompiledUpstream,
+	up *upstreampkg.Upstream,
 	env map[string]interface{},
-	baseClient *http.Client,
 	timeout time.Duration,
 ) (*StepResult, error) {
 	stepCtx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
 
-	// Evaluate path using compiled templates
 	path, err := step.PathPart.EvalString(env, EscapePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate path: %w", err)
@@ -66,9 +64,8 @@ func ExecuteStepWithTimeout(
 		path += "?" + queryStr
 	}
 
-	fullURL := strings.TrimRight(upstream.Upstream.URL, "/") + "/" + strings.TrimLeft(path, "/")
+	fullURL := strings.TrimRight(up.BaseURL, "/") + "/" + strings.TrimLeft(path, "/")
 
-	// Evaluate body
 	var body io.Reader
 	if step.BodyTmpl != nil {
 		var bodyBytes []byte
@@ -96,14 +93,12 @@ func ExecuteStepWithTimeout(
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set Content-Type for requests with a body
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
 	propagateHeaders(req, env)
 
-	// Evaluate and set custom headers from compiled templates
 	for key, tmpl := range step.Headers {
 		val, err := tmpl.EvalString(env, EscapeNone)
 		if err != nil {
@@ -112,29 +107,16 @@ func ExecuteStepWithTimeout(
 		req.Header.Set(key, val)
 	}
 
-	httpClient := baseClient
-	if upstream.Auth != nil {
-		transport := baseClient.Transport
-		if transport == nil {
-			transport = http.DefaultTransport
-		}
-		authTransport := upstream.Auth.RoundTripper(transport)
-		httpClient = &http.Client{
-			Transport: authTransport,
-			Timeout:   baseClient.Timeout,
-		}
-	}
-
-	resp, err := httpClient.Do(req)
+	resp, err := up.Client.Do(req)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, fmt.Errorf("timeout after %v: %w", timeout, err)
 		}
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer client.DrainAndClose(resp.Body)
+	defer upstreampkg.DrainAndClose(resp.Body)
 
-	maxBytes := upstream.MaxResponseBytes
+	maxBytes := up.MaxResponseBytes
 	rawBody, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
@@ -214,7 +196,6 @@ func propagateHeaders(req *http.Request, env map[string]interface{}) {
 		"traceparent",
 		"Accept",
 		"Accept-Language",
-		"Authorization",
 	}
 
 	for _, headerName := range propagatedHeaders {

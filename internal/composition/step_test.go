@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	upstreampkg "github.com/restitch/restitch-gateway/internal/upstream"
 )
 
 func mustCompileTemplate(t *testing.T, raw string) *Template {
@@ -48,13 +50,13 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
-			Upstream: &Upstream{URL: server.URL},
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
 		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
 
-		result, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		result, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
 			t.Fatalf("ExecuteStep failed: %v", err)
 		}
@@ -104,11 +106,11 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
-			Upstream: &Upstream{URL: server.URL},
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
-		result, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		result, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
 			t.Fatalf("ExecuteStep failed: %v", err)
 		}
@@ -152,11 +154,11 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
-			Upstream: &Upstream{URL: server.URL},
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
-		_, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		_, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
 			t.Fatalf("ExecuteStep failed: %v", err)
 		}
@@ -190,11 +192,11 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
-			Upstream: &Upstream{URL: server.URL},
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
-		_, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		_, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
 			t.Fatalf("ExecuteStep failed: %v", err)
 		}
@@ -218,8 +220,8 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
-			Upstream: &Upstream{URL: server.URL},
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
 		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
@@ -227,7 +229,7 @@ func TestExecuteStep(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		_, err := ExecuteStep(ctx, step, upstream, env, http.DefaultClient)
+		_, err := ExecuteStep(ctx, step, upstream, env)
 		if err == nil {
 			t.Error("Expected error from cancelled context")
 		}
@@ -256,13 +258,13 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
-			Upstream: &Upstream{URL: server.URL},
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
 		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
 
-		result, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		result, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
 			t.Fatalf("ExecuteStep should not return error for upstream 404: %v", err)
 		}
@@ -295,13 +297,14 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
-			Upstream:         &Upstream{URL: server.URL},
-			MaxResponseBytes: 100, // much smaller than actual response
+		upstream := &upstreampkg.Upstream{
+			BaseURL:          server.URL,
+			MaxResponseBytes: 100,
+			Client:           http.DefaultClient,
 		}
 
 		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
-		_, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		_, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err == nil {
 			t.Fatal("expected error for oversized response")
 		}
@@ -326,13 +329,14 @@ func TestExecuteStep(t *testing.T) {
 			Optional: true,
 		}
 
-		upstream := &CompiledUpstream{
-			Upstream:         &Upstream{URL: server.URL},
+		upstream := &upstreampkg.Upstream{
+			BaseURL:          server.URL,
 			MaxResponseBytes: 100,
+			Client:           http.DefaultClient,
 		}
 
 		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
-		_, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		_, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err == nil {
 			t.Fatal("expected error for oversized response")
 		}

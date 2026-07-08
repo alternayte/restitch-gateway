@@ -469,13 +469,9 @@ compositions:
 		t.Fatalf("CompileConfig failed: %v", err)
 	}
 
-	upstream, exists := compiled.Upstreams["api"]
+	_, exists := compiled.Upstreams["api"]
 	if !exists {
 		t.Fatal("upstream api not found in compiled config")
-	}
-
-	if upstream.Auth == nil {
-		t.Error("expected auth strategy to be compiled")
 	}
 }
 
@@ -584,12 +580,8 @@ compositions:
 		t.Fatalf("CompileConfig failed: %v", err)
 	}
 
-	upstream, exists := compiled.Upstreams["api"]
+	_, exists := compiled.Upstreams["api"]
 	if !exists {
 		t.Fatal("upstream api not found in compiled config")
-	}
-
-	if upstream.Auth != nil {
-		t.Error("expected no auth strategy for upstream without auth config")
 	}
 }

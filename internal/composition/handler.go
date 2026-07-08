@@ -23,8 +23,8 @@ type Handler struct {
 }
 
 // NewHandler creates a new composition handler.
-func NewHandler(config *CompiledConfig, httpClient *http.Client) *Handler {
-	executor := NewExecutor(config, httpClient)
+func NewHandler(config *CompiledConfig) *Handler {
+	executor := NewExecutor(config)
 
 	return &Handler{
 		executor: executor,
@@ -63,6 +63,8 @@ func (h *Handler) RegisterRoutes(router *server.Router) {
 // serveComposition handles a request for a specific composition.
 func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compositionName string, params map[string]string) {
 	ctx := r.Context()
+
+	ctx = auth.WithClientAuthorization(ctx, r.Header.Get("Authorization"))
 
 	slog.InfoContext(ctx, "executing composition",
 		"composition", compositionName,

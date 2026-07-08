@@ -59,7 +59,7 @@ compositions:
         profile: "{{ steps.profile.body }}"
 `)
 
-		executor := NewExecutor(config, http.DefaultClient)
+		executor := NewExecutor(config)
 
 		// Execute composition
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -135,7 +135,7 @@ compositions:
         orders: "{{ steps.orders.body }}"
 `)
 
-		executor := NewExecutor(config, http.DefaultClient)
+		executor := NewExecutor(config)
 
 		// Execute composition
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -202,7 +202,7 @@ compositions:
       body: {}
 `)
 
-		executor := NewExecutor(config, http.DefaultClient)
+		executor := NewExecutor(config)
 
 		// Execute composition - should complete with both results
 		// Per CONTEXT.md: "Upstream error passthrough" means we return the 500 status
@@ -278,7 +278,7 @@ compositions:
         combined: "{{ steps.combined.body }}"
 `)
 
-		executor := NewExecutor(config, http.DefaultClient)
+		executor := NewExecutor(config)
 
 		// Execute composition
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -324,7 +324,7 @@ compositions:
       body: {}
 `)
 
-		executor := NewExecutor(config, http.DefaultClient)
+		executor := NewExecutor(config)
 
 		// Create context that will be cancelled
 		ctx, cancel := context.WithCancel(context.Background())
@@ -352,7 +352,7 @@ compositions:
       body: {}
 `)
 
-		executor := NewExecutor(config, http.DefaultClient)
+		executor := NewExecutor(config)
 
 		req := httptest.NewRequest("GET", "/test", nil)
 		_, err := executor.Execute(context.Background(), "nonexistent", req, nil, nil)
@@ -411,7 +411,7 @@ compositions:
 		t.Fatalf("CompileConfig: %v", err)
 	}
 
-	executor := NewExecutor(config, http.DefaultClient)
+	executor := NewExecutor(config)
 	req := httptest.NewRequest("GET", "/test", nil)
 	result, err := executor.Execute(context.Background(), "test", req, nil, nil)
 	if err != nil {

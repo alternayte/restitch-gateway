@@ -37,15 +37,13 @@ type CompositionResult struct {
 
 // Executor runs compositions according to their DAG execution plans.
 type Executor struct {
-	config     *CompiledConfig
-	httpClient *http.Client
+	config *CompiledConfig
 }
 
 // NewExecutor creates a new composition executor.
-func NewExecutor(config *CompiledConfig, httpClient *http.Client) *Executor {
+func NewExecutor(config *CompiledConfig) *Executor {
 	return &Executor{
-		config:     config,
-		httpClient: httpClient,
+		config: config,
 	}
 }
 
@@ -131,7 +129,6 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 	}, nil
 }
 
-// executeStepWithErrorHandling executes a single step with optional step error handling.
 func (e *Executor) executeStepWithErrorHandling(
 	ctx context.Context,
 	compositionName string,
@@ -171,7 +168,7 @@ func (e *Executor) executeStepWithErrorHandling(
 			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepSkipped, Optional: step.Optional}
 	}
 
-	compiledUpstream, exists := e.config.Upstreams[step.Step.Upstream]
+	up, exists := e.config.Upstreams[step.Step.Upstream]
 	if !exists {
 		durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
 		return &stepError{stepName: stepName, err: fmt.Errorf("upstream not found"), optional: step.Optional},
@@ -186,10 +183,10 @@ func (e *Executor) executeStepWithErrorHandling(
 		"composition", compositionName,
 		"step", stepName,
 		"wave", waveNum,
-		"upstream", compiledUpstream.Upstream.URL,
+		"upstream", up.BaseURL,
 		"optional", step.Optional)
 
-	result, err := ExecuteStep(ctx, step, compiledUpstream, env, e.httpClient)
+	result, err := ExecuteStep(ctx, step, up, env)
 	durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
 
 	if err != nil {
@@ -232,7 +229,6 @@ func (e *Executor) executeStepWithErrorHandling(
 	return nil, &StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepSuccess, Optional: step.Optional}
 }
 
-// checkDependenciesFailed returns true if any dependency (inferred or explicit) has nil result.
 func checkDependenciesFailed(deps []string, results map[string]*StepResult) bool {
 	for _, depName := range deps {
 		if result, exists := results[depName]; !exists || result == nil {
@@ -242,7 +238,6 @@ func checkDependenciesFailed(deps []string, results map[string]*StepResult) bool
 	return false
 }
 
-// countSteps counts total steps across all waves.
 func countSteps(waves [][]string) int {
 	total := 0
 	for _, wave := range waves {

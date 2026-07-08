@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/restitch/restitch-gateway/internal/client"
 	"github.com/restitch/restitch-gateway/internal/composition"
 	"github.com/restitch/restitch-gateway/internal/observability"
 	"github.com/restitch/restitch-gateway/internal/server"
@@ -41,17 +40,11 @@ func main() {
 	srv.Router().Use(observability.RequestIDMiddleware)
 	srv.Router().Use(server.NewLoggingMiddleware())
 
-	httpClient := client.New()
-
 	// Load composition config
-	var compositionHandler *composition.Handler
-	var upstreamInfos map[string]server.UpstreamInfo
-
 	cfg, err := composition.LoadConfigFile(*configFile)
 	if errors.Is(err, fs.ErrNotExist) {
 		slog.Warn("no composition config found, starting with health endpoints only",
 			"config_file", *configFile)
-		upstreamInfos = make(map[string]server.UpstreamInfo)
 	} else if err != nil {
 		slog.Error("failed to load config file", "file", *configFile, "error", err)
 		os.Exit(1)
@@ -67,21 +60,12 @@ func main() {
 			"upstreams", len(compiledCfg.Config.Upstreams),
 			"compositions", len(compiledCfg.Config.Compositions))
 
-		compositionHandler = composition.NewHandler(compiledCfg, httpClient.HTTPClient())
+		compositionHandler := composition.NewHandler(compiledCfg)
 		compositionHandler.RegisterRoutes(srv.Router())
-
-		upstreamInfos = make(map[string]server.UpstreamInfo)
-		for name, upstream := range compiledCfg.Config.Upstreams {
-			upstreamInfos[name] = server.UpstreamInfo{
-				URL:        upstream.URL,
-				HealthPath: upstream.HealthPath,
-			}
-		}
 	}
 
 	srv.Router().Handle(http.MethodGet, "/health", server.HealthHandler(srv))
 	srv.Router().Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
-	srv.Router().Handle(http.MethodGet, "/health/upstreams", server.UpstreamHealthHandler(upstreamInfos, httpClient.HTTPClient()))
 
 	srv.Router().Finalize()
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
+	"github.com/restitch/restitch-gateway/internal/upstream"
 	"gopkg.in/yaml.v3"
 )
 
@@ -44,19 +45,11 @@ func LoadConfigFile(path string) (*Config, error) {
 type CompiledConfig struct {
 	Config       *Config
 	Compositions map[string]*CompiledComposition
-	Upstreams    map[string]*CompiledUpstream
+	Upstreams    map[string]*upstream.Upstream
 }
 
 // DefaultStepTimeout is the default timeout for step execution when not configured.
-const DefaultStepTimeout = 30 * time.Second
-
-// CompiledUpstream holds an upstream definition plus its compiled auth strategy.
-type CompiledUpstream struct {
-	Upstream         *Upstream
-	Auth             auth.Strategy
-	Timeout          time.Duration
-	MaxResponseBytes int64
-}
+var DefaultStepTimeout = 30 * time.Second
 
 // CompiledComposition holds compiled expressions for a single composition.
 type CompiledComposition struct {
@@ -97,28 +90,26 @@ func CompileConfig(ctx context.Context, cfg *Config) (*CompiledConfig, error) {
 	compiled := &CompiledConfig{
 		Config:       cfg,
 		Compositions: make(map[string]*CompiledComposition),
-		Upstreams:    make(map[string]*CompiledUpstream),
+		Upstreams:    make(map[string]*upstream.Upstream),
 	}
 
-	for name, upstream := range cfg.Upstreams {
+	for name, up := range cfg.Upstreams {
 		var strategy auth.Strategy
-		if upstream.Auth != nil {
-			if err := upstream.Auth.Validate(); err != nil {
+		if up.Auth != nil {
+			if err := up.Auth.Validate(); err != nil {
 				return nil, fmt.Errorf("upstream %s: %w", name, err)
 			}
 			var err error
-			strategy, err = upstream.Auth.Build(ctx)
+			strategy, err = up.Auth.Build(ctx)
 			if err != nil {
 				return nil, fmt.Errorf("upstream %s auth: %w", name, err)
 			}
 		}
-		upstreamCopy := upstream
-		compiled.Upstreams[name] = &CompiledUpstream{
-			Upstream:         &upstreamCopy,
-			Auth:             strategy,
-			Timeout:          upstream.Timeout,
-			MaxResponseBytes: upstream.MaxResponseBytes,
-		}
+
+		compiled.Upstreams[name] = upstream.Build(
+			name, up.URL, up.Timeout, up.MaxResponseBytes, up.HealthPath,
+			upstream.TransportConfig{}, strategy,
+		)
 	}
 
 	for compName, comp := range cfg.Compositions {
