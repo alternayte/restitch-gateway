@@ -80,7 +80,7 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 			go func() {
 				defer wg.Done()
 
-				stepErr, timing := e.executeStepWithErrorHandling(ctx, compositionName, stepName, comp, req, results, &resultsMutex, waveNum)
+				stepErr, timing := e.executeStepWithErrorHandling(ctx, compositionName, stepName, comp, plan, req, results, &resultsMutex, waveNum)
 				if timing != nil {
 					stepTimingsMu.Lock()
 					stepTimings = append(stepTimings, *timing)
@@ -128,6 +128,7 @@ func (e *Executor) executeStepWithErrorHandling(
 	compositionName string,
 	stepName string,
 	comp *CompiledComposition,
+	plan *ExecutionPlan,
 	req *http.Request,
 	results map[string]*StepResult,
 	resultsMutex *sync.Mutex,
@@ -143,7 +144,7 @@ func (e *Executor) executeStepWithErrorHandling(
 	}
 
 	resultsMutex.Lock()
-	depFailed := checkDependenciesFailed(step, results)
+	depFailed := checkDependenciesFailed(plan.Deps[stepName], results)
 	resultsMutex.Unlock()
 
 	if depFailed {
@@ -220,9 +221,9 @@ func (e *Executor) executeStepWithErrorHandling(
 	return nil, &StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: "success", Optional: step.Optional}
 }
 
-// checkDependenciesFailed returns true if any dependency has nil result.
-func checkDependenciesFailed(step *CompiledStep, results map[string]*StepResult) bool {
-	for _, depName := range step.Step.DependsOn {
+// checkDependenciesFailed returns true if any dependency (inferred or explicit) has nil result.
+func checkDependenciesFailed(deps []string, results map[string]*StepResult) bool {
+	for _, depName := range deps {
 		if result, exists := results[depName]; !exists || result == nil {
 			return true
 		}

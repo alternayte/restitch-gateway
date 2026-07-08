@@ -7,6 +7,7 @@ import (
 // ExecutionPlan represents the order in which steps should execute.
 type ExecutionPlan struct {
 	Waves [][]string
+	Deps  map[string][]string // step → resolved deps (inferred+explicit)
 }
 
 // BuildDAG analyzes a composition and produces an execution plan.
@@ -25,6 +26,7 @@ func BuildDAG(comp *CompiledComposition) (*ExecutionPlan, error) {
 		return nil, err
 	}
 
+	plan.Deps = stepDeps
 	return plan, nil
 }
 

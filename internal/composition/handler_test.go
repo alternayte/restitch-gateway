@@ -76,6 +76,7 @@ compositions:
 	// Create router and register routes
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
+	router.Finalize()
 
 	tests := []struct {
 		name       string
@@ -216,6 +217,7 @@ compositions:
 	// Create router and register routes
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
+	router.Finalize()
 
 	// Request without Authorization header
 	req := httptest.NewRequest("GET", "/api/protected", nil)
@@ -294,6 +296,7 @@ compositions:
 	// Create router and register routes
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
+	router.Finalize()
 
 	// Request WITH Authorization header
 	req := httptest.NewRequest("GET", "/api/protected", nil)
@@ -363,6 +366,7 @@ compositions:
 	// Create router and register routes
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
+	router.Finalize()
 
 	// Request (no client auth needed for header auth)
 	req := httptest.NewRequest("GET", "/api/data", nil)

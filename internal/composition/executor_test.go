@@ -365,6 +365,86 @@ compositions:
 	})
 }
 
+func TestExecutor_InferredDependencySkipped(t *testing.T) {
+	var bHits int
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/b-endpoint" {
+			bHits++
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"id": 1})
+	}))
+	defer mockServer.Close()
+
+	// Step a is optional and targets a dead upstream (will fail).
+	// Step b references steps.a.body.id in its path but has NO depends_on.
+	// With resolved deps, b should be skipped because a is an inferred dep.
+	fullYAML := `
+upstreams:
+  test-upstream:
+    url: ` + mockServer.URL + `
+  dead:
+    url: "http://127.0.0.1:1"
+compositions:
+  test:
+    path: /test
+    steps:
+      - name: a
+        upstream: dead
+        path: /fail
+        optional: true
+      - name: b
+        upstream: test-upstream
+        path: "/b-endpoint/{{ steps.a.body.id }}"
+        optional: true
+    response:
+      status: 200
+      body:
+        result: "ok"
+`
+	cfg, err := ParseConfig([]byte(fullYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+	config, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig: %v", err)
+	}
+
+	executor := NewExecutor(config, http.DefaultClient)
+	req := httptest.NewRequest("GET", "/test", nil)
+	result, err := executor.Execute(context.Background(), "test", req)
+	if err != nil {
+		t.Fatalf("Execute should not return error (both steps optional): %v", err)
+	}
+
+	if bHits != 0 {
+		t.Errorf("step b upstream was called %d times, expected 0 (should be skipped)", bHits)
+	}
+
+	if !result.IsPartial {
+		t.Error("expected partial result")
+	}
+
+	// Check that b is skipped in timings
+	for _, timing := range result.StepTimings {
+		if timing.Name == "b" && timing.Status != "skipped" {
+			t.Errorf("step b status = %q, want 'skipped'", timing.Status)
+		}
+	}
+
+	// Check _errors contains dependency_failed for step b
+	foundSkipped := false
+	for _, e := range result.StepErrors {
+		if e.Step == "b" && e.Message == "dependency_failed" {
+			foundSkipped = true
+		}
+	}
+	if !foundSkipped {
+		t.Errorf("expected _errors to contain step b with dependency_failed, got: %+v", result.StepErrors)
+	}
+}
+
 // createTestConfig creates a CompiledConfig from YAML string for testing.
 func createTestConfig(upstreamURL, yamlContent string) *CompiledConfig {
 	// Build full YAML with upstream

@@ -44,7 +44,9 @@ func SanitizeErrorMessage(err error) string {
 	if errors.Is(err, ErrRuleMatched) {
 		return "error rule matched"
 	}
-	// Don't expose internal details
+	if err != nil && err.Error() == "dependency_failed" {
+		return "dependency_failed"
+	}
 	return "upstream error"
 }
 
