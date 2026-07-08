@@ -4,20 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
 	"github.com/restitch/restitch-gateway/internal/server"
 )
 
+var paramPattern = regexp.MustCompile(`\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
+
 // Handler handles HTTP requests for compositions.
 type Handler struct {
 	executor *Executor
 	config   *CompiledConfig
-	routes   map[string]string
 }
 
 // NewHandler creates a new composition handler.
@@ -27,46 +29,57 @@ func NewHandler(config *CompiledConfig, httpClient *http.Client) *Handler {
 	return &Handler{
 		executor: executor,
 		config:   config,
-		routes:   make(map[string]string),
 	}
 }
 
 // RegisterRoutes registers all composition routes with the router.
+// Each composition gets its own closure — no runtime route matching.
 func (h *Handler) RegisterRoutes(router *server.Router) {
 	for compName, comp := range h.config.Config.Compositions {
-		routeKey := h.routeKey(comp.Path, comp.Method)
-		h.routes[routeKey] = compName
+		name := compName
 
-		router.Handle(comp.Method, comp.Path, h.ServeHTTP)
+		// Extract {param} names from the path pattern
+		matches := paramPattern.FindAllStringSubmatch(comp.Path, -1)
+		paramNames := make([]string, 0, len(matches))
+		for _, m := range matches {
+			paramNames = append(paramNames, m[1])
+		}
+
+		router.Handle(comp.Method, comp.Path, func(w http.ResponseWriter, r *http.Request) {
+			params := make(map[string]string, len(paramNames))
+			for _, p := range paramNames {
+				params[p] = r.PathValue(p)
+			}
+			h.serveComposition(w, r, name, params)
+		})
 
 		slog.Info("registered composition route",
-			"composition", compName,
+			"composition", name,
 			"method", comp.Method,
 			"path", comp.Path)
 	}
 }
 
-// ServeHTTP handles an HTTP request by executing the appropriate composition.
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// serveComposition handles a request for a specific composition.
+func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compositionName string, params map[string]string) {
 	ctx := r.Context()
-
-	compositionName := h.matchComposition(r.URL.Path, r.Method)
-	if compositionName == "" {
-		slog.WarnContext(ctx, "no composition found for request",
-			"method", r.Method,
-			"path", r.URL.Path)
-		http.NotFound(w, r)
-		return
-	}
 
 	slog.InfoContext(ctx, "executing composition",
 		"composition", compositionName,
 		"method", r.Method,
 		"path", r.URL.Path)
 
-	result, err := h.executor.Execute(ctx, compositionName, r)
+	// Read and parse request body once
+	var body any
+	if r.Body != nil && r.ContentLength != 0 {
+		raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if err == nil && len(raw) > 0 && strings.Contains(r.Header.Get("Content-Type"), "json") {
+			json.Unmarshal(raw, &body)
+		}
+	}
+
+	result, err := h.executor.Execute(ctx, compositionName, r, params, body)
 	if err != nil {
-		// Client disconnected — don't write a response
 		if r.Context().Err() != nil {
 			slog.InfoContext(ctx, "client canceled",
 				"composition", compositionName)
@@ -169,26 +182,6 @@ func findSlowestStep(timings []StepTiming) map[string]interface{} {
 		"name":        slowest.Name,
 		"duration_ms": slowest.DurationMS,
 	}
-}
-
-// matchComposition finds the composition name for a given path and method.
-func (h *Handler) matchComposition(path, method string) string {
-	normalizedPath := path
-	if len(normalizedPath) > 1 && strings.HasSuffix(normalizedPath, "/") {
-		normalizedPath = strings.TrimSuffix(normalizedPath, "/")
-	}
-
-	routeKey := h.routeKey(normalizedPath, method)
-	if compName, exists := h.routes[routeKey]; exists {
-		return compName
-	}
-
-	return ""
-}
-
-// routeKey creates a unique key for route mapping.
-func (h *Handler) routeKey(path, method string) string {
-	return method + ":" + path
 }
 
 // writeJSON writes a JSON response with the given status code.

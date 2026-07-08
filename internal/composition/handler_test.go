@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/restitch/restitch-gateway/internal/server"
@@ -119,54 +120,69 @@ compositions:
 	}
 }
 
-func TestHandler_matchComposition(t *testing.T) {
-	handler := &Handler{
-		routes: map[string]string{
-			"GET:/api/users":  "get-users",
-			"POST:/api/users": "create-user",
-			"GET:/api/posts":  "get-posts",
-		},
-	}
-
-	tests := []struct {
-		name   string
-		path   string
-		method string
-		want   string
-	}{
-		{
-			name:   "exact match",
-			path:   "/api/users",
-			method: "GET",
-			want:   "get-users",
-		},
-		{
-			name:   "different method",
-			path:   "/api/users",
-			method: "POST",
-			want:   "create-user",
-		},
-		{
-			name:   "no match",
-			path:   "/api/unknown",
-			method: "GET",
-			want:   "",
-		},
-		{
-			name:   "trailing slash removed",
-			path:   "/api/users/",
-			method: "GET",
-			want:   "get-users",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := handler.matchComposition(tt.path, tt.method)
-			if got != tt.want {
-				t.Errorf("matchComposition() = %v, want %v", got, tt.want)
-			}
+func TestHandler_PathParams(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"id":   r.URL.Path[len("/users/"):],
+			"name": "user-" + r.URL.Path[len("/users/"):],
 		})
+	}))
+	defer mockServer.Close()
+
+	configYAML := `
+upstreams:
+  mock:
+    url: ` + mockServer.URL + `
+
+compositions:
+  user:
+    path: "/api/users/{id}"
+    method: GET
+    steps:
+      - name: u
+        upstream: mock
+        path: "/users/{{ req.params.id }}"
+    response:
+      status: 200
+      body:
+        user: "{{ steps.u.body }}"
+`
+
+	cfg, err := ParseConfig([]byte(configYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+
+	compiledCfg, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig: %v", err)
+	}
+
+	handler := NewHandler(compiledCfg, &http.Client{})
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+	router.Finalize()
+
+	req := httptest.NewRequest("GET", "/api/users/42", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body: %s", w.Code, w.Body.String())
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+
+	user, ok := body["user"].(map[string]any)
+	if !ok {
+		t.Fatalf("user field not a map: %v", body["user"])
+	}
+	if user["id"] != "42" {
+		t.Errorf("user.id = %v, want 42", user["id"])
 	}
 }
 
@@ -477,5 +493,176 @@ compositions:
 	}
 	if !foundLoyalty {
 		t.Errorf("_errors should contain loyalty step, got %v", errors)
+	}
+}
+
+func TestHandler_ErrorTaxonomy_DeadUpstream502(t *testing.T) {
+	configYAML := `
+upstreams:
+  dead:
+    url: "http://127.0.0.1:1"
+compositions:
+  fail:
+    path: /fail
+    steps:
+      - name: s
+        upstream: dead
+        path: /x
+    response:
+      status: 200
+      body: {}
+`
+	cfg, _ := ParseConfig([]byte(configYAML))
+	compiled, _ := CompileConfig(context.Background(), cfg)
+	handler := NewHandler(compiled, &http.Client{})
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+	router.Finalize()
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest("GET", "/fail", nil))
+
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("expected 502, got %d", w.Code)
+	}
+
+	var body map[string]any
+	json.NewDecoder(w.Body).Decode(&body)
+	if body["error"] != "upstream error" {
+		t.Errorf("error = %v, want 'upstream error'", body["error"])
+	}
+	if body["step"] != "s" {
+		t.Errorf("step = %v, want 's'", body["step"])
+	}
+}
+
+func TestHandler_ErrorTaxonomy_Timeout504(t *testing.T) {
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-make(chan struct{}):
+		}
+	}))
+	defer slow.Close()
+
+	configYAML := `
+upstreams:
+  slow:
+    url: ` + slow.URL + `
+compositions:
+  timeout:
+    path: /timeout
+    steps:
+      - name: s
+        upstream: slow
+        path: /x
+        timeout: 50ms
+    response:
+      status: 200
+      body: {}
+`
+	cfg, _ := ParseConfig([]byte(configYAML))
+	compiled, _ := CompileConfig(context.Background(), cfg)
+	handler := NewHandler(compiled, &http.Client{})
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+	router.Finalize()
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest("GET", "/timeout", nil))
+
+	if w.Code != http.StatusGatewayTimeout {
+		t.Errorf("expected 504, got %d", w.Code)
+	}
+
+	var body map[string]any
+	json.NewDecoder(w.Body).Decode(&body)
+	if body["error"] != "upstream timeout" {
+		t.Errorf("error = %v, want 'upstream timeout'", body["error"])
+	}
+	if body["step"] != "s" {
+		t.Errorf("step = %v, want 's'", body["step"])
+	}
+}
+
+func TestHandler_ErrorTaxonomy_TemplateError500(t *testing.T) {
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("not json"))
+	}))
+	defer mock.Close()
+
+	// Template tries to access .body.id on a non-JSON response, which
+	// is a string — accessing .id on a string causes a template eval error
+	// with no failed dependency, so it's a real template bug → 500.
+	configYAML := `
+upstreams:
+  mock:
+    url: ` + mock.URL + `
+compositions:
+  buggy:
+    path: /buggy
+    steps:
+      - name: s
+        upstream: mock
+        path: /x
+    response:
+      status: 200
+      body:
+        val: "{{ steps.s.body.id }}"
+`
+	cfg, _ := ParseConfig([]byte(configYAML))
+	compiled, _ := CompileConfig(context.Background(), cfg)
+	handler := NewHandler(compiled, &http.Client{})
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+	router.Finalize()
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest("GET", "/buggy", nil))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+
+	var body map[string]any
+	json.NewDecoder(w.Body).Decode(&body)
+	if body["error"] != "internal error" {
+		t.Errorf("error = %v, want 'internal error' (must not leak internals)", body["error"])
+	}
+}
+
+func TestHandler_ErrorTaxonomy_NoInternalLeak(t *testing.T) {
+	configYAML := `
+upstreams:
+  dead:
+    url: "http://127.0.0.1:1"
+compositions:
+  fail:
+    path: /fail
+    steps:
+      - name: s
+        upstream: dead
+        path: /x
+    response:
+      status: 200
+      body: {}
+`
+	cfg, _ := ParseConfig([]byte(configYAML))
+	compiled, _ := CompileConfig(context.Background(), cfg)
+	handler := NewHandler(compiled, &http.Client{})
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+	router.Finalize()
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest("GET", "/fail", nil))
+
+	bodyStr := w.Body.String()
+	if strings.Contains(bodyStr, "127.0.0.1:1") {
+		t.Errorf("response body leaks internal URL: %s", bodyStr)
+	}
+	if strings.Contains(bodyStr, "connection refused") {
+		t.Errorf("response body leaks internal error: %s", bodyStr)
 	}
 }

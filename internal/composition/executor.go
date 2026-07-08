@@ -50,7 +50,7 @@ func NewExecutor(config *CompiledConfig, httpClient *http.Client) *Executor {
 }
 
 // Execute runs a composition for an incoming request.
-func (e *Executor) Execute(ctx context.Context, compositionName string, req *http.Request) (*CompositionResult, error) {
+func (e *Executor) Execute(ctx context.Context, compositionName string, req *http.Request, params map[string]string, body any) (*CompositionResult, error) {
 	comp, exists := e.config.Compositions[compositionName]
 	if !exists {
 		return nil, fmt.Errorf("composition %q not found", compositionName)
@@ -89,7 +89,7 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, req *htt
 			go func() {
 				defer wg.Done()
 
-				stepErr, timing := e.executeStepWithErrorHandling(ctx, compositionName, stepName, comp, plan, req, results, &resultsMutex, waveNum)
+				stepErr, timing := e.executeStepWithErrorHandling(ctx, compositionName, stepName, comp, plan, req, params, body, results, &resultsMutex, waveNum)
 				if timing != nil {
 					stepTimingsMu.Lock()
 					stepTimings = append(stepTimings, *timing)
@@ -139,6 +139,8 @@ func (e *Executor) executeStepWithErrorHandling(
 	comp *CompiledComposition,
 	plan *ExecutionPlan,
 	req *http.Request,
+	params map[string]string,
+	body any,
 	results map[string]*StepResult,
 	resultsMutex *sync.Mutex,
 	waveNum int,
@@ -177,7 +179,7 @@ func (e *Executor) executeStepWithErrorHandling(
 	}
 
 	resultsMutex.Lock()
-	env := buildRequestEnv(req, nil, nil, results)
+	env := buildRequestEnv(req, params, body, results)
 	resultsMutex.Unlock()
 
 	slog.InfoContext(ctx, "step starting",

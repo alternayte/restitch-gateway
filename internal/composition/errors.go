@@ -13,6 +13,21 @@ type StepErrorDetail struct {
 	Status  string `json:"status"` // "failed" or "skipped"
 }
 
+// RequiredStepError is returned by Execute when a required step fails.
+// It carries the step name so the handler can include it in the error response.
+type RequiredStepError struct {
+	Step string
+	Err  error
+}
+
+func (e *RequiredStepError) Error() string {
+	return fmt.Sprintf("required step %q failed: %v", e.Step, e.Err)
+}
+
+func (e *RequiredStepError) Unwrap() error {
+	return e.Err
+}
+
 // stepError is an internal type for collecting errors during execution.
 type stepError struct {
 	stepName string
