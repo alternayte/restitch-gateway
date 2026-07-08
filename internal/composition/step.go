@@ -187,57 +187,6 @@ func ExecuteStepWithTimeout(
 	}, nil
 }
 
-// buildRequestEnv creates the environment for expression evaluation.
-// It includes the incoming request data and results from completed steps.
-// Nil results (from failed optional steps) are included as nil values.
-func buildRequestEnv(req *http.Request, stepResults map[string]*StepResult) map[string]interface{} {
-	// Parse query parameters
-	query := make(map[string]string)
-	for key, values := range req.URL.Query() {
-		if len(values) > 0 {
-			query[key] = values[0] // Take first value for simplicity
-		}
-	}
-
-	// Parse headers
-	headers := make(map[string]string)
-	for key, values := range req.Header {
-		if len(values) > 0 {
-			headers[key] = values[0]
-		}
-	}
-
-	env := map[string]interface{}{
-		"req": map[string]interface{}{
-			"path":    req.URL.Path,
-			"query":   query,
-			"headers": headers,
-			"body":    map[string]interface{}{}, // TODO: Parse request body in future phases
-		},
-	}
-
-	// Add step results if any
-	// Nil results from failed optional steps are included as nil
-	// Per CONTEXT.md: "Failed optional steps return `null` for `steps.X` in expressions"
-	if len(stepResults) > 0 {
-		steps := make(map[string]interface{})
-		for name, result := range stepResults {
-			if result == nil {
-				// Failed optional step - null in expressions
-				steps[name] = nil
-			} else {
-				steps[name] = map[string]interface{}{
-					"status":  result.Status,
-					"headers": convertHeaders(result.Headers),
-					"body":    result.Body,
-				}
-			}
-		}
-		env["steps"] = steps
-	}
-
-	return env
-}
 
 // convertHeaders converts http.Header to map[string]string (first value only).
 func convertHeaders(headers http.Header) map[string]string {

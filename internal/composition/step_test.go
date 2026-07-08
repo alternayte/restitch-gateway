@@ -47,7 +47,7 @@ func TestExecuteStep(t *testing.T) {
 			Auth:     nil, // No auth for this test
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil)
+		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
 
 		// Execute step
 		result, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
@@ -86,7 +86,7 @@ func TestExecuteStep(t *testing.T) {
 
 		// Create environment with query parameter
 		incomingReq := httptest.NewRequest("GET", "/?user_id=456", nil)
-		env := buildRequestEnv(incomingReq, nil)
+		env := buildRequestEnv(incomingReq, nil, nil, nil)
 
 		// Compile path expression
 		pathExpr, err := CompileExpression("req.query.user_id", BuildBaseEnvironment(nil))
@@ -147,7 +147,7 @@ func TestExecuteStep(t *testing.T) {
 		incomingReq.Header.Set("X-Correlation-ID", "corr-456")
 		incomingReq.Header.Set("traceparent", "00-trace-123")
 
-		env := buildRequestEnv(incomingReq, nil)
+		env := buildRequestEnv(incomingReq, nil, nil, nil)
 
 		step := &CompiledStep{
 			Step: &Step{
@@ -192,7 +192,7 @@ func TestExecuteStep(t *testing.T) {
 
 		// Create incoming request WITHOUT X-Request-ID
 		incomingReq := httptest.NewRequest("GET", "/", nil)
-		env := buildRequestEnv(incomingReq, nil)
+		env := buildRequestEnv(incomingReq, nil, nil, nil)
 
 		step := &CompiledStep{
 			Step: &Step{
@@ -244,7 +244,7 @@ func TestExecuteStep(t *testing.T) {
 			Auth:     nil, // No auth for this test
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil)
+		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
 
 		// Create context that will be cancelled
 		ctx, cancel := context.WithCancel(context.Background())
@@ -288,7 +288,7 @@ func TestExecuteStep(t *testing.T) {
 			Auth:     nil, // No auth for this test
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil)
+		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
 
 		// Execute step - should NOT return error (passthrough upstream status)
 		result, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
@@ -318,7 +318,7 @@ func TestBuildRequestEnv(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer token")
 		req.Header.Set("X-Request-ID", "req-123")
 
-		env := buildRequestEnv(req, nil)
+		env := buildRequestEnv(req, nil, nil, nil)
 
 		// Verify request data
 		reqData, ok := env["req"].(map[string]interface{})
@@ -374,7 +374,7 @@ func TestBuildRequestEnv(t *testing.T) {
 			},
 		}
 
-		env := buildRequestEnv(req, stepResults)
+		env := buildRequestEnv(req, nil, nil, stepResults)
 
 		// Verify steps are included
 		steps, ok := env["steps"].(map[string]interface{})

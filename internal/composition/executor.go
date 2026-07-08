@@ -167,7 +167,7 @@ func (e *Executor) executeStepWithErrorHandling(
 	}
 
 	resultsMutex.Lock()
-	env := buildRequestEnv(req, results)
+	env := buildRequestEnv(req, nil, nil, results)
 	resultsMutex.Unlock()
 
 	slog.InfoContext(ctx, "step starting",

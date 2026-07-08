@@ -27,7 +27,7 @@ type CompositionResponse struct {
 //   - Top-level `_errors` field in response body with failure details
 func BuildResponse(template *CompiledResponse, results map[string]*StepResult, req *http.Request, stepErrors []StepErrorDetail) (*CompositionResponse, error) {
 	// Build environment for expression evaluation
-	env := buildRequestEnv(req, results)
+	env := buildRequestEnv(req, nil, nil, results)
 
 	// Evaluate status
 	status := 200 // Default status
