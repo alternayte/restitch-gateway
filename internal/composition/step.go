@@ -134,9 +134,13 @@ func ExecuteStepWithTimeout(
 	}
 	defer client.DrainAndClose(resp.Body)
 
-	rawBody, err := io.ReadAll(resp.Body)
+	maxBytes := upstream.MaxResponseBytes
+	rawBody, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+	if int64(len(rawBody)) > maxBytes {
+		return nil, fmt.Errorf("response exceeds %d bytes", maxBytes)
 	}
 
 	parsedBody, err := parseJSONBody(rawBody, resp.Header.Get("Content-Type"))

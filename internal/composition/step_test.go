@@ -48,7 +48,7 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
+		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
 			Upstream: &Upstream{URL: server.URL},
 		}
 
@@ -104,7 +104,7 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
+		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
 			Upstream: &Upstream{URL: server.URL},
 		}
 
@@ -152,7 +152,7 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
+		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
 			Upstream: &Upstream{URL: server.URL},
 		}
 
@@ -190,7 +190,7 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
+		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
 			Upstream: &Upstream{URL: server.URL},
 		}
 
@@ -218,7 +218,7 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
+		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
 			Upstream: &Upstream{URL: server.URL},
 		}
 
@@ -256,7 +256,7 @@ func TestExecuteStep(t *testing.T) {
 			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
+		upstream := &CompiledUpstream{MaxResponseBytes: 10 * 1024 * 1024,
 			Upstream: &Upstream{URL: server.URL},
 		}
 
@@ -277,6 +277,64 @@ func TestExecuteStep(t *testing.T) {
 		}
 		if body["error"] != "user not found" {
 			t.Errorf("Expected error message, got %v", body["error"])
+		}
+	})
+
+	t.Run("response size cap", func(t *testing.T) {
+		bigBody := strings.Repeat("x", 200)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"data":"` + bigBody + `"}`))
+		}))
+		defer server.Close()
+
+		pathTmpl, _ := CompileTemplate("/test", map[string]any{})
+		step := &CompiledStep{
+			Step:     &Step{Name: "big", Method: "GET", Headers: map[string]string{}},
+			PathPart: pathTmpl,
+			Headers:  map[string]*Template{},
+		}
+
+		upstream := &CompiledUpstream{
+			Upstream:         &Upstream{URL: server.URL},
+			MaxResponseBytes: 100, // much smaller than actual response
+		}
+
+		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
+		_, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		if err == nil {
+			t.Fatal("expected error for oversized response")
+		}
+		if !strings.Contains(err.Error(), "exceeds 100 bytes") {
+			t.Errorf("expected size cap error, got: %v", err)
+		}
+	})
+
+	t.Run("response size cap optional step degrades", func(t *testing.T) {
+		bigBody := strings.Repeat("x", 200)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"data":"` + bigBody + `"}`))
+		}))
+		defer server.Close()
+
+		pathTmpl, _ := CompileTemplate("/test", map[string]any{})
+		step := &CompiledStep{
+			Step:     &Step{Name: "big", Method: "GET", Headers: map[string]string{}},
+			PathPart: pathTmpl,
+			Headers:  map[string]*Template{},
+			Optional: true,
+		}
+
+		upstream := &CompiledUpstream{
+			Upstream:         &Upstream{URL: server.URL},
+			MaxResponseBytes: 100,
+		}
+
+		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
+		_, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		if err == nil {
+			t.Fatal("expected error for oversized response")
 		}
 	})
 }

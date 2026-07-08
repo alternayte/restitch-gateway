@@ -30,10 +30,11 @@ type Config struct {
 // Upstream represents a named backend service that steps can call.
 // Auth configuration is optional - if omitted, no authentication is applied.
 type Upstream struct {
-	URL        string        `yaml:"url"`
-	Auth       *auth.Config  `yaml:"auth"`        // Optional auth configuration (AUTH-06)
-	Timeout    time.Duration `yaml:"timeout"`     // Default timeout for all steps using this upstream (0 means use 30s default)
-	HealthPath string        `yaml:"health_path"` // Path for health checks (default: "" means HEAD to base URL)
+	URL              string        `yaml:"url"`
+	Auth             *auth.Config  `yaml:"auth"`
+	Timeout          time.Duration `yaml:"timeout"`
+	HealthPath       string        `yaml:"health_path"`
+	MaxResponseBytes int64         `yaml:"max_response_bytes"`
 }
 
 // Composition represents a multi-step API composition with a response template.

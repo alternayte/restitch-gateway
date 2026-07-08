@@ -52,9 +52,10 @@ const DefaultStepTimeout = 30 * time.Second
 
 // CompiledUpstream holds an upstream definition plus its compiled auth strategy.
 type CompiledUpstream struct {
-	Upstream *Upstream
-	Auth     auth.Strategy
-	Timeout  time.Duration
+	Upstream         *Upstream
+	Auth             auth.Strategy
+	Timeout          time.Duration
+	MaxResponseBytes int64
 }
 
 // CompiledComposition holds compiled expressions for a single composition.
@@ -113,9 +114,10 @@ func CompileConfig(ctx context.Context, cfg *Config) (*CompiledConfig, error) {
 		}
 		upstreamCopy := upstream
 		compiled.Upstreams[name] = &CompiledUpstream{
-			Upstream: &upstreamCopy,
-			Auth:     strategy,
-			Timeout:  upstream.Timeout,
+			Upstream:         &upstreamCopy,
+			Auth:             strategy,
+			Timeout:          upstream.Timeout,
+			MaxResponseBytes: upstream.MaxResponseBytes,
 		}
 	}
 
@@ -291,6 +293,13 @@ func compileBodyNode(body any, env map[string]any) (*CompiledBodyNode, error) {
 }
 
 func validateAndApplyDefaults(cfg *Config) error {
+	for name, up := range cfg.Upstreams {
+		if up.MaxResponseBytes <= 0 {
+			up.MaxResponseBytes = 10 * 1024 * 1024 // 10 MiB
+		}
+		cfg.Upstreams[name] = up
+	}
+
 	for compName, comp := range cfg.Compositions {
 		if comp.Method == "" {
 			comp.Method = "GET"
