@@ -7,10 +7,10 @@ import (
 )
 
 // StepErrorDetail represents a single step failure for the _errors array.
-// Per CONTEXT.md: contains step name + error message (not status codes or timing).
 type StepErrorDetail struct {
 	Step    string `json:"step"`
 	Message string `json:"message"`
+	Status  string `json:"status"` // "failed" or "skipped"
 }
 
 // stepError is an internal type for collecting errors during execution.
@@ -58,9 +58,15 @@ func BuildErrorsArray(stepErrors []stepError) []StepErrorDetail {
 
 	details := make([]StepErrorDetail, len(stepErrors))
 	for i, se := range stepErrors {
+		msg := SanitizeErrorMessage(se.err)
+		status := "failed"
+		if msg == "dependency_failed" {
+			status = "skipped"
+		}
 		details[i] = StepErrorDetail{
 			Step:    se.stepName,
-			Message: SanitizeErrorMessage(se.err),
+			Message: msg,
+			Status:  status,
 		}
 	}
 	return details
