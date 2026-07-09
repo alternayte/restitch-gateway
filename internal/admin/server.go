@@ -12,10 +12,19 @@ import (
 
 // Config holds admin server configuration.
 type Config struct {
-	Enabled        bool   `yaml:"enabled"`
-	Port           int    `yaml:"port"`
-	APIKey         string `yaml:"api_key"`
-	RequestLogSize int    `yaml:"request_log_size"`
+	Enabled        bool          `yaml:"enabled"`
+	Port           int           `yaml:"port"`
+	APIKey         string        `yaml:"api_key"`
+	RequestLogSize int           `yaml:"request_log_size"`
+	Storage        StorageConfig `yaml:"storage"`
+}
+
+// StorageConfig configures the time-series/request storage backend.
+type StorageConfig struct {
+	Type      string `yaml:"type"`
+	URL       string `yaml:"url"`
+	AuthToken string `yaml:"auth_token"`
+	Retention string `yaml:"retention"`
 }
 
 // CompositionInfo describes a composition for the admin API.
@@ -68,6 +77,7 @@ type Deps struct {
 	Metrics      http.Handler
 	Validate     func(yamlBytes []byte) []string
 	Reload       func() (string, error)
+	Storage      Storage
 }
 
 // Server is the admin API server.
@@ -91,6 +101,9 @@ func New(cfg Config, deps Deps) *Server {
 	mux.HandleFunc("GET /admin/api/compositions", s.requireKey(s.handleCompositions))
 	mux.HandleFunc("GET /admin/api/compositions/{name}", s.requireKey(s.handleCompositionByName))
 	mux.HandleFunc("GET /admin/api/upstreams", s.requireKey(s.handleUpstreams))
+	mux.HandleFunc("GET /admin/api/stats/timeseries", s.requireKey(s.handleTimeSeries))
+	mux.HandleFunc("GET /admin/api/stats/steps", s.requireKey(s.handleStepMetrics))
+	mux.HandleFunc("GET /admin/api/requests/{id}", s.requireKey(s.handleRequestByID))
 	mux.HandleFunc("GET /admin/api/requests", s.requireKey(s.handleRequests))
 	mux.HandleFunc("GET /admin/api/stats", s.requireKey(s.handleStats))
 	mux.HandleFunc("POST /admin/api/validate", s.requireKey(s.handleValidate))
@@ -192,7 +205,132 @@ func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
+
+	if s.deps.Storage != nil {
+		opts := RequestQuery{Limit: limit}
+		opts.Composition = r.URL.Query().Get("composition")
+		if v := r.URL.Query().Get("status_min"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				opts.StatusMin = n
+			}
+		}
+		if v := r.URL.Query().Get("status_max"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				opts.StatusMax = n
+			}
+		}
+		if v := r.URL.Query().Get("min_duration_ms"); v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				opts.MinDuration = f
+			}
+		}
+		if v := r.URL.Query().Get("partial"); v != "" {
+			p := v == "true"
+			opts.Partial = &p
+		}
+		records, err := s.deps.Storage.QueryRequests(r.Context(), opts)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, records)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, s.deps.Requests.List(limit))
+}
+
+func (s *Server) handleTimeSeries(w http.ResponseWriter, r *http.Request) {
+	if s.deps.Storage == nil {
+		writeJSON(w, http.StatusOK, []Bucket{})
+		return
+	}
+
+	rangeDur := ParseRangeDuration(r.URL.Query().Get("range"), time.Hour)
+	resolution := ParseRangeDuration(r.URL.Query().Get("resolution"), time.Minute)
+	composition := r.URL.Query().Get("composition")
+
+	to := time.Now()
+	from := to.Add(-rangeDur)
+
+	buckets, err := s.deps.Storage.QueryTimeSeries(r.Context(), from, to, resolution, composition)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if buckets == nil {
+		buckets = []Bucket{}
+	}
+	writeJSON(w, http.StatusOK, buckets)
+}
+
+func (s *Server) handleStepMetrics(w http.ResponseWriter, r *http.Request) {
+	if s.deps.Storage == nil {
+		writeJSON(w, http.StatusOK, []StepAggregate{})
+		return
+	}
+
+	composition := r.URL.Query().Get("composition")
+	if composition == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "composition parameter required"})
+		return
+	}
+
+	rangeDur := ParseRangeDuration(r.URL.Query().Get("range"), time.Hour)
+	to := time.Now()
+	from := to.Add(-rangeDur)
+
+	metrics, err := s.deps.Storage.QueryStepMetrics(r.Context(), composition, from, to)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if metrics == nil {
+		metrics = []StepAggregate{}
+	}
+	writeJSON(w, http.StatusOK, metrics)
+}
+
+func (s *Server) handleRequestByID(w http.ResponseWriter, r *http.Request) {
+	if s.deps.Storage == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "storage not configured"})
+		return
+	}
+
+	id := r.PathValue("id")
+	rec, err := s.deps.Storage.GetRequestByID(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if rec == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "request not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, rec)
+}
+
+// ParseRangeDuration parses a range/resolution shorthand string (e.g. "1h",
+// "5m", "7d") into a time.Duration, returning fallback if s is unrecognized.
+func ParseRangeDuration(s string, fallback time.Duration) time.Duration {
+	switch s {
+	case "1h":
+		return time.Hour
+	case "6h":
+		return 6 * time.Hour
+	case "24h":
+		return 24 * time.Hour
+	case "7d":
+		return 7 * 24 * time.Hour
+	case "30d":
+		return 30 * 24 * time.Hour
+	case "1m":
+		return time.Minute
+	case "5m":
+		return 5 * time.Minute
+	default:
+		return fallback
+	}
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {

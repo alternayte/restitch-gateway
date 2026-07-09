@@ -132,7 +132,62 @@ func runCmd(args []string) int {
 		ringSize := gwcfg.Admin.RequestLogSize
 		ring := admin.NewRingBuffer(ringSize)
 		stats := admin.NewStats()
-		handler.SetRecorder(&admin.MultiRecorder{Ring: ring, Stats: stats})
+
+		// Create time-series storage backend from config.
+		adminCfg := gwcfg.Admin
+		var store admin.Storage
+		switch adminCfg.Storage.Type {
+		case "sqlite":
+			var err error
+			retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 7*24*time.Hour)
+			store, err = admin.NewSQLStorage(adminCfg.Storage.URL, adminCfg.Storage.AuthToken, retention)
+			if err != nil {
+				slog.Error("failed to open SQLite storage", "error", err)
+				// fall back to memory
+				store = admin.NewMemoryStorage(retention)
+			}
+		case "turso":
+			var err error
+			retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 30*24*time.Hour)
+			store, err = admin.NewSQLStorage(adminCfg.Storage.URL, adminCfg.Storage.AuthToken, retention)
+			if err != nil {
+				slog.Error("failed to connect to Turso", "error", err)
+				store = admin.NewMemoryStorage(retention)
+			}
+		default:
+			retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 24*time.Hour)
+			store = admin.NewMemoryStorage(retention)
+		}
+
+		acc := admin.NewAccumulator()
+
+		// Start flush goroutine: periodically drains the accumulator into
+		// durable storage and compacts old data.
+		flushCtx, flushCancel := context.WithCancel(context.Background())
+		go func() {
+			ticker := time.NewTicker(60 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					buckets := acc.Flush()
+					for _, b := range buckets {
+						if err := store.RecordBucket(context.Background(), b); err != nil {
+							slog.Error("failed to record time-series bucket", "error", err)
+						}
+					}
+					retentionDur := admin.ParseRangeDuration(adminCfg.Storage.Retention, 24*time.Hour)
+					if err := store.Compact(context.Background(), retentionDur); err != nil {
+						slog.Error("failed to compact time-series storage", "error", err)
+					}
+				case <-flushCtx.Done():
+					return
+				}
+			}
+		}()
+		defer flushCancel()
+
+		handler.SetRecorder(&admin.MultiRecorder{Ring: ring, Stats: stats, Accumulator: acc, Storage: store})
 
 		router := server.NewRouter()
 		handler.RegisterRoutes(router)
@@ -211,6 +266,7 @@ func runCmd(args []string) int {
 			Enabled: gwcfg.Admin.IsEnabled(),
 			Port:    gwcfg.Admin.Port,
 			APIKey:  gwcfg.Admin.APIKey,
+			Storage: adminCfg.Storage,
 		}, admin.Deps{
 			Metrics:    metrics.Handler(),
 			Version:    version,
@@ -224,6 +280,7 @@ func runCmd(args []string) int {
 			},
 			Requests: ring,
 			Stats:    stats,
+			Storage:  store,
 			Validate: func(yamlBytes []byte) []string {
 				_, err := composition.ParseConfig(yamlBytes)
 				if err != nil {
@@ -238,6 +295,11 @@ func runCmd(args []string) int {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			adminSrv.Shutdown(ctx)
+		}()
+		defer func() {
+			if err := store.Close(); err != nil {
+				slog.Error("failed to close storage", "error", err)
+			}
 		}()
 	}
 
