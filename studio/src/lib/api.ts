@@ -37,6 +37,13 @@ export interface StepRecord {
   wave: number
   duration_ms: number
   http_status: number
+  upstream: string
+  url: string
+  start_offset_ms: number
+  body_size: number
+  error?: string
+  cached: boolean
+  retries: number
 }
 
 export interface RequestRecord {
@@ -63,6 +70,29 @@ export interface ValidateResult {
   errors: string[]
 }
 
+export interface TimeSeriesBucket {
+  timestamp: string
+  composition: string
+  requests: number
+  errors: number
+  partials: number
+  latency_p50: number
+  latency_p95: number
+  latency_p99: number
+  latency_buckets: number[]
+  step_metrics: Record<string, { requests: number; errors: number; avg_ms: number; p95_ms: number }>
+}
+
+export interface StepAggregate {
+  name: string
+  upstream: string
+  requests: number
+  errors: number
+  avg_ms: number
+  p95_ms: number
+  p99_ms: number
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
@@ -84,4 +114,10 @@ export const api = {
   stats: () => get<StatsResponse>("/api/stats"),
   validate: (yaml: string) => post<ValidateResult>("/api/validate", yaml),
   reload: () => post<{ ok: boolean; config_hash?: string; errors?: string[] }>("/api/reload", ""),
+  timeseries: (range: string, resolution: string, composition?: string) =>
+    get<TimeSeriesBucket[]>(`/api/stats/timeseries?range=${range}&resolution=${resolution}${composition ? `&composition=${composition}` : ''}`),
+  stepMetrics: (composition: string, range: string) =>
+    get<StepAggregate[]>(`/api/stats/steps?composition=${composition}&range=${range}`),
+  request: (id: string) =>
+    get<RequestRecord>(`/api/requests/${id}`),
 }
