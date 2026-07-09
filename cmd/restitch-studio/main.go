@@ -34,38 +34,7 @@ func main() {
 		*adminKey = v
 	}
 
-	target, err := url.Parse(*gatewayAdminURL)
-	if err != nil {
-		log.Fatalf("invalid gateway admin URL: %v", err)
-	}
-
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Transport = &http.Transport{
-		ResponseHeaderTimeout: 15 * time.Second,
-	}
-
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-		if strings.HasPrefix(req.URL.Path, "/api/") {
-			req.URL.Path = "/admin" + req.URL.Path
-		}
-		if *adminKey != "" {
-			req.Header.Set("X-Admin-Key", *adminKey)
-		}
-	}
-
-	mux := http.NewServeMux()
-
-	mux.Handle("/api/", proxy)
-	mux.Handle("/metrics", proxy)
-
-	sub, err := fs.Sub(distFS, "dist")
-	if err != nil {
-		log.Fatal(err)
-	}
-	spaHandler := spaFileServer(http.FS(sub))
-	mux.Handle("/", spaHandler)
+	mux := buildMux(*gatewayAdminURL, *adminKey)
 
 	addr := fmt.Sprintf(":%d", *port)
 	slog.Info("restitch-studio starting",
@@ -82,6 +51,43 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+func buildMux(gatewayAdminURL, adminKey string) *http.ServeMux {
+	target, err := url.Parse(gatewayAdminURL)
+	if err != nil {
+		log.Fatalf("invalid gateway admin URL: %v", err)
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.Transport = &http.Transport{
+		ResponseHeaderTimeout: 15 * time.Second,
+	}
+
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		if strings.HasPrefix(req.URL.Path, "/api/") {
+			req.URL.Path = "/admin" + req.URL.Path
+		}
+		if adminKey != "" {
+			req.Header.Set("X-Admin-Key", adminKey)
+		}
+	}
+
+	mux := http.NewServeMux()
+
+	mux.Handle("/api/", proxy)
+	mux.Handle("/metrics", proxy)
+
+	sub, err := fs.Sub(distFS, "dist")
+	if err != nil {
+		log.Fatal(err)
+	}
+	spaHandler := spaFileServer(http.FS(sub))
+	mux.Handle("/", spaHandler)
+
+	return mux
 }
 
 // spaFileServer serves files from the embedded filesystem, falling back to
