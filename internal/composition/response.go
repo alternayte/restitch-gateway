@@ -1,8 +1,8 @@
 package composition
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 )
 
 // CompositionResponse is the final response to send to client.
@@ -16,8 +16,8 @@ type CompositionResponse struct {
 // failedSteps contains step names that failed or were skipped — used for
 // nil-safe evaluation per K3: on eval error, if the template's deps
 // intersect failedSteps, return nil instead of an error.
-func BuildResponse(template *CompiledResponse, results map[string]*StepResult, req *http.Request, stepErrors []StepErrorDetail, failedSteps map[string]bool) (*CompositionResponse, error) {
-	env := buildRequestEnv(req, nil, nil, results)
+func BuildResponse(ctx context.Context, template *CompiledResponse, results map[string]*StepResult, rd *RequestData, stepErrors []StepErrorDetail, failedSteps map[string]bool) (*CompositionResponse, error) {
+	env := buildRequestEnv(ctx, rd, results)
 
 	status := 200
 	if template.StatusTmpl != nil {

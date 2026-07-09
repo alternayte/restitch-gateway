@@ -1,7 +1,7 @@
 package composition
 
 import (
-	"net/http"
+	"context"
 
 	"github.com/restitch/restitch-gateway/internal/inbound"
 )
@@ -9,10 +9,10 @@ import (
 // buildRequestEnv creates the environment for expression evaluation.
 // Populates per §2.4: req.method/path/params/query/query_all/headers/body,
 // sets env["request"] = env["req"] (alias), and steps.
-func buildRequestEnv(req *http.Request, params map[string]string, body any, stepResults map[string]*StepResult) map[string]any {
+func buildRequestEnv(ctx context.Context, rd *RequestData, stepResults map[string]*StepResult) map[string]any {
 	query := make(map[string]string)
 	queryAll := make(map[string][]string)
-	for key, values := range req.URL.Query() {
+	for key, values := range rd.Query {
 		queryAll[key] = values
 		if len(values) > 0 {
 			query[key] = values[0]
@@ -20,29 +20,30 @@ func buildRequestEnv(req *http.Request, params map[string]string, body any, step
 	}
 
 	headers := make(map[string]string)
-	for key, values := range req.Header {
+	for key, values := range rd.Headers {
 		if len(values) > 0 {
 			headers[key] = values[0]
 		}
 	}
 
+	params := rd.Params
 	if params == nil {
 		params = map[string]string{}
 	}
 
 	var authClaims any
-	if claims := inbound.GetClaims(req.Context()); claims != nil {
+	if claims := inbound.GetClaims(ctx); claims != nil {
 		authClaims = map[string]any(claims)
 	}
 
 	reqData := map[string]any{
-		"method":    req.Method,
-		"path":      req.URL.Path,
+		"method":    rd.Method,
+		"path":      rd.Path,
 		"params":    params,
 		"query":     query,
 		"query_all": queryAll,
 		"headers":   headers,
-		"body":      body,
+		"body":      rd.Body,
 		"auth":      authClaims,
 	}
 
