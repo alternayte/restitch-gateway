@@ -1,10 +1,14 @@
-# Binaries (root level only)
+# Compiled binaries
 /restitch
+bin/
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+
+# Bundled frontend assets
+cmd/restitch-studio/dist/
 
 # Test binary
 *.test
