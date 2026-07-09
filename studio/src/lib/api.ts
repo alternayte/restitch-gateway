@@ -12,6 +12,7 @@ export interface StepInfo {
   optional: boolean
   timeout_ms: number
   depends_on: string[]
+  inferred_deps: string[]
 }
 
 export interface CompositionInfo {

@@ -156,16 +156,81 @@ function MetricsTab({ comp }: { comp: CompositionInfo }) {
   )
 }
 
+interface StepNodeData extends Record<string, unknown> {
+  label: string
+  upstream: string
+  method: string
+  optional: boolean
+  timeoutMs: number
+  wave: number
+  overlayBorder: string
+  durationLabel: string
+}
+
+const methodColors: Record<string, string> = {
+  GET: "bg-blue-500/15 text-blue-400",
+  POST: "bg-green-500/15 text-green-400",
+  PUT: "bg-amber-500/15 text-amber-400",
+  DELETE: "bg-red-500/15 text-red-400",
+}
+
+function EnhancedStepNode({ data }: { data: StepNodeData }) {
+  return (
+    <div className={`px-3 py-2.5 min-w-[180px] transition-all ${data.overlayBorder || ""}`}>
+      <div className="flex items-center gap-2">
+        <span className="font-medium text-[13px]">{data.label}</span>
+        {data.optional && (
+          <span className="text-[9px] font-semibold tracking-[0.5px] uppercase px-1.5 py-0.5 rounded bg-warning/15 text-warning">opt</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 mt-1.5">
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${methodColors[data.method] || "bg-ink-subtle/15 text-ink-muted"}`}>
+          {data.method}
+        </span>
+        <span className="text-[11px] text-ink-muted truncate">{data.upstream}</span>
+      </div>
+      <div className="flex items-center gap-2 mt-1 text-[10px] text-ink-subtle">
+        <span>wave {data.wave + 1}</span>
+        {data.timeoutMs > 0 && <span>· {data.timeoutMs}ms timeout</span>}
+      </div>
+      {data.durationLabel && (
+        <div className="mt-1.5 text-[11px] font-mono tabular-nums text-ink-subtle">
+          {data.durationLabel}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const dagNodeTypes = { enhanced: EnhancedStepNode }
+
 function DAGView({ comp }: { comp: CompositionInfo }) {
-  const nodes: Node[] = comp.steps.map((step) => {
+  const [showOverlay, setShowOverlay] = useState(false)
+  const { data: requests } = usePoll(() => api.requests(20), 3000)
+
+  const latestRequest = requests?.find((r) => r.composition === comp.name)
+
+  const traceSteps = showOverlay && latestRequest ? latestRequest.steps : []
+
+  const nodes: Node<StepNodeData>[] = comp.steps.map((step) => {
     const wave = comp.waves.findIndex((w) => w.includes(step.name))
     const inWave = comp.waves[wave]?.indexOf(step.name) ?? 0
+    const traceStep = traceSteps.find((s) => s.name === step.name)
+
+    let overlayBorder = ""
+    let durationLabel = ""
+    if (traceStep) {
+      if (traceStep.status === "success") overlayBorder = "ring-2 ring-success/50"
+      else if (traceStep.status === "failed") overlayBorder = "ring-2 ring-error/50"
+      else overlayBorder = "ring-1 ring-ink-subtle/20 opacity-50"
+      durationLabel = `${traceStep.duration_ms.toFixed(1)}ms`
+    }
 
     return {
       id: step.name,
-      position: { x: wave * 260, y: inWave * 120 },
-      data: { label: step.name, upstream: step.upstream, method: step.method, optional: step.optional },
-      type: "default",
+      position: { x: wave * 280, y: inWave * 130 },
+      data: { label: step.name, upstream: step.upstream, method: step.method, optional: step.optional, timeoutMs: step.timeout_ms, wave, overlayBorder, durationLabel },
+      type: "enhanced",
       style: {
         background: "#161618",
         border: "1px solid rgba(178,182,189,0.12)",
@@ -173,52 +238,61 @@ function DAGView({ comp }: { comp: CompositionInfo }) {
         padding: "0",
         color: "#fff",
         fontSize: "13px",
-        width: 180,
       },
     }
   })
 
-  const edges: Edge[] = comp.steps.flatMap((step) =>
-    (step.depends_on || []).map((dep) => ({
-      id: `${dep}-${step.name}`,
-      source: dep,
-      target: step.name,
-      style: { stroke: "rgba(178,182,189,0.3)" },
-    }))
-  )
+  const edges: Edge[] = [
+    ...comp.steps.flatMap((step) =>
+      (step.depends_on || []).map((dep) => ({
+        id: `explicit-${dep}-${step.name}`,
+        source: dep,
+        target: step.name,
+        style: { stroke: showOverlay ? "rgba(74,222,128,0.5)" : "rgba(178,182,189,0.4)", strokeWidth: 2 },
+        animated: showOverlay,
+      }))
+    ),
+    ...comp.steps.flatMap((step) =>
+      (step.inferred_deps || []).map((dep) => ({
+        id: `inferred-${dep}-${step.name}`,
+        source: dep,
+        target: step.name,
+        style: { stroke: showOverlay ? "rgba(74,222,128,0.3)" : "rgba(178,182,189,0.25)", strokeWidth: 1.5, strokeDasharray: "6 3" },
+        animated: showOverlay,
+        label: showOverlay ? "" : "inferred",
+        labelStyle: { fontSize: 9, fill: "rgba(178,182,189,0.4)" },
+      }))
+    ),
+  ]
 
   return (
-    <div className="bg-surface-1 border border-hairline rounded-xl overflow-hidden" style={{ height: 450 }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        fitView
-        proOptions={{ hideAttribution: true }}
-        nodeTypes={{ default: StepNode }}
-      >
-        <Background color="rgba(178,182,189,0.05)" />
-        <Controls
-          style={{ background: "#222225", border: "1px solid rgba(178,182,189,0.12)", borderRadius: "8px" }}
-        />
-      </ReactFlow>
-    </div>
-  )
-}
-
-function StepNode({ data }: { data: { label: string; upstream: string; method: string; optional: boolean } }) {
-  return (
-    <div className="px-3 py-2.5">
-      <div className="flex items-center gap-2">
-        <span className="font-medium text-[13px]">{data.label}</span>
-        {data.optional && (
-          <span className="text-[9px] font-semibold tracking-[0.5px] uppercase px-1.5 py-0.5 rounded bg-warning/15 text-warning">
-            opt
-          </span>
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[12px] font-semibold tracking-[0.6px] uppercase text-ink-subtle">
+          Execution DAG
+        </div>
+        {latestRequest && (
+          <button
+            onClick={() => setShowOverlay(!showOverlay)}
+            className={`text-[12px] px-3 py-1 rounded-lg border transition-colors ${
+              showOverlay ? "bg-surface-2 border-hairline text-ink" : "border-hairline-soft text-ink-muted hover:text-ink"
+            }`}
+          >
+            {showOverlay ? "Hide trace" : "Show latest trace"}
+          </button>
         )}
       </div>
-      <div className="flex items-center gap-2 mt-1 text-[11px] text-ink-muted">
-        <span className="text-rs-accent font-semibold">{data.method}</span>
-        <span>{data.upstream}</span>
+      <div className="bg-surface-1 border border-hairline rounded-xl overflow-hidden" style={{ height: 450 }}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          fitView
+          proOptions={{ hideAttribution: true }}
+          nodeTypes={dagNodeTypes}
+        >
+          <Background color="rgba(178,182,189,0.05)" />
+          <Controls style={{ background: "#222225", border: "1px solid rgba(178,182,189,0.12)", borderRadius: "8px" }} />
+        </ReactFlow>
       </div>
     </div>
   )
