@@ -18,16 +18,56 @@ type Config struct {
 	RequestLogSize int    `yaml:"request_log_size"`
 }
 
+// CompositionInfo describes a composition for the admin API.
+type CompositionInfo struct {
+	Name   string     `json:"name"`
+	Path   string     `json:"path"`
+	Method string     `json:"method"`
+	Public bool       `json:"public"`
+	Steps  []StepInfo `json:"steps"`
+	Waves  [][]string `json:"waves"`
+}
+
+// StepInfo describes a step within a composition.
+type StepInfo struct {
+	Name         string   `json:"name"`
+	Upstream     string   `json:"upstream"`
+	Method       string   `json:"method"`
+	Optional     bool     `json:"optional"`
+	TimeoutMS    int64    `json:"timeout_ms"`
+	DependsOn    []string `json:"depends_on"`
+	InferredDeps []string `json:"inferred_deps"`
+}
+
+// UpstreamInfo describes an upstream for the admin API.
+type UpstreamInfo struct {
+	Name      string             `json:"name"`
+	URL       string             `json:"url"`
+	AuthType  string             `json:"auth_type"`
+	TimeoutMS int64              `json:"timeout_ms"`
+	Health    UpstreamHealthInfo `json:"health"`
+}
+
+// UpstreamHealthInfo describes the health status of an upstream.
+type UpstreamHealthInfo struct {
+	Status    string  `json:"status"`
+	LatencyMS float64 `json:"latency_ms"`
+	CheckedAt string  `json:"checked_at"`
+	Error     string  `json:"error,omitempty"`
+}
+
 // Deps holds dependencies injected into the admin server.
 type Deps struct {
-	Version    string
-	ConfigPath string
-	ConfigHash func() string
-	Requests   *RingBuffer
-	Stats      *Stats
-	Metrics    http.Handler
-	Validate   func(yamlBytes []byte) []string
-	Reload     func() (string, error)
+	Version      string
+	ConfigPath   string
+	ConfigHash   func() string
+	Compositions func() []CompositionInfo
+	Upstreams    func(ctx context.Context) []UpstreamInfo
+	Requests     *RingBuffer
+	Stats        *Stats
+	Metrics      http.Handler
+	Validate     func(yamlBytes []byte) []string
+	Reload       func() (string, error)
 }
 
 // Server is the admin API server.
@@ -48,6 +88,9 @@ func New(cfg Config, deps Deps) *Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /admin/api/info", s.requireKey(s.handleInfo))
+	mux.HandleFunc("GET /admin/api/compositions", s.requireKey(s.handleCompositions))
+	mux.HandleFunc("GET /admin/api/compositions/{name}", s.requireKey(s.handleCompositionByName))
+	mux.HandleFunc("GET /admin/api/upstreams", s.requireKey(s.handleUpstreams))
 	mux.HandleFunc("GET /admin/api/requests", s.requireKey(s.handleRequests))
 	mux.HandleFunc("GET /admin/api/stats", s.requireKey(s.handleStats))
 	mux.HandleFunc("POST /admin/api/validate", s.requireKey(s.handleValidate))
@@ -96,12 +139,50 @@ func (s *Server) requireKey(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"version":        s.deps.Version,
 		"uptime_seconds": time.Since(s.startTime).Seconds(),
 		"config_hash":    s.deps.ConfigHash(),
 		"config_path":    s.deps.ConfigPath,
-	})
+	}
+	if s.deps.Compositions != nil {
+		resp["compositions"] = len(s.deps.Compositions())
+	}
+	if s.deps.Upstreams != nil {
+		resp["upstreams"] = len(s.deps.Upstreams(r.Context()))
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleCompositions(w http.ResponseWriter, r *http.Request) {
+	if s.deps.Compositions == nil {
+		writeJSON(w, http.StatusOK, []CompositionInfo{})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.deps.Compositions())
+}
+
+func (s *Server) handleCompositionByName(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if s.deps.Compositions == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	for _, c := range s.deps.Compositions() {
+		if c.Name == name {
+			writeJSON(w, http.StatusOK, c)
+			return
+		}
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+}
+
+func (s *Server) handleUpstreams(w http.ResponseWriter, r *http.Request) {
+	if s.deps.Upstreams == nil {
+		writeJSON(w, http.StatusOK, []UpstreamInfo{})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.deps.Upstreams(r.Context()))
 }
 
 func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request) {

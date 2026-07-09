@@ -13,8 +13,10 @@ import (
 
 	"github.com/restitch/restitch-gateway/internal/admin"
 	"github.com/restitch/restitch-gateway/internal/composition"
+	"github.com/restitch/restitch-gateway/internal/gwconfig"
 	"github.com/restitch/restitch-gateway/internal/observability"
 	"github.com/restitch/restitch-gateway/internal/server"
+	"github.com/restitch/restitch-gateway/internal/upstream"
 )
 
 func runCmd(args []string) int {
@@ -28,18 +30,59 @@ func runCmd(args []string) int {
 	configFile := flags.String("config", "restitch.yaml", "path to composition config file")
 	flags.Parse(args)
 
-	if err := observability.Setup(*logFormat, *logLevel); err != nil {
+	// Load and parse gateway config (server/admin blocks + compositions)
+	expanded, raw, readErr := gwconfig.ReadAndExpand(*configFile)
+	noConfigFile := errors.Is(readErr, iofs.ErrNotExist)
+	if readErr != nil && !noConfigFile {
+		fmt.Fprintf(os.Stderr, "failed to load config file: %v\n", readErr)
+		return 1
+	}
+
+	// Parse server/admin config from YAML (or use defaults if no file)
+	var gwcfg *gwconfig.File
+	if noConfigFile {
+		gwcfg = &gwconfig.File{}
+	} else {
+		var err error
+		gwcfg, err = gwconfig.LoadBytes(expanded, raw)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config error: %v\n", err)
+			return 1
+		}
+	}
+	gwconfig.ApplyEnvOverrides(gwcfg)
+
+	// Flag overrides win over env overrides and YAML
+	if isFlagSet(flags, "port") {
+		gwcfg.Server.Port = *port
+	}
+	if isFlagSet(flags, "tls-port") {
+		gwcfg.Server.TLSPort = *tlsPort
+	}
+	if isFlagSet(flags, "log-format") {
+		gwcfg.Server.LogFormat = *logFormat
+	}
+	if isFlagSet(flags, "log-level") {
+		gwcfg.Server.LogLevel = *logLevel
+	}
+	if isFlagSet(flags, "cert") {
+		gwcfg.Server.TLSCert = *certFile
+	}
+	if isFlagSet(flags, "key") {
+		gwcfg.Server.TLSKey = *keyFile
+	}
+
+	if err := observability.Setup(gwcfg.Server.LogFormat, gwcfg.Server.LogLevel); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}
 
 	srv := server.New(server.Config{
-		Port:    *port,
-		TLSPort: *tlsPort,
+		Port:    gwcfg.Server.Port,
+		TLSPort: gwcfg.Server.TLSPort,
 	})
 
-	cfg, loadErr := composition.LoadConfigFile(*configFile)
-	if errors.Is(loadErr, iofs.ErrNotExist) {
+	if noConfigFile {
 		slog.Warn("no composition config found, starting with health endpoints only",
 			"config_file", *configFile)
 
@@ -50,10 +93,13 @@ func runCmd(args []string) int {
 		router.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
 		router.Finalize()
 		srv.SetHandler(router)
-	} else if loadErr != nil {
-		slog.Error("failed to load config file", "file", *configFile, "error", loadErr)
-		return 1
 	} else {
+		cfg, err := composition.ParseConfig(expanded)
+		if err != nil {
+			slog.Error("failed to parse config", "file", *configFile, "error", err)
+			return 1
+		}
+
 		compiled, err := composition.CompileConfig(context.Background(), cfg)
 		if err != nil {
 			slog.Error("failed to compile config", "error", err)
@@ -69,7 +115,13 @@ func runCmd(args []string) int {
 		metrics := observability.NewMetrics()
 		observability.SetDefaultMetrics(metrics)
 
+		// Wire circuit breaker state gauge
+		upstream.OnBreakerStateChange = func(name string, from, to string) {
+			metrics.BreakerState.WithLabelValues(name).Set(observability.BreakerStateValue(to))
+		}
+
 		pipe := &Pipeline{
+			Hash:     gwcfg.Hash(),
 			Compiled: compiled,
 			Executor: composition.NewExecutor(compiled),
 		}
@@ -77,7 +129,8 @@ func runCmd(args []string) int {
 		handler := composition.NewHandler(compiled, nil)
 
 		// Wire request recording (ring buffer + stats)
-		ring := admin.NewRingBuffer(500)
+		ringSize := gwcfg.Admin.RequestLogSize
+		ring := admin.NewRingBuffer(ringSize)
 		stats := admin.NewStats()
 		handler.SetRecorder(&admin.MultiRecorder{Ring: ring, Stats: stats})
 
@@ -99,7 +152,22 @@ func runCmd(args []string) int {
 
 		// Reload function shared between admin API, SIGHUP, and fsnotify
 		doReload := func() (string, error) {
-			newCfg, err := composition.LoadConfigFile(*configFile)
+			newExpanded, newRaw, err := gwconfig.ReadAndExpand(*configFile)
+			if err != nil {
+				return "", err
+			}
+			newGwcfg, err := gwconfig.LoadBytes(newExpanded, newRaw)
+			if err != nil {
+				return "", err
+			}
+			newHash := newGwcfg.Hash()
+
+			if current := swapper.Current(); current != nil && current.Hash == newHash && newHash != "" {
+				slog.Info("config unchanged", "hash", newHash)
+				return newHash, nil
+			}
+
+			newCfg, err := composition.ParseConfig(newExpanded)
 			if err != nil {
 				return "", err
 			}
@@ -109,6 +177,7 @@ func runCmd(args []string) int {
 			}
 
 			newPipe := &Pipeline{
+				Hash:     newHash,
 				Compiled: newCompiled,
 				Executor: composition.NewExecutor(newCompiled),
 			}
@@ -120,15 +189,13 @@ func runCmd(args []string) int {
 			newRouter.Finalize()
 			newPipe.Handler = newRouter
 
-			hash := configHash(*configFile)
-			newPipe.Hash = hash
-
 			old := swapper.Swap(newPipe)
 			if old != nil {
 				time.AfterFunc(30*time.Second, old.Close)
 			}
 
-			return hash, nil
+			slog.Info("config reloaded", "old_hash", old.Hash, "new_hash", newHash)
+			return newHash, nil
 		}
 
 		// Start reload watchers (SIGHUP + fsnotify)
@@ -136,17 +203,27 @@ func runCmd(args []string) int {
 		rl.watchSignals()
 		rl.watchFile()
 
+		// Build an upstream health checker for the admin API
+		healthChecker := upstream.NewChecker(compiled.Upstreams, 10*time.Second)
+
 		// Admin server
 		adminSrv := admin.New(admin.Config{
-			Enabled: true,
-			Port:    9090,
+			Enabled: gwcfg.Admin.IsEnabled(),
+			Port:    gwcfg.Admin.Port,
+			APIKey:  gwcfg.Admin.APIKey,
 		}, admin.Deps{
-			Metrics: metrics.Handler(),
+			Metrics:    metrics.Handler(),
 			Version:    version,
 			ConfigPath: *configFile,
 			ConfigHash: func() string { return swapper.Current().Hash },
-			Requests:   ring,
-			Stats:      stats,
+			Compositions: func() []admin.CompositionInfo {
+				return compositionsFromPipeline(swapper.Current())
+			},
+			Upstreams: func(ctx context.Context) []admin.UpstreamInfo {
+				return upstreamsFromPipeline(swapper.Current(), healthChecker, ctx)
+			},
+			Requests: ring,
+			Stats:    stats,
 			Validate: func(yamlBytes []byte) []string {
 				_, err := composition.ParseConfig(yamlBytes)
 				if err != nil {
@@ -164,12 +241,12 @@ func runCmd(args []string) int {
 		}()
 	}
 
-	tlsEnabled := *certFile != "" && *keyFile != ""
+	tlsEnabled := gwcfg.Server.TLSCert != "" && gwcfg.Server.TLSKey != ""
 
 	if tlsEnabled {
-		slog.Info("server starting", "port", *port, "tls_port", *tlsPort, "version", version)
+		slog.Info("server starting", "port", gwcfg.Server.Port, "tls_port", gwcfg.Server.TLSPort, "version", version)
 	} else {
-		slog.Info("server starting", "port", *port, "version", version)
+		slog.Info("server starting", "port", gwcfg.Server.Port, "version", version)
 	}
 
 	errChan := make(chan error, 2)
@@ -182,7 +259,7 @@ func runCmd(args []string) int {
 
 	if tlsEnabled {
 		go func() {
-			if err := srv.ListenAndServeTLS(*certFile, *keyFile); err != nil && err != http.ErrServerClosed {
+			if err := srv.ListenAndServeTLS(gwcfg.Server.TLSCert, gwcfg.Server.TLSKey); err != nil && err != http.ErrServerClosed {
 				errChan <- fmt.Errorf("HTTPS server error: %w", err)
 			}
 		}()
@@ -205,6 +282,16 @@ func runCmd(args []string) int {
 	return 0
 }
 
+func isFlagSet(fs *flag.FlagSet, name string) bool {
+	found := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
+}
+
 func applyMiddleware(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
 	for i := len(mws) - 1; i >= 0; i-- {
 		h = mws[i](h)
@@ -222,4 +309,98 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
+}
+
+func compositionsFromPipeline(p *Pipeline) []admin.CompositionInfo {
+	if p == nil || p.Compiled == nil {
+		return nil
+	}
+	var result []admin.CompositionInfo
+	for name, comp := range p.Compiled.Config.Compositions {
+		ci := admin.CompositionInfo{
+			Name:   name,
+			Path:   comp.Path,
+			Method: comp.Method,
+			Public: comp.Public,
+		}
+		for _, step := range comp.Steps {
+			si := admin.StepInfo{
+				Name:     step.Name,
+				Upstream: step.Upstream,
+				Method:   step.Method,
+				Optional: step.Optional,
+			}
+			if step.Timeout != nil {
+				si.TimeoutMS = step.Timeout.Milliseconds()
+			}
+			if step.DependsOn != nil {
+				si.DependsOn = step.DependsOn
+			} else {
+				si.DependsOn = []string{}
+			}
+
+			// Compute inferred deps: all deps minus explicit deps
+			if cc, ok := p.Compiled.Compositions[name]; ok {
+				if cs, ok := cc.Steps[step.Name]; ok {
+					explicit := make(map[string]bool, len(step.DependsOn))
+					for _, d := range step.DependsOn {
+						explicit[d] = true
+					}
+					var inferred []string
+					for _, d := range cs.Deps {
+						if !explicit[d] {
+							inferred = append(inferred, d)
+						}
+					}
+					if inferred == nil {
+						inferred = []string{}
+					}
+					si.InferredDeps = inferred
+				}
+			}
+			if si.InferredDeps == nil {
+				si.InferredDeps = []string{}
+			}
+
+			ci.Steps = append(ci.Steps, si)
+		}
+		if cc, ok := p.Compiled.Compositions[name]; ok && cc.ExecutionPlan != nil {
+			ci.Waves = cc.ExecutionPlan.Waves
+		}
+		result = append(result, ci)
+	}
+	return result
+}
+
+func upstreamsFromPipeline(p *Pipeline, checker *upstream.Checker, ctx context.Context) []admin.UpstreamInfo {
+	if p == nil || p.Compiled == nil {
+		return nil
+	}
+	var healthMap map[string]upstream.HealthStatus
+	if checker != nil {
+		healthMap = checker.Check(ctx)
+	}
+	var result []admin.UpstreamInfo
+	for name, up := range p.Compiled.Config.Upstreams {
+		ui := admin.UpstreamInfo{
+			Name:      name,
+			URL:       up.URL,
+			TimeoutMS: up.Timeout.Milliseconds(),
+		}
+		if up.Auth != nil {
+			ui.AuthType = up.Auth.Type()
+		} else {
+			ui.AuthType = "none"
+		}
+		if hs, ok := healthMap[name]; ok {
+			ui.Health = admin.UpstreamHealthInfo{
+				Status:    hs.Status,
+				LatencyMS: hs.LatencyMS,
+				CheckedAt: hs.CheckedAt.Format(time.RFC3339),
+				Error:     hs.Error,
+			}
+		}
+		result = append(result, ui)
+	}
+	return result
 }

@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,91 @@ import (
 
 	"github.com/restitch/restitch-gateway/internal/reqlog"
 )
+
+func testDeps() Deps {
+	return Deps{
+		Version:    "test",
+		ConfigPath: "test.yaml",
+		ConfigHash: func() string { return "abc" },
+		Compositions: func() []CompositionInfo {
+			return []CompositionInfo{
+				{
+					Name:   "user-dashboard",
+					Path:   "/api/users/{id}/dashboard",
+					Method: "GET",
+					Public: false,
+					Steps: []StepInfo{
+						{Name: "user", Upstream: "users-api", Method: "GET", Optional: false, TimeoutMS: 5000, DependsOn: []string{}},
+						{Name: "orders", Upstream: "orders-api", Method: "GET", Optional: true, TimeoutMS: 3000, DependsOn: []string{"user"}},
+					},
+					Waves: [][]string{{"user"}, {"orders"}},
+				},
+				{
+					Name:   "health-check",
+					Path:   "/api/health",
+					Method: "GET",
+					Public: true,
+					Steps: []StepInfo{
+						{Name: "ping", Upstream: "users-api", Method: "GET", Optional: false, TimeoutMS: 1000, DependsOn: []string{}},
+					},
+					Waves: [][]string{{"ping"}},
+				},
+			}
+		},
+		Upstreams: func(ctx context.Context) []UpstreamInfo {
+			return []UpstreamInfo{
+				{
+					Name:      "users-api",
+					URL:       "https://users.internal",
+					AuthType:  "header",
+					TimeoutMS: 10000,
+					Health: UpstreamHealthInfo{
+						Status:    "healthy",
+						LatencyMS: 5.2,
+						CheckedAt: "2026-07-09T00:00:00Z",
+					},
+				},
+				{
+					Name:      "orders-api",
+					URL:       "https://orders.internal",
+					AuthType:  "none",
+					TimeoutMS: 5000,
+					Health: UpstreamHealthInfo{
+						Status:    "unhealthy",
+						LatencyMS: 0,
+						CheckedAt: "2026-07-09T00:00:00Z",
+						Error:     "connection refused",
+					},
+				},
+			}
+		},
+		Requests: NewRingBuffer(10),
+		Stats:    NewStats(),
+		Validate: func([]byte) []string { return nil },
+		Reload:   func() (string, error) { return "abc", nil },
+	}
+}
+
+func TestCompositionInfo_InferredDeps(t *testing.T) {
+	si := StepInfo{
+		Name:         "bonus",
+		Upstream:     "api",
+		Method:       "GET",
+		DependsOn:    []string{},
+		InferredDeps: []string{"user", "loyalty"},
+	}
+	data, _ := json.Marshal(si)
+	var m map[string]any
+	json.Unmarshal(data, &m)
+
+	inferred, ok := m["inferred_deps"].([]any)
+	if !ok {
+		t.Fatal("inferred_deps not present or not array")
+	}
+	if len(inferred) != 2 {
+		t.Errorf("inferred_deps length = %d, want 2", len(inferred))
+	}
+}
 
 func TestRingBuffer_Overflow(t *testing.T) {
 	rb := NewRingBuffer(3)
@@ -59,29 +145,16 @@ func TestStats_Snapshot(t *testing.T) {
 }
 
 func TestServer_APIKeyAuth(t *testing.T) {
-	srv := New(Config{
-		Port:   0,
-		APIKey: "secret123",
-	}, Deps{
-		Version:    "test",
-		ConfigPath: "test.yaml",
-		ConfigHash: func() string { return "abc" },
-		Requests:   NewRingBuffer(10),
-		Stats:      NewStats(),
-		Validate:   func([]byte) []string { return nil },
-		Reload:     func() (string, error) { return "abc", nil },
-	})
+	srv := New(Config{Port: 0, APIKey: "secret123"}, testDeps())
 
 	handler := srv.httpServer.Handler
 
-	// Without key → 401
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/info", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("without key: expected 401, got %d", rec.Code)
 	}
 
-	// With key → 200
 	req := httptest.NewRequest("GET", "/admin/api/info", nil)
 	req.Header.Set("X-Admin-Key", "secret123")
 	rec = httptest.NewRecorder()
@@ -92,15 +165,11 @@ func TestServer_APIKeyAuth(t *testing.T) {
 }
 
 func TestServer_Info(t *testing.T) {
-	srv := New(Config{Port: 0}, Deps{
-		Version:    "v2.0.0",
-		ConfigPath: "/etc/restitch.yaml",
-		ConfigHash: func() string { return "deadbeef" },
-		Requests:   NewRingBuffer(10),
-		Stats:      NewStats(),
-		Validate:   func([]byte) []string { return nil },
-		Reload:     func() (string, error) { return "", nil },
-	})
+	deps := testDeps()
+	deps.Version = "v2.0.0"
+	deps.ConfigPath = "/etc/restitch.yaml"
+	deps.ConfigHash = func() string { return "deadbeef" }
+	srv := New(Config{Port: 0}, deps)
 
 	rec := httptest.NewRecorder()
 	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/info", nil))
@@ -114,25 +183,24 @@ func TestServer_Info(t *testing.T) {
 	if info["config_hash"] != "deadbeef" {
 		t.Errorf("config_hash = %v, want deadbeef", info["config_hash"])
 	}
+	if info["compositions"] != float64(2) {
+		t.Errorf("compositions = %v, want 2", info["compositions"])
+	}
+	if info["upstreams"] != float64(2) {
+		t.Errorf("upstreams = %v, want 2", info["upstreams"])
+	}
 }
 
 func TestServer_Validate(t *testing.T) {
-	srv := New(Config{Port: 0}, Deps{
-		Version:    "test",
-		ConfigPath: "test.yaml",
-		ConfigHash: func() string { return "" },
-		Requests:   NewRingBuffer(10),
-		Stats:      NewStats(),
-		Validate: func(b []byte) []string {
-			if strings.Contains(string(b), "bad") {
-				return []string{"invalid config"}
-			}
-			return nil
-		},
-		Reload: func() (string, error) { return "", nil },
-	})
+	deps := testDeps()
+	deps.Validate = func(b []byte) []string {
+		if strings.Contains(string(b), "bad") {
+			return []string{"invalid config"}
+		}
+		return nil
+	}
+	srv := New(Config{Port: 0}, deps)
 
-	// Valid
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/admin/api/validate", strings.NewReader("good config"))
 	srv.httpServer.Handler.ServeHTTP(rec, req)
@@ -143,7 +211,6 @@ func TestServer_Validate(t *testing.T) {
 		t.Errorf("expected valid=true, got %v", result["valid"])
 	}
 
-	// Invalid
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest("POST", "/admin/api/validate", strings.NewReader("bad config"))
 	srv.httpServer.Handler.ServeHTTP(rec, req)
@@ -152,5 +219,131 @@ func TestServer_Validate(t *testing.T) {
 	json.NewDecoder(rec.Body).Decode(&result)
 	if result["valid"] != false {
 		t.Errorf("expected valid=false, got %v", result["valid"])
+	}
+}
+
+func TestServer_Compositions(t *testing.T) {
+	srv := New(Config{Port: 0}, testDeps())
+
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/compositions", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var comps []CompositionInfo
+	json.NewDecoder(rec.Body).Decode(&comps)
+	if len(comps) != 2 {
+		t.Fatalf("expected 2 compositions, got %d", len(comps))
+	}
+
+	found := false
+	for _, c := range comps {
+		if c.Name == "user-dashboard" {
+			found = true
+			if c.Method != "GET" {
+				t.Errorf("method = %s, want GET", c.Method)
+			}
+			if len(c.Steps) != 2 {
+				t.Errorf("steps = %d, want 2", len(c.Steps))
+			}
+			if len(c.Waves) != 2 {
+				t.Errorf("waves = %d, want 2", len(c.Waves))
+			}
+		}
+	}
+	if !found {
+		t.Error("user-dashboard composition not found")
+	}
+}
+
+func TestServer_CompositionByName(t *testing.T) {
+	srv := New(Config{Port: 0}, testDeps())
+	h := srv.httpServer.Handler
+
+	// Found
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/compositions/user-dashboard", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var comp CompositionInfo
+	json.NewDecoder(rec.Body).Decode(&comp)
+	if comp.Name != "user-dashboard" {
+		t.Errorf("name = %s, want user-dashboard", comp.Name)
+	}
+
+	// Not found
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/compositions/nonexistent", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestServer_Upstreams(t *testing.T) {
+	srv := New(Config{Port: 0}, testDeps())
+
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/upstreams", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var ups []UpstreamInfo
+	json.NewDecoder(rec.Body).Decode(&ups)
+	if len(ups) != 2 {
+		t.Fatalf("expected 2 upstreams, got %d", len(ups))
+	}
+
+	foundHealthy := false
+	foundUnhealthy := false
+	for _, u := range ups {
+		if u.Name == "users-api" {
+			foundHealthy = true
+			if u.Health.Status != "healthy" {
+				t.Errorf("users-api health = %s, want healthy", u.Health.Status)
+			}
+			if u.AuthType != "header" {
+				t.Errorf("users-api auth = %s, want header", u.AuthType)
+			}
+		}
+		if u.Name == "orders-api" {
+			foundUnhealthy = true
+			if u.Health.Status != "unhealthy" {
+				t.Errorf("orders-api health = %s, want unhealthy", u.Health.Status)
+			}
+			if u.Health.Error != "connection refused" {
+				t.Errorf("orders-api error = %q, want 'connection refused'", u.Health.Error)
+			}
+		}
+	}
+	if !foundHealthy {
+		t.Error("users-api upstream not found")
+	}
+	if !foundUnhealthy {
+		t.Error("orders-api upstream not found")
+	}
+}
+
+func TestServer_Compositions_NilDeps(t *testing.T) {
+	deps := testDeps()
+	deps.Compositions = nil
+	deps.Upstreams = nil
+	srv := New(Config{Port: 0}, deps)
+	h := srv.httpServer.Handler
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/compositions", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/upstreams", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 }
