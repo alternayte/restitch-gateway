@@ -21,7 +21,7 @@ func checkCmd(args []string) int {
 		return 1
 	}
 
-	compiledCfg, err := composition.CompileConfig(context.Background(), cfg)
+	compiledCfg, err := composition.CompileConfig(context.Background(), cfg, composition.CompileOptions{SkipAuthInit: true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1

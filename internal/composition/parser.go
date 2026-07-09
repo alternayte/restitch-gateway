@@ -3,11 +3,11 @@ package composition
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
+	"github.com/restitch/restitch-gateway/internal/gwconfig"
 	"github.com/restitch/restitch-gateway/internal/upstream"
 	"gopkg.in/yaml.v3"
 )
@@ -26,14 +26,14 @@ func ParseConfig(data []byte) (*Config, error) {
 	return &cfg, nil
 }
 
-// LoadConfigFile reads a YAML configuration file and parses it.
+// LoadConfigFile reads a YAML configuration file, expands env vars, and parses it.
 func LoadConfigFile(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	expanded, _, err := gwconfig.ReadAndExpand(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	cfg, err := ParseConfig(data)
+	cfg, err := ParseConfig(expanded)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse config file %s: %w", path, err)
 	}
@@ -85,8 +85,18 @@ type CompiledBodyNode struct {
 	List    []*CompiledBodyNode
 }
 
+// CompileOptions controls optional behavior during compilation.
+type CompileOptions struct {
+	SkipAuthInit bool // skip OAuth2 initial token fetch (for check/validate)
+}
+
 // CompileConfig takes a parsed config and compiles all expressions and auth strategies.
-func CompileConfig(ctx context.Context, cfg *Config) (*CompiledConfig, error) {
+func CompileConfig(ctx context.Context, cfg *Config, opts ...CompileOptions) (*CompiledConfig, error) {
+	var opt CompileOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+	_ = opt // used below
 	compiled := &CompiledConfig{
 		Config:       cfg,
 		Compositions: make(map[string]*CompiledComposition),
@@ -100,7 +110,7 @@ func CompileConfig(ctx context.Context, cfg *Config) (*CompiledConfig, error) {
 				return nil, fmt.Errorf("upstream %s: %w", name, err)
 			}
 			var err error
-			strategy, err = up.Auth.Build(ctx)
+			strategy, err = up.Auth.Build(ctx, auth.BuildOptions{SkipInit: opt.SkipAuthInit})
 			if err != nil {
 				return nil, fmt.Errorf("upstream %s auth: %w", name, err)
 			}
@@ -349,6 +359,9 @@ func validateAndApplyDefaults(cfg *Config) error {
 
 			if step.Method == "" {
 				step.Method = "GET"
+			}
+			if step.Cache != nil && step.Method != "GET" {
+				return fmt.Errorf("composition %s, step %s: cache is only supported on GET steps", compName, step.Name)
 			}
 			if step.Headers == nil {
 				step.Headers = make(map[string]string)

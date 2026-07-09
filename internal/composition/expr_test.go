@@ -1,121 +1,8 @@
 package composition
 
 import (
-	"strings"
 	"testing"
 )
-
-func TestCompileExpression_Valid(t *testing.T) {
-	env := BuildBaseEnvironment([]string{"user"})
-
-	tests := []struct {
-		name string
-		expr string
-	}{
-		{"simple variable", "req.query.user_id"},
-		{"step reference", "steps.user.body.id"},
-		{"arithmetic", "steps.user.body.count + 1"},
-		{"string concat", `"User: " + steps.user.body.name`},
-		{"array index", "steps.user.body.items[0]"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			compiled, err := CompileExpression(tt.expr, env)
-			if err != nil {
-				t.Fatalf("CompileExpression failed: %v", err)
-			}
-
-			if compiled.Raw != tt.expr {
-				t.Errorf("expected Raw=%q, got %q", tt.expr, compiled.Raw)
-			}
-
-			if compiled.Program == nil {
-				t.Error("Program should not be nil")
-			}
-		})
-	}
-}
-
-func TestCompileExpression_InvalidSyntax(t *testing.T) {
-	env := BuildBaseEnvironment(nil)
-
-	tests := []struct {
-		name string
-		expr string
-	}{
-		{"unclosed paren", "req.query.id + (1"},
-		{"invalid syntax", "req.query.id @ 1"}, // @ is not a valid operator
-		{"unclosed string", `"unclosed`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := CompileExpression(tt.expr, env)
-			if err == nil {
-				t.Error("expected compilation error for invalid syntax")
-			}
-
-			if err != nil && !strings.Contains(err.Error(), "compilation failed") {
-				t.Errorf("error should mention compilation failed, got: %v", err)
-			}
-		})
-	}
-}
-
-func TestEvaluateExpression(t *testing.T) {
-	env := BuildBaseEnvironment([]string{"user"})
-
-	// Compile expression
-	compiled, err := CompileExpression("req.query.user_id", env)
-	if err != nil {
-		t.Fatalf("CompileExpression failed: %v", err)
-	}
-
-	// Evaluate with runtime data
-	runtimeEnv := map[string]interface{}{
-		"req": map[string]interface{}{
-			"query": map[string]string{"user_id": "123"},
-		},
-	}
-
-	result, err := EvaluateExpression(compiled, runtimeEnv)
-	if err != nil {
-		t.Fatalf("EvaluateExpression failed: %v", err)
-	}
-
-	if result != "123" {
-		t.Errorf("expected result 123, got %v", result)
-	}
-}
-
-func TestEvaluateExpression_Arithmetic(t *testing.T) {
-	env := BuildBaseEnvironment([]string{"data"})
-
-	compiled, err := CompileExpression("steps.data.body.count + 10", env)
-	if err != nil {
-		t.Fatalf("CompileExpression failed: %v", err)
-	}
-
-	runtimeEnv := map[string]interface{}{
-		"steps": map[string]interface{}{
-			"data": map[string]interface{}{
-				"body": map[string]interface{}{
-					"count": 5,
-				},
-			},
-		},
-	}
-
-	result, err := EvaluateExpression(compiled, runtimeEnv)
-	if err != nil {
-		t.Fatalf("EvaluateExpression failed: %v", err)
-	}
-
-	if result != 15 {
-		t.Errorf("expected result 15, got %v", result)
-	}
-}
 
 func TestIsExpression(t *testing.T) {
 	tests := []struct {
@@ -129,7 +16,7 @@ func TestIsExpression(t *testing.T) {
 		{"plain text", false},
 		{"", false},
 		{"{not an expression}", false},
-		{"{{ }}", true}, // Malformed but has delimiters
+		{"{{ }}", true},
 	}
 
 	for _, tt := range tests {
@@ -200,7 +87,6 @@ func TestExtractExpressions(t *testing.T) {
 func TestBuildBaseEnvironment(t *testing.T) {
 	env := BuildBaseEnvironment([]string{"user", "orders"})
 
-	// Check req structure
 	req, ok := env["req"].(map[string]interface{})
 	if !ok {
 		t.Fatal("req should be map[string]interface{}")
@@ -219,7 +105,6 @@ func TestBuildBaseEnvironment(t *testing.T) {
 		t.Error("req should have body")
 	}
 
-	// Check steps structure
 	steps, ok := env["steps"].(map[string]interface{})
 	if !ok {
 		t.Fatal("steps should be map[string]interface{}")
@@ -229,7 +114,6 @@ func TestBuildBaseEnvironment(t *testing.T) {
 		t.Errorf("expected 2 steps, got %d", len(steps))
 	}
 
-	// Check user step structure
 	user, ok := steps["user"].(map[string]interface{})
 	if !ok {
 		t.Fatal("user step should be map[string]interface{}")

@@ -87,6 +87,25 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// Type returns a human-readable name for the configured auth strategy.
+func (c *Config) Type() string {
+	if c == nil {
+		return "none"
+	}
+	switch {
+	case c.Header != nil:
+		return "header"
+	case c.Basic != nil:
+		return "basic"
+	case c.Passthrough != nil:
+		return "passthrough"
+	case c.OAuth2 != nil:
+		return "oauth2"
+	default:
+		return "none"
+	}
+}
+
 // HeaderConfig for static header injection (AUTH-01).
 // Injects a fixed header value into every request to the upstream.
 // Value supports ${VAR} syntax for environment variable expansion.
@@ -120,12 +139,22 @@ type OAuth2Config struct {
 	Scopes       []string `yaml:"scopes"`        // Optional scopes to request
 }
 
+// BuildOptions controls optional behavior during auth strategy construction.
+type BuildOptions struct {
+	SkipInit bool // skip OAuth2 initial token fetch
+}
+
 // Build creates the appropriate Strategy based on which config option is set.
 // Returns nil if no auth is configured.
 // Returns an error if environment variable expansion fails or credentials are invalid.
-func (c *Config) Build(ctx context.Context) (Strategy, error) {
+func (c *Config) Build(ctx context.Context, opts ...BuildOptions) (Strategy, error) {
 	if c == nil {
 		return nil, nil
+	}
+
+	var opt BuildOptions
+	if len(opts) > 0 {
+		opt = opts[0]
 	}
 
 	switch {
@@ -136,6 +165,9 @@ func (c *Config) Build(ctx context.Context) (Strategy, error) {
 	case c.Passthrough != nil:
 		return NewPassthroughStrategy(c.Passthrough)
 	case c.OAuth2 != nil:
+		if opt.SkipInit {
+			return NewOAuth2StrategyValidateOnly(c.OAuth2)
+		}
 		return NewOAuth2Strategy(ctx, c.OAuth2)
 	default:
 		return nil, nil // No auth configured

@@ -8,8 +8,6 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
-
-	"github.com/restitch/restitch-gateway/internal/gwconfig"
 )
 
 const oauth2ExpiryDelta = 30 * time.Second
@@ -22,23 +20,10 @@ type OAuth2Strategy struct {
 // NewOAuth2Strategy creates an OAuth2 client credentials strategy.
 // Uses a dedicated refresh client with 10s timeout to bound hung IdP calls.
 func NewOAuth2Strategy(ctx context.Context, cfg *OAuth2Config) (*OAuth2Strategy, error) {
-	clientID, err := gwconfig.ExpandEnvStrict(cfg.ClientID)
-	if err != nil {
-		return nil, fmt.Errorf("oauth2 client_id: %w", err)
-	}
-	clientSecret, err := gwconfig.ExpandEnvStrict(cfg.ClientSecret)
-	if err != nil {
-		return nil, fmt.Errorf("oauth2 client_secret: %w", err)
-	}
-	tokenURL, err := gwconfig.ExpandEnvStrict(cfg.TokenURL)
-	if err != nil {
-		return nil, fmt.Errorf("oauth2 token_url: %w", err)
-	}
-
 	ccConfig := &clientcredentials.Config{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		TokenURL:     tokenURL,
+		ClientID:     cfg.ClientID,
+		ClientSecret: cfg.ClientSecret,
+		TokenURL:     cfg.TokenURL,
 		Scopes:       cfg.Scopes,
 	}
 
@@ -61,6 +46,20 @@ func NewOAuth2Strategy(ctx context.Context, cfg *OAuth2Config) (*OAuth2Strategy,
 	return &OAuth2Strategy{
 		tokenSource: tokenSource,
 	}, nil
+}
+
+// NewOAuth2StrategyValidateOnly validates OAuth2 config fields without fetching a token.
+func NewOAuth2StrategyValidateOnly(cfg *OAuth2Config) (*OAuth2Strategy, error) {
+	if cfg.ClientID == "" {
+		return nil, fmt.Errorf("oauth2 client_id is required")
+	}
+	if cfg.ClientSecret == "" {
+		return nil, fmt.Errorf("oauth2 client_secret is required")
+	}
+	if cfg.TokenURL == "" {
+		return nil, fmt.Errorf("oauth2 token_url is required")
+	}
+	return &OAuth2Strategy{}, nil
 }
 
 // RoundTripper returns an http.RoundTripper that injects OAuth2 Bearer tokens.

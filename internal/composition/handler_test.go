@@ -349,7 +349,7 @@ upstreams:
     auth:
       header:
         name: "X-API-Key"
-        value: "${TEST_API_KEY}"
+        value: "test-api-key-456"
 
 compositions:
   api:

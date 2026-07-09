@@ -99,106 +99,7 @@ func TestNewOAuth2Strategy(t *testing.T) {
 		}
 	})
 
-	t.Run("env var expansion in credentials", func(t *testing.T) {
-		os.Clearenv()
-		os.Setenv("OAUTH_CLIENT_ID", "env-client-id")
-		os.Setenv("OAUTH_CLIENT_SECRET", "env-client-secret")
-
-		server, _ := mockTokenServer(t, "test-token", 3600)
-		defer server.Close()
-
-		cfg := &OAuth2Config{
-			TokenURL:     server.URL,
-			ClientID:     "${OAUTH_CLIENT_ID}",
-			ClientSecret: "${OAUTH_CLIENT_SECRET}",
-		}
-
-		strategy, err := NewOAuth2Strategy(context.Background(), cfg)
-		if err != nil {
-			t.Fatalf("NewOAuth2Strategy() error: %v", err)
-		}
-
-		if strategy == nil {
-			t.Fatal("NewOAuth2Strategy() returned nil strategy")
-		}
-	})
-
-	t.Run("missing client_id env var fails", func(t *testing.T) {
-		os.Clearenv()
-
-		cfg := &OAuth2Config{
-			TokenURL:     "https://example.com/token",
-			ClientID:     "${MISSING_CLIENT_ID}",
-			ClientSecret: "secret",
-		}
-
-		_, err := NewOAuth2Strategy(context.Background(), cfg)
-		if err == nil {
-			t.Fatal("Expected error for missing env var")
-		}
-		if !strings.Contains(err.Error(), "oauth2 client_id") {
-			t.Errorf("Error should mention client_id: %v", err)
-		}
-	})
-
-	t.Run("missing client_secret env var fails", func(t *testing.T) {
-		os.Clearenv()
-
-		cfg := &OAuth2Config{
-			TokenURL:     "https://example.com/token",
-			ClientID:     "client",
-			ClientSecret: "${MISSING_CLIENT_SECRET}",
-		}
-
-		_, err := NewOAuth2Strategy(context.Background(), cfg)
-		if err == nil {
-			t.Fatal("Expected error for missing env var")
-		}
-		if !strings.Contains(err.Error(), "oauth2 client_secret") {
-			t.Errorf("Error should mention client_secret: %v", err)
-		}
-	})
-
-	t.Run("missing token_url env var fails", func(t *testing.T) {
-		os.Clearenv()
-
-		cfg := &OAuth2Config{
-			TokenURL:     "${MISSING_TOKEN_URL}",
-			ClientID:     "client",
-			ClientSecret: "secret",
-		}
-
-		_, err := NewOAuth2Strategy(context.Background(), cfg)
-		if err == nil {
-			t.Fatal("Expected error for missing env var")
-		}
-		if !strings.Contains(err.Error(), "oauth2 token_url") {
-			t.Errorf("Error should mention token_url: %v", err)
-		}
-	})
-
-	t.Run("empty env var fails", func(t *testing.T) {
-		os.Clearenv()
-		os.Setenv("EMPTY_SECRET", "")
-
-		cfg := &OAuth2Config{
-			TokenURL:     "https://example.com/token",
-			ClientID:     "client",
-			ClientSecret: "${EMPTY_SECRET}",
-		}
-
-		_, err := NewOAuth2Strategy(context.Background(), cfg)
-		if err == nil {
-			t.Fatal("Expected error for empty env var")
-		}
-		if !strings.Contains(err.Error(), "oauth2 client_secret") {
-			t.Errorf("Error should mention client_secret: %v", err)
-		}
-	})
-
 	t.Run("initial token fetch failure fails startup", func(t *testing.T) {
-		os.Clearenv()
-
 		server := mockFailingTokenServer(t)
 		defer server.Close()
 
@@ -214,6 +115,56 @@ func TestNewOAuth2Strategy(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "initial oauth2 token fetch failed") {
 			t.Errorf("Error should mention initial fetch failed: %v", err)
+		}
+	})
+}
+
+func TestNewOAuth2StrategyValidateOnly(t *testing.T) {
+	t.Run("valid config passes", func(t *testing.T) {
+		cfg := &OAuth2Config{
+			TokenURL:     "https://example.com/token",
+			ClientID:     "client",
+			ClientSecret: "secret",
+		}
+		_, err := NewOAuth2StrategyValidateOnly(cfg)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("empty client_id fails", func(t *testing.T) {
+		cfg := &OAuth2Config{
+			TokenURL:     "https://example.com/token",
+			ClientID:     "",
+			ClientSecret: "secret",
+		}
+		_, err := NewOAuth2StrategyValidateOnly(cfg)
+		if err == nil {
+			t.Fatal("expected error for empty client_id")
+		}
+	})
+
+	t.Run("empty client_secret fails", func(t *testing.T) {
+		cfg := &OAuth2Config{
+			TokenURL:     "https://example.com/token",
+			ClientID:     "client",
+			ClientSecret: "",
+		}
+		_, err := NewOAuth2StrategyValidateOnly(cfg)
+		if err == nil {
+			t.Fatal("expected error for empty client_secret")
+		}
+	})
+
+	t.Run("empty token_url fails", func(t *testing.T) {
+		cfg := &OAuth2Config{
+			TokenURL:     "",
+			ClientID:     "client",
+			ClientSecret: "secret",
+		}
+		_, err := NewOAuth2StrategyValidateOnly(cfg)
+		if err == nil {
+			t.Fatal("expected error for empty token_url")
 		}
 	})
 }

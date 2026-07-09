@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net/http"
+	"os"
 	"sync/atomic"
 
 	"github.com/restitch/restitch-gateway/internal/composition"
@@ -61,8 +62,12 @@ func buildPipeline(ctx context.Context, path string, deps PipelineDeps) (*Pipeli
 }
 
 func configHash(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
 	h := sha256.New()
-	h.Write([]byte(path))
+	h.Write(data)
 	return fmt.Sprintf("%x", h.Sum(nil))[:16]
 }
 

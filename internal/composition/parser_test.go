@@ -2,6 +2,7 @@ package composition
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 )
@@ -475,8 +476,8 @@ compositions:
 	}
 }
 
-func TestCompileConfig_AuthMissingEnvVar(t *testing.T) {
-	yaml := `
+func TestLoadConfigFile_AuthMissingEnvVar(t *testing.T) {
+	yamlContent := `
 upstreams:
   api:
     url: "http://localhost:8080"
@@ -496,15 +497,13 @@ compositions:
       status: 200
       body: {}
 `
+	dir := t.TempDir()
+	path := dir + "/test.yaml"
+	os.WriteFile(path, []byte(yamlContent), 0644)
 
-	cfg, err := ParseConfig([]byte(yaml))
-	if err != nil {
-		t.Fatalf("ParseConfig failed: %v", err)
-	}
-
-	_, err = CompileConfig(context.Background(), cfg)
+	_, err := LoadConfigFile(path)
 	if err == nil {
-		t.Fatal("expected error for missing env var")
+		t.Fatal("expected error for missing env var at load time")
 	}
 
 	if !strings.Contains(err.Error(), "NONEXISTENT_VAR") {
