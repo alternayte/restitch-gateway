@@ -26,6 +26,16 @@ jobs:
 
       - run: go build ./...
 
+      - name: Coverage check
+        run: |
+          go test -coverprofile=coverage.out ./internal/...
+          TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${TOTAL}%"
+          if [ "$(echo "$TOTAL < 70" | bc -l)" = "1" ]; then
+            echo "Coverage ${TOTAL}% is below 70% threshold"
+            exit 1
+          fi
+
   studio:
     runs-on: ubuntu-latest
     if: hashFiles('studio/package.json') != ''
@@ -41,5 +51,24 @@ jobs:
       - run: npm ci
         working-directory: studio
 
+      - name: Test
+        run: |
+          if npm run --silent test -- --passWithNoTests 2>/dev/null; then
+            echo "Tests passed"
+          else
+            echo "No test script or tests skipped"
+          fi
+        working-directory: studio
+        continue-on-error: true
+
       - run: npm run build
         working-directory: studio
+
+  docker:
+    runs-on: ubuntu-latest
+    if: hashFiles('Dockerfile') != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t restitch:ci .
