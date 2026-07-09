@@ -1,0 +1,13 @@
+{
+  "name": "timeout - required step timeout returns 504",
+  "in": {
+    "method": "GET",
+    "path": "/timeout",
+    "headers": {}
+  },
+  "out": {
+    "status": 504,
+    "headers": {},
+    "body_contains": ["upstream timeout", "slow"]
+  }
+}

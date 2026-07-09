@@ -1,0 +1,13 @@
+{
+  "name": "path parameters - id passed through to upstream",
+  "in": {
+    "method": "GET",
+    "path": "/api/users/99",
+    "headers": {}
+  },
+  "out": {
+    "status": 200,
+    "headers": {},
+    "body_contains": ["user-99"]
+  }
+}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/composition"
+	"github.com/restitch/restitch-gateway/internal/inbound"
 	"github.com/restitch/restitch-gateway/internal/server"
 )
 
@@ -36,6 +37,7 @@ type UpstreamSpec struct {
 type Config struct {
 	YAML      string
 	Upstreams map[string]UpstreamSpec
+	APIKeys   []string // if set, enables inbound API key auth
 }
 
 // Env provides access to the running gateway for tests.
@@ -111,7 +113,18 @@ func Run(t *testing.T, cfg Config, fn func(t *testing.T, env *Env)) {
 		t.Fatalf("CompileConfig: %v", err)
 	}
 
-	handler := composition.NewHandler(compiled, nil)
+	var authenticator *inbound.Authenticator
+	if len(cfg.APIKeys) > 0 {
+		var authErr error
+		authenticator, authErr = inbound.New(context.Background(), inbound.InboundAuthConfig{
+			APIKeys: cfg.APIKeys,
+		})
+		if authErr != nil {
+			t.Fatalf("inbound auth: %v", authErr)
+		}
+	}
+
+	handler := composition.NewHandler(compiled, authenticator)
 
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)

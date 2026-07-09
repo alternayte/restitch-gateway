@@ -1,0 +1,13 @@
+{
+  "name": "not found - unknown route",
+  "in": {
+    "method": "GET",
+    "path": "/nonexistent",
+    "headers": {}
+  },
+  "out": {
+    "status": 404,
+    "headers": {},
+    "body_contains": []
+  }
+}

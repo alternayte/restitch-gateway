@@ -1,0 +1,59 @@
+upstreams:
+  mock:
+    url: "${MOCK_URL}"
+    timeout: 5s
+  dead:
+    url: "http://127.0.0.1:1"
+    timeout: 1s
+
+compositions:
+  user:
+    path: "/api/users/{id}"
+    method: GET
+    steps:
+      - name: user
+        upstream: mock
+        path: "/users/{{ req.params.id }}"
+    response:
+      status: 200
+      body:
+        user: "{{ steps.user.body }}"
+
+  partial:
+    path: "/partial"
+    method: GET
+    steps:
+      - name: main
+        upstream: mock
+        path: "/users/1"
+      - name: failing
+        upstream: dead
+        path: "/unreachable"
+        optional: true
+    response:
+      body:
+        main: "{{ steps.main.body }}"
+        extra: "{{ steps.failing.body }}"
+
+  timeout:
+    path: "/timeout"
+    method: GET
+    steps:
+      - name: slow
+        upstream: mock
+        path: "/slow?ms=5000"
+        timeout: 50ms
+    response:
+      body:
+        result: "{{ steps.slow.body }}"
+
+  echo:
+    path: "/echo"
+    method: GET
+    steps:
+      - name: e
+        upstream: mock
+        path: "/echo"
+    response:
+      body:
+        result: "{{ steps.e.body }}"

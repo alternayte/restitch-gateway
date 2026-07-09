@@ -1,0 +1,27 @@
+upstreams:
+  svc:
+    url: "http://localhost:9999"
+compositions:
+  test:
+    path: /test
+    steps:
+      - name: fetch
+        upstream: svc
+        path: /fetch
+      - name: enrich
+        upstream: svc
+        path: "/enrich/{{ steps.fetch.body.id }}"
+      - name: validate
+        upstream: svc
+        path: /validate
+      - name: merge
+        upstream: svc
+        path: /merge
+        depends_on: [enrich, validate]
+      - name: notify
+        upstream: svc
+        path: "/notify/{{ steps.merge.body.id }}"
+    response:
+      status: 200
+      body:
+        result: "{{ steps.notify.body }}"

@@ -6,8 +6,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestE2E_HappyPath(t *testing.T) {
@@ -333,6 +335,107 @@ compositions:
 	})
 }
 
+func TestE2E_CacheHit(t *testing.T) {
+	Run(t, Config{
+		YAML: `
+upstreams:
+  mock:
+    url: "@@UPSTREAM_mock@@"
+compositions:
+  cached:
+    path: /cached
+    steps:
+      - name: data
+        upstream: mock
+        path: /data
+        cache:
+          ttl: 10s
+    response:
+      status: 200
+      body:
+        result: "{{ steps.data.body }}"
+`,
+		Upstreams: map[string]UpstreamSpec{
+			"mock": {Script: map[string]ScriptedResponse{
+				"GET /data": {Body: `{"value":"cached"}`},
+			}},
+		},
+	}, func(t *testing.T, env *Env) {
+		resp1, err := env.Client.Get(env.GatewayURL + "/cached")
+		if err != nil {
+			t.Fatalf("first request: %v", err)
+		}
+		resp1.Body.Close()
+		if resp1.StatusCode != 200 {
+			t.Fatalf("first request status %d", resp1.StatusCode)
+		}
+
+		time.Sleep(10 * time.Millisecond)
+
+		resp2, err := env.Client.Get(env.GatewayURL + "/cached")
+		if err != nil {
+			t.Fatalf("second request: %v", err)
+		}
+		resp2.Body.Close()
+		if resp2.StatusCode != 200 {
+			t.Fatalf("second request status %d", resp2.StatusCode)
+		}
+
+		if hits := env.Hits("mock"); hits != 1 {
+			t.Errorf("expected 1 upstream hit (cached), got %d", hits)
+		}
+	})
+}
+
+func TestE2E_InboundAPIKey(t *testing.T) {
+	Run(t, Config{
+		YAML: `
+upstreams:
+  mock:
+    url: "@@UPSTREAM_mock@@"
+compositions:
+  protected:
+    path: /protected
+    steps:
+      - name: data
+        upstream: mock
+        path: /data
+    response:
+      status: 200
+      body:
+        result: "{{ steps.data.body }}"
+`,
+		Upstreams: map[string]UpstreamSpec{
+			"mock": {Script: map[string]ScriptedResponse{
+				"GET /data": {Body: `{"ok":true}`},
+			}},
+		},
+		APIKeys: []string{"test-key-42"},
+	}, func(t *testing.T, env *Env) {
+		// Without key → 401
+		resp1, err := env.Client.Get(env.GatewayURL + "/protected")
+		if err != nil {
+			t.Fatalf("request without key: %v", err)
+		}
+		resp1.Body.Close()
+		if resp1.StatusCode != 401 {
+			t.Errorf("without key: expected 401, got %d", resp1.StatusCode)
+		}
+
+		// With key → 200
+		req, _ := http.NewRequest("GET", env.GatewayURL+"/protected", nil)
+		req.Header.Set("X-API-Key", "test-key-42")
+		resp2, err := env.Client.Do(req)
+		if err != nil {
+			t.Fatalf("request with key: %v", err)
+		}
+		resp2.Body.Close()
+		if resp2.StatusCode != 200 {
+			t.Errorf("with key: expected 200, got %d", resp2.StatusCode)
+		}
+	})
+}
+
 func TestE2E_ResponseSizeCap(t *testing.T) {
 	bigBody := `{"data":"` + strings.Repeat("x", 200) + `"}`
 	Run(t, Config{
@@ -370,4 +473,91 @@ compositions:
 			t.Fatalf("expected 502 for oversized response, got %d: %s", resp.StatusCode, body)
 		}
 	})
+}
+
+func TestE2E_AuthScoping(t *testing.T) {
+	var ptHeaders, noauthHeaders http.Header
+	var ptMu, noauthMu sync.Mutex
+
+	Run(t, Config{
+		YAML: `
+upstreams:
+  passthrough-svc:
+    url: "@@UPSTREAM_passthrough-svc@@"
+    auth:
+      passthrough: {}
+  noauth-svc:
+    url: "@@UPSTREAM_noauth-svc@@"
+compositions:
+  scoped:
+    path: /scoped
+    steps:
+      - name: pt
+        upstream: passthrough-svc
+        path: /data
+      - name: na
+        upstream: noauth-svc
+        path: /data
+    response:
+      status: 200
+      body:
+        pt: "{{ steps.pt.body }}"
+        na: "{{ steps.na.body }}"
+`,
+		Upstreams: map[string]UpstreamSpec{
+			"passthrough-svc": {Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ptMu.Lock()
+				ptHeaders = r.Header.Clone()
+				ptMu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"from":"pt"}`))
+			})},
+			"noauth-svc": {Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				noauthMu.Lock()
+				noauthHeaders = r.Header.Clone()
+				noauthMu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"from":"na"}`))
+			})},
+		},
+	}, func(t *testing.T, env *Env) {
+		req, _ := http.NewRequest("GET", env.GatewayURL+"/scoped", nil)
+		req.Header.Set("Authorization", "Bearer SECRET_TOKEN")
+		resp, err := env.Client.Do(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		ptMu.Lock()
+		ptAuth := ptHeaders.Get("Authorization")
+		ptMu.Unlock()
+
+		noauthMu.Lock()
+		naAuth := noauthHeaders.Get("Authorization")
+		noauthMu.Unlock()
+
+		if ptAuth != "Bearer SECRET_TOKEN" {
+			t.Errorf("passthrough upstream should receive Authorization header, got %q", ptAuth)
+		}
+		if naAuth != "" {
+			t.Errorf("no-auth upstream should NOT receive Authorization header, got %q", naAuth)
+		}
+	})
+}
+
+func TestE2E_HotReload(t *testing.T) {
+	// Hot reload requires the admin server and pipeline swap infrastructure,
+	// which the current testenv does not wire up. The admin server, pipeline
+	// swap, and SIGHUP/fsnotify reload are tested separately in:
+	// - cmd/restitch/ (TestSwapper, TestReload_BadConfig)
+	// - internal/admin/ (admin_test.go)
+	// Wiring a full admin server into testenv would require significant
+	// additional plumbing. Skipping until testenv supports it.
+	t.Skip("testenv does not wire admin server; reload tested in cmd/restitch/ and internal/admin/")
 }
