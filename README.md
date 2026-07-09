@@ -135,7 +135,7 @@ Expressions use [Expr](https://expr-lang.org/) syntax inside `{{ }}` delimiters.
 | `steps.<name>.body` | any | Parsed JSON body |
 | `steps.<name>` | nil | When step failed or was skipped |
 
-```yaml
+```yaml (fragment)
 # Path escaping is automatic
 path: "/users/{{ req.params.id }}"
 

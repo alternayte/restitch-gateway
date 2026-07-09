@@ -1976,7 +1976,201 @@ Expected end state: every command above passes exactly as described. If any
 deviates, the corresponding milestone's gate has regressed — fix before
 declaring completion.
 
+---
 
+# Addendum: Production Readiness Audit (2026-07-09)
 
+Conducted after completing M1–M15 + Studio Observability upgrade. Findings
+organized into: plan-vs-codebase drift, critical production gaps, competitive
+feature gaps, and proposed new milestones.
 
+## A1. Plan-vs-Codebase Drift
+
+Items implemented but not reflected in PLAN.md sections 2.2, 2.3, or 3.3.
+These are documentation-only fixes to keep the plan as single source of truth.
+
+| # | Drift | Where to fix |
+|---|-------|-------------|
+| A1.1 | `admin.storage` config (`type`, `url`, `auth_token`, `retention`) exists in code but not in §2.3 config schema | Add to §2.3 under `admin:` |
+| A1.2 | `modernc.org/sqlite` dep added (SQLite storage backend) — not in §3.3 approved deps | Add to §3.3 Go deps |
+| A1.3 | `recharts` npm dep added (dashboard charts) — not in §3.3 approved deps | Add to §3.3 npm deps |
+| A1.4 | Three admin API endpoints added (`/stats/timeseries`, `/stats/steps`, `/requests/{id}`) — not in T8.3 | Add to T8.3 endpoint table |
+| A1.5 | `internal/reqlog` package not in §2.2 target package map | Add to §2.2 |
+| A1.6 | Studio Metrics tab, 7 chart components, 3 waterfall components, 1 filter component — not in T13.3–T13.5 | Add to M13 or create M13b |
+| A1.7 | `Pipeline` remains in `cmd/restitch/pipeline.go` — T14.1 says move to `internal/server/` | Update T14.1 or move the file |
+| A1.8 | E2E-10 (admin integration) replaced by ResponseSizeCap — undocumented substitution | Document in T14.1 |
+| A1.9 | CI has no `e2e` job (T14.2 calls for one) | Add to CI or update T14.2 |
+| A1.10 | CI studio test uses `continue-on-error: true` — test failures silently ignored | Remove `continue-on-error` |
+
+## A2. Critical Production Gaps
+
+Issues that must be fixed before any production deployment.
+
+### A2.1 Admin server missing HTTP timeouts
+
+`internal/admin/server.go` creates `http.Server` without `ReadTimeout`,
+`WriteTimeout`, `ReadHeaderTimeout`, or `IdleTimeout`. Vulnerable to
+slowloris attacks and connection exhaustion. The data-plane server sets
+these correctly (30s/30s/120s).
+
+**Fix:** Add to `New()`:
+```go
+s.httpServer = &http.Server{
+    Addr:              fmt.Sprintf(":%d", cfg.Port),
+    Handler:           corsMiddleware(mux),
+    ReadTimeout:       30 * time.Second,
+    WriteTimeout:      30 * time.Second,
+    ReadHeaderTimeout: 10 * time.Second,
+    IdleTimeout:       120 * time.Second,
+}
+```
+
+### A2.2 Main gateway missing ReadHeaderTimeout
+
+`internal/server/server.go` sets ReadTimeout and WriteTimeout but not
+`ReadHeaderTimeout`. Without it, a client can hold connections indefinitely
+by sending headers slowly. Known Go security concern (gosec G112).
+
+**Fix:** Add `ReadHeaderTimeout: 10 * time.Second` to both httpServer and
+httpsServer in `internal/server/server.go`.
+
+### A2.3 Admin CORS allows all origins
+
+`Access-Control-Allow-Origin: *` on the admin API means any website can
+call `POST /admin/api/reload` via a browser. The API key in `X-Admin-Key`
+is explicitly allowed in `Access-Control-Allow-Headers`, so the preflight
+check doesn't protect it.
+
+**Fix:** When `api_key` is set, restrict CORS to the Studio origin only
+(or make CORS origins configurable). When no key is set (dev mode), `*`
+is acceptable.
+
+### A2.4 SQL QueryRequests fetches entire table
+
+`internal/admin/sql_storage.go` `QueryRequests` runs `SELECT data FROM
+request_log ORDER BY timestamp DESC` with no `LIMIT` clause, then filters
+in Go. As the table grows, this is a full table scan loading all data into
+memory.
+
+**Fix:** Push `LIMIT`, `composition`, and `timestamp` filters down to SQL
+WHERE clauses. Filter `status` and `duration` in Go only (they're in the
+JSON blob).
+
+## A3. Important Production Gaps
+
+Should fix before v1 — operational risks under load or during incidents.
+
+| # | Gap | Severity | Fix |
+|---|-----|----------|-----|
+| A3.1 | Shutdown does not flush accumulator — up to 60s of metrics lost on restart | Important | Call `acc.Flush()` + write buckets before `store.Close()` in shutdown path |
+| A3.2 | No upstream URL validation at config time — empty/malformed URLs fail only at request time | Important | Add `url.Parse()` check in `validateAndApplyDefaults()` |
+| A3.3 | `AllowUndefinedVariables()` in expression engine — typos like `steps.usre.body` compile silently, return nil at runtime | Important | Remove the flag (breaking change for existing configs with intentionally undefined vars) or add a strict-mode config option |
+| A3.4 | `handleValidate` uses `r.Body.Read(buf[:])` once — may get partial reads on large bodies, error discarded | Important | Use `io.ReadAll(io.LimitReader(r.Body, 1<<20))` |
+| A3.5 | No rate limiting on admin API — `POST /admin/api/reload` can be hammered causing resource exhaustion | Important | Add simple token-bucket limiter on mutation endpoints |
+| A3.6 | `MultiRecorder.Record` uses `context.Background()` for storage writes — not cancellable during shutdown | Important | Use a context with timeout (e.g. 5s) |
+| A3.7 | Accumulator latency slices unbounded between 60s flushes — 100k req/min = 100k float64s per composition in memory | Important | Cap at e.g. 10k samples with reservoir sampling, or flush more frequently under load |
+| A3.8 | `InsecureSkipVerify` configurable with no warning log | Important | Add `slog.Warn` when TLS verification is disabled for an upstream |
+| A3.9 | No `admin.storage` validation in `gwconfig.Validate()` — invalid storage type/URL passes silently | Important | Add validation for storage config fields |
+| A3.10 | No frontend tests for any chart, waterfall, filter, or page components (0/17 new components tested) | Important | Add at minimum smoke-render tests for key components |
+
+## A4. Competitive Feature Gaps
+
+Features that production API gateways (KrakenD, Tyk, Kong, APISIX) offer
+that Restitch does not. Ordered by user-impact.
+
+Sources: [KrakenD](https://www.krakend.io/), [Tyk](https://tyk.io/),
+[API Gateway Comparison](https://www.moesif.com/blog/technical/api-gateways/How-to-Choose-The-Right-API-Gateway-For-Your-Platform-Comparison-Of-Kong-Tyk-Apigee-And-Alternatives/),
+[Open Source Gateways 2026](https://daily.dev/blog/top-6-open-source-api-gateway-frameworks/),
+[APISIX Comparison](https://api7.ai/learning-center/api-gateway-guide/api-gateway-comparison-apisix-kong-traefik-krakend-tyk)
+
+### Tier 1 — Expected by users (competitive table stakes)
+
+| Feature | KrakenD | Tyk | Kong | Restitch | Priority |
+|---------|---------|-----|------|----------|----------|
+| **Rate limiting** (per-client, per-endpoint) | Token bucket, multi-layer | Built-in, per-key/per-endpoint | Plugin (rate-limiting) | Missing | High |
+| **Request/response payload size limits** | Configurable per-endpoint | Configurable | Plugin | Hard-coded 1MiB, not configurable | High |
+| **Request schema validation** (JSON Schema) | Built-in | Built-in | Plugin | Missing | Medium |
+| **OpenTelemetry / distributed tracing** | Plugin | Built-in | Plugin | Header propagation only, no span generation | Medium |
+| **Response transformation** (field filtering, renaming) | Built-in (flatmap, allow/deny lists) | Built-in | Plugin | Template-only (powerful but no declarative filtering) | Low |
+| **IP allow/deny lists** | Built-in | Built-in | Plugin | Missing | Medium |
+
+### Tier 2 — Differentiators (not expected but valuable)
+
+| Feature | Who has it | Restitch | Notes |
+|---------|-----------|----------|-------|
+| **GraphQL composition** | Tyk (Universal Data Graph), Apollo | N/A | REST-only is Restitch's niche — not a gap |
+| **gRPC support** | Kong, Tyk, APISIX | N/A | REST-only scope |
+| **WebSocket proxying** | Kong, APISIX | N/A | Not in scope |
+| **Plugin/WASM extensibility** | KrakenD, Kong, APISIX | Deferred (M16) | Already noted |
+| **Developer portal** | Tyk, Kong, Apigee | Missing | Enterprise feature — v2+ |
+| **Canary/traffic splitting** | Kong, Tyk | Missing | v2+ |
+| **Request body passthrough** (non-JSON) | Most | Missing | Only JSON POST bodies parsed |
+
+### Tier 3 — Restitch competitive advantages
+
+| Feature | vs. Competition |
+|---------|----------------|
+| **Declarative DAG composition** | Unique — KrakenD aggregates but doesn't support multi-wave DAGs with dependency inference |
+| **Expression-based wiring** | More flexible than KrakenD's flatmap; comparable to Tyk's Universal Data Graph but for REST |
+| **Studio UI with execution overlay** | No competitor offers a built-in DAG visualization with live trace overlay |
+| **Partial responses** | Built-in with `optional` steps — most gateways fail the whole request |
+| **Config-as-code with hot reload** | On par with KrakenD; better than Kong (requires DB) |
+
+## A5. Proposed New Milestones
+
+### M16 — Production Hardening (pre-v1 release)
+
+Priority: **Must complete before any production deployment.**
+
+| Task | Description | Files |
+|------|-------------|-------|
+| T16.1 | Add HTTP timeouts to admin server (A2.1) | `internal/admin/server.go` |
+| T16.2 | Add `ReadHeaderTimeout` to gateway server (A2.2) | `internal/server/server.go` |
+| T16.3 | Restrict admin CORS when API key is set (A2.3) | `internal/admin/server.go` |
+| T16.4 | Push SQL filters to QueryRequests query (A2.4) | `internal/admin/sql_storage.go` |
+| T16.5 | Flush accumulator on shutdown (A3.1) | `cmd/restitch/run.go` |
+| T16.6 | Validate upstream URLs at config time (A3.2) | `internal/composition/parser.go` |
+| T16.7 | Fix `handleValidate` body read (A3.4) | `internal/admin/server.go` |
+| T16.8 | Validate `admin.storage` config (A3.9) | `internal/gwconfig/config.go` |
+| T16.9 | Warn when `InsecureSkipVerify` is enabled (A3.8) | `internal/upstream/client.go` |
+| T16.10 | Update PLAN.md for drift items (A1.1–A1.10) | `PLAN.md` |
+
+Verification: `go build ./... && go vet ./... && go test ./... -count=1`
+green; admin server withstands `slowhttptest` without leaking connections.
+
+### M17 — Rate Limiting & Request Validation
+
+Priority: **High — competitive table stakes.**
+
+| Task | Description |
+|------|-------------|
+| T17.1 | Per-composition token-bucket rate limiter with configurable burst, rate, and key extraction (client IP / API key / header). Config under `compositions.*.rate_limit: { requests_per_second: 100, burst: 10, key: "header:X-Client-ID" }`. Use `golang.org/x/time/rate`. |
+| T17.2 | Global gateway rate limiter (admin config). Reject with 429 + `Retry-After` header. |
+| T17.3 | Configurable request body size limit per composition (`max_request_bytes`, default 1MiB). Return 413 when exceeded. |
+| T17.4 | Optional JSON Schema validation for request body (`request_schema` field on composition). Validate before executing steps. Reject with 400 + structured error. |
+| T17.5 | Admin API rate limiter — simple per-IP limit on mutation endpoints (`/reload`, `/validate`). |
+
+### M18 — Observability: OpenTelemetry Tracing
+
+Priority: **Medium — important for production debugging at scale.**
+
+| Task | Description |
+|------|-------------|
+| T18.1 | Add `go.opentelemetry.io/otel` SDK. Create/continue server spans at the gateway for each composition request. |
+| T18.2 | Create child spans per step execution. Attach step name, upstream, wave, status as span attributes. |
+| T18.3 | Propagate `traceparent`/`tracestate` to upstream requests (already partially done — formalize). |
+| T18.4 | Configure exporter via env vars (`OTEL_EXPORTER_OTLP_ENDPOINT`, standard OTel env config). |
+| T18.5 | Add trace ID to Studio request records. Show trace ID in the request explorer with a link to external trace viewer. |
+
+### M19 — CI & Test Hardening
+
+Priority: **Medium — prevents regressions.**
+
+| Task | Description |
+|------|-------------|
+| T19.1 | Add `e2e` CI job (T14.2 — currently missing). Run binary specs + E2E Go tests. |
+| T19.2 | Remove `continue-on-error: true` from studio CI test step. |
+| T19.3 | Add smoke-render tests for key Studio components (Dashboard, Requests, CompositionDetail). |
+| T19.4 | Add E2E test for admin integration path: data-plane request → ring buffer → admin API response → time-series storage. |
+| T19.5 | Add expression-typo detection: config warning when a `{{ steps.X.body }}` reference doesn't match any step name. |
 
