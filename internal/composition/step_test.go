@@ -54,7 +54,7 @@ func TestExecuteStep(t *testing.T) {
 			BaseURL: server.URL,
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(httptest.NewRequest("GET", "/", nil), nil, nil), nil)
 
 		result, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
@@ -89,7 +89,7 @@ func TestExecuteStep(t *testing.T) {
 		defer server.Close()
 
 		incomingReq := httptest.NewRequest("GET", "/?user_id=456", nil)
-		env := buildRequestEnv(incomingReq, nil, nil, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(incomingReq, nil, nil), nil)
 
 		pathTmpl, err := CompileTemplate("/users/{{ req.query.user_id }}", env)
 		if err != nil {
@@ -142,7 +142,7 @@ func TestExecuteStep(t *testing.T) {
 		incomingReq.Header.Set("X-Correlation-ID", "corr-456")
 		incomingReq.Header.Set("traceparent", "00-trace-123")
 
-		env := buildRequestEnv(incomingReq, nil, nil, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(incomingReq, nil, nil), nil)
 
 		step := &CompiledStep{
 			Step: &Step{
@@ -180,7 +180,7 @@ func TestExecuteStep(t *testing.T) {
 		defer server.Close()
 
 		incomingReq := httptest.NewRequest("GET", "/", nil)
-		env := buildRequestEnv(incomingReq, nil, nil, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(incomingReq, nil, nil), nil)
 
 		step := &CompiledStep{
 			Step: &Step{
@@ -224,7 +224,7 @@ func TestExecuteStep(t *testing.T) {
 			BaseURL: server.URL,
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(httptest.NewRequest("GET", "/", nil), nil, nil), nil)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -262,7 +262,7 @@ func TestExecuteStep(t *testing.T) {
 			BaseURL: server.URL,
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(httptest.NewRequest("GET", "/", nil), nil, nil), nil)
 
 		result, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
@@ -303,7 +303,7 @@ func TestExecuteStep(t *testing.T) {
 			Client:           http.DefaultClient,
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(httptest.NewRequest("GET", "/", nil), nil, nil), nil)
 		_, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err == nil {
 			t.Fatal("expected error for oversized response")
@@ -335,7 +335,7 @@ func TestExecuteStep(t *testing.T) {
 			Client:           http.DefaultClient,
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil, nil, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(httptest.NewRequest("GET", "/", nil), nil, nil), nil)
 		_, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err == nil {
 			t.Fatal("expected error for oversized response")
@@ -349,7 +349,7 @@ func TestBuildRequestEnv(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer token")
 		req.Header.Set("X-Request-ID", "req-123")
 
-		env := buildRequestEnv(req, nil, nil, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(req, nil, nil), nil)
 
 		reqData, ok := env["req"].(map[string]any)
 		if !ok {
@@ -404,7 +404,7 @@ func TestBuildRequestEnv(t *testing.T) {
 			},
 		}
 
-		env := buildRequestEnv(req, nil, nil, stepResults)
+		env := buildRequestEnv(context.Background(), NewRequestData(req, nil, nil), stepResults)
 
 		steps, ok := env["steps"].(map[string]any)
 		if !ok {

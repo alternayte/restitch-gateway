@@ -62,8 +62,8 @@ compositions:
 		executor := NewExecutor(config)
 
 		// Execute composition
-		req := httptest.NewRequest("GET", "/test", nil)
-		result, err := executor.Execute(context.Background(), "test", req, nil, nil)
+		rd := NewRequestData(httptest.NewRequest("GET", "/test", nil), nil, nil)
+		result, err := executor.Execute(context.Background(), "test", rd)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -138,8 +138,8 @@ compositions:
 		executor := NewExecutor(config)
 
 		// Execute composition
-		req := httptest.NewRequest("GET", "/test", nil)
-		result, err := executor.Execute(context.Background(), "test", req, nil, nil)
+		rd := NewRequestData(httptest.NewRequest("GET", "/test", nil), nil, nil)
+		result, err := executor.Execute(context.Background(), "test", rd)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -207,8 +207,8 @@ compositions:
 		// Execute composition - should complete with both results
 		// Per CONTEXT.md: "Upstream error passthrough" means we return the 500 status
 		// in the result, but the step itself completed successfully
-		req := httptest.NewRequest("GET", "/test", nil)
-		result, err := executor.Execute(context.Background(), "test", req, nil, nil)
+		rd := NewRequestData(httptest.NewRequest("GET", "/test", nil), nil, nil)
+		result, err := executor.Execute(context.Background(), "test", rd)
 		if err != nil {
 			t.Fatalf("Execute should not fail on upstream 500: %v", err)
 		}
@@ -281,8 +281,8 @@ compositions:
 		executor := NewExecutor(config)
 
 		// Execute composition
-		req := httptest.NewRequest("GET", "/test", nil)
-		result, err := executor.Execute(context.Background(), "test", req, nil, nil)
+		rd := NewRequestData(httptest.NewRequest("GET", "/test", nil), nil, nil)
+		result, err := executor.Execute(context.Background(), "test", rd)
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -331,8 +331,8 @@ compositions:
 		cancel() // Cancel immediately
 
 		// Execute composition - should fail with context error
-		req := httptest.NewRequest("GET", "/test", nil)
-		_, err := executor.Execute(ctx, "test", req, nil, nil)
+		rd := NewRequestData(httptest.NewRequest("GET", "/test", nil), nil, nil)
+		_, err := executor.Execute(ctx, "test", rd)
 		if err == nil {
 			t.Fatal("Expected error from cancelled context")
 		}
@@ -354,8 +354,8 @@ compositions:
 
 		executor := NewExecutor(config)
 
-		req := httptest.NewRequest("GET", "/test", nil)
-		_, err := executor.Execute(context.Background(), "nonexistent", req, nil, nil)
+		rd := NewRequestData(httptest.NewRequest("GET", "/test", nil), nil, nil)
+		_, err := executor.Execute(context.Background(), "nonexistent", rd)
 		if err == nil {
 			t.Fatal("Expected error for nonexistent composition")
 		}
@@ -412,8 +412,8 @@ compositions:
 	}
 
 	executor := NewExecutor(config)
-	req := httptest.NewRequest("GET", "/test", nil)
-	result, err := executor.Execute(context.Background(), "test", req, nil, nil)
+	rd := NewRequestData(httptest.NewRequest("GET", "/test", nil), nil, nil)
+	result, err := executor.Execute(context.Background(), "test", rd)
 	if err != nil {
 		t.Fatalf("Execute should not return error (both steps optional): %v", err)
 	}

@@ -1,7 +1,8 @@
 package composition
 
 import (
-	"net/http"
+	"context"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -121,9 +122,10 @@ func TestBuildResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest("GET", "http://example.com/test", nil)
+			req := httptest.NewRequest("GET", "http://example.com/test", nil)
+			rd := NewRequestData(req, nil, nil)
 
-			resp, err := BuildResponse(tt.template, tt.stepResults, req, nil, nil)
+			resp, err := BuildResponse(context.Background(), tt.template, tt.stepResults, rd, nil, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("BuildResponse() error = %v, wantErr %v", err, tt.wantErr)
 				return
