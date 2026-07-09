@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"sort"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (registers as "sqlite")
@@ -117,8 +118,30 @@ func (s *SQLStorage) QueryRequests(ctx context.Context, opts RequestQuery) ([]re
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT data FROM request_log ORDER BY timestamp DESC`)
+
+	query := `SELECT data FROM request_log`
+	var args []any
+	var conditions []string
+
+	if opts.Composition != "" {
+		conditions = append(conditions, `composition = ?`)
+		args = append(args, opts.Composition)
+	}
+
+	if len(conditions) > 0 {
+		query += ` WHERE ` + strings.Join(conditions, ` AND `)
+	}
+
+	// Fetch more than limit to allow for Go-side filtering on JSON fields.
+	// Cap the SQL scan at 10x limit to bound memory usage.
+	sqlLimit := limit * 10
+	if sqlLimit > 10000 {
+		sqlLimit = 10000
+	}
+	query += ` ORDER BY timestamp DESC LIMIT ?`
+	args = append(args, sqlLimit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -132,9 +155,6 @@ func (s *SQLStorage) QueryRequests(ctx context.Context, opts RequestQuery) ([]re
 		}
 		var r reqlog.Record
 		if err := json.Unmarshal([]byte(data), &r); err != nil {
-			continue
-		}
-		if opts.Composition != "" && r.Composition != opts.Composition {
 			continue
 		}
 		if opts.StatusMin > 0 && r.Status < opts.StatusMin {

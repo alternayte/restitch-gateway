@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"time"
 
 	"github.com/restitch/restitch-gateway/internal/reqlog"
 )
@@ -33,6 +34,8 @@ func (mr *MultiRecorder) Record(rec reqlog.Record) {
 	}
 
 	if mr.Storage != nil {
-		mr.Storage.RecordRequest(context.Background(), rec)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		mr.Storage.RecordRequest(ctx, rec)
 	}
 }

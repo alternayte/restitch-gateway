@@ -200,6 +200,61 @@ A cache hit skips coalescing and upstream execution entirely.
 
 ---
 
+## Rate Limiting
+
+Token-bucket rate limiting at two levels: per-composition and global gateway.
+
+### Per-Composition
+
+```yaml
+compositions:
+  user-api:
+    path: "/api/users/{id}"
+    method: GET
+    rate_limit:
+      requests_per_second: 100
+      burst: 10
+      key: "ip"               # ip | header:<name> | api-key
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `requests_per_second` | float | — | Sustained request rate |
+| `burst` | int | — | Maximum burst size above the sustained rate |
+| `key` | string | `"ip"` | Rate limit key: `ip` (client IP), `header:<name>` (value of the named request header), or `api-key` (the `X-API-Key` value) |
+
+### Global Gateway
+
+Applied before composition dispatch. Configured under `server.rate_limit`
+with the same fields as above:
+
+```yaml
+server:
+  rate_limit:
+    requests_per_second: 1000
+    burst: 50
+    key: "ip"
+```
+
+When both global and per-composition limits are configured, a request must
+pass both.
+
+### Response
+
+Requests that exceed the rate limit receive:
+
+- HTTP **429 Too Many Requests**
+- `Retry-After: 1` header
+- Body: `{"error":"rate limit exceeded"}`
+
+### Admin API Rate Limiting
+
+Admin mutation endpoints (`POST /admin/api/reload`, `POST /admin/api/validate`)
+are rate-limited at 10 requests per second per IP with a burst of 5. This is
+always active and not configurable.
+
+---
+
 ## Configuration Examples
 
 ### Full resilience setup

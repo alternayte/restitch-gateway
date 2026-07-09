@@ -59,6 +59,10 @@ server:                          # all optional
   shutdown_timeout: 30s
   log_format: json               # json | text
   log_level: info                # debug | info | warn | error
+  rate_limit:                    # optional global rate limiter
+    requests_per_second: 1000
+    burst: 50
+    key: "ip"                    # ip | header:<name> | api-key
   auth:                          # inbound auth; omit = open
     api_keys: ["${GATEWAY_KEY}"]
     jwt:
@@ -95,6 +99,16 @@ compositions:
     path: "/api/users/{id}/dashboard"
     method: GET
     public: false                # true = skip inbound auth
+    rate_limit:                  # optional per-composition rate limiter
+      requests_per_second: 100
+      burst: 10
+      key: "ip"
+    max_request_bytes: 1048576   # request body size limit (default 1 MiB)
+    request_schema:              # optional JSON Schema for request body validation
+      type: object
+      properties:
+        name: { type: string }
+      required: [name]
     steps:
       - name: user
         upstream: users-api
@@ -192,6 +206,11 @@ Failed step references evaluate to `null` in templates (no 500).
 **Request Coalescing** (per-step, GET only):
 - `coalesce: true` — deduplicates concurrent identical requests via singleflight
 
+**Rate Limiting** (per-composition or global):
+- Token-bucket limiter keyed by IP, header, or API key
+- Per-composition `rate_limit` and global `server.rate_limit`
+- Exceeded requests receive 429 with `Retry-After` header
+
 ### Observability
 
 **Prometheus Metrics** (on admin port):
@@ -220,6 +239,10 @@ Failed step references evaluate to `null` in templates (no 500).
 | `GET /health` | Admin liveness |
 
 Protected by `admin.api_key` (via `X-Admin-Key` header) when configured.
+
+**Distributed Tracing**: OpenTelemetry support via OTLP HTTP exporter. Set
+`OTEL_EXPORTER_OTLP_ENDPOINT` to enable. Spans are created per composition
+and per step, and trace IDs are included in request records.
 
 **Structured Logging**: JSON by default, every line includes `request_id`
 from context. Use `-log-level debug` for step-level detail.

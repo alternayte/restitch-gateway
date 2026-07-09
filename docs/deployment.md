@@ -127,8 +127,13 @@ config file:
 | `RESTITCH_ADMIN_PORT` | `admin.port` | `9090` |
 | `RESTITCH_ADMIN_ENABLED` | `admin.enabled` | `true` |
 | `RESTITCH_ADMIN_API_KEY` | `admin.api_key` | (none) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector URL | (none) |
 
 Precedence: CLI flags > `RESTITCH_*` env > YAML file > defaults.
+
+`OTEL_EXPORTER_OTLP_ENDPOINT` is a standard OpenTelemetry variable, not a
+`RESTITCH_*` override. When set, the gateway exports traces via OTLP HTTP
+to the specified endpoint.
 
 ### Studio
 
@@ -210,6 +215,10 @@ admin:
   port: 9090
   api_key: "${ADMIN_KEY}"
 ```
+
+When `admin.api_key` is set, CORS is restricted to the requesting origin
+(the `Origin` header value) rather than `*`. This prevents open cross-origin
+access to the admin API in production.
 
 In production, do not expose the admin port externally. Use network policies
 or firewall rules to restrict access to internal traffic.

@@ -347,3 +347,53 @@ func TestServer_Compositions_NilDeps(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 }
+
+func TestServer_MutationRateLimit(t *testing.T) {
+	srv := New(Config{Port: 0}, testDeps())
+	h := srv.httpServer.Handler
+
+	// The mutation limiter is configured with burst=5, so the first 5
+	// requests should succeed. The 6th should be rate-limited.
+	for i := 0; i < 5; i++ {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/admin/api/reload", strings.NewReader(""))
+		req.RemoteAddr = "10.0.0.99:1234"
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request %d: expected 200, got %d", i+1, rec.Code)
+		}
+	}
+
+	// 6th request should be rate limited
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/admin/api/reload", strings.NewReader(""))
+	req.RemoteAddr = "10.0.0.99:1234"
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d", rec.Code)
+	}
+
+	var body map[string]string
+	json.NewDecoder(rec.Body).Decode(&body)
+	if body["error"] != "rate limit exceeded" {
+		t.Errorf("error = %q, want \"rate limit exceeded\"", body["error"])
+	}
+
+	// A different IP should still be allowed
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest("POST", "/admin/api/reload", strings.NewReader(""))
+	req2.RemoteAddr = "10.0.0.100:1234"
+	h.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("different IP: expected 200, got %d", rec2.Code)
+	}
+
+	// GET endpoints should not be rate limited even from the exhausted IP
+	rec3 := httptest.NewRecorder()
+	req3 := httptest.NewRequest("GET", "/admin/api/info", nil)
+	req3.RemoteAddr = "10.0.0.99:1234"
+	h.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusOK {
+		t.Fatalf("GET endpoint: expected 200, got %d", rec3.Code)
+	}
+}

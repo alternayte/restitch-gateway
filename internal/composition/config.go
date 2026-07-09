@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
+	"github.com/restitch/restitch-gateway/internal/ratelimit"
 )
 
 // Config represents the complete composition configuration loaded from YAML.
@@ -64,11 +65,14 @@ type CacheConfig struct {
 // Composition represents a multi-step API composition with a response template.
 // Compositions are matched to incoming requests by path and method.
 type Composition struct {
-	Path     string           `yaml:"path"`
-	Method   string           `yaml:"method"`
-	Public   bool             `yaml:"public"`
-	Steps    []Step           `yaml:"steps"`
-	Response ResponseTemplate `yaml:"response"`
+	Path             string            `yaml:"path"`
+	Method           string            `yaml:"method"`
+	Public           bool              `yaml:"public"`
+	Steps            []Step            `yaml:"steps"`
+	Response         ResponseTemplate  `yaml:"response"`
+	RateLimit        *ratelimit.Config `yaml:"rate_limit"`
+	MaxRequestBytes  int64             `yaml:"max_request_bytes"`
+	RequestSchema    map[string]any    `yaml:"request_schema"`
 }
 
 // Step represents a single upstream request in a composition.

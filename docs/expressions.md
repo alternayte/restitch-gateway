@@ -164,6 +164,12 @@ When a step fails or is skipped, its entry in `steps` is `nil`. The rules:
      points: "{{ steps.loyalty?.body?.points ?? 0 }}"
    ```
 
+## Unknown Step Name Warnings
+
+At config load time, the gateway warns if a template references an unknown
+step name (e.g., `steps.usre.body` when no step named `usre` exists). This
+helps catch typos before they cause nil results at runtime.
+
 ## Escaping
 
 - **Path escaping** — values interpolated into step `path` fields are

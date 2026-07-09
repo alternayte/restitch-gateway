@@ -14,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	upstreampkg "github.com/restitch/restitch-gateway/internal/upstream"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // StepResult holds the response from an upstream service.
@@ -98,6 +100,12 @@ func ExecuteStepWithTimeout(
 	}
 
 	propagateHeaders(req, env)
+
+	// Inject OTel trace context (traceparent/tracestate) from the current span.
+	// This replaces the manual traceparent copy from propagateHeaders when tracing
+	// is active. The traceparent entry in propagatedHeaders remains as a fallback
+	// for when tracing is disabled.
+	otel.GetTextMapPropagator().Inject(stepCtx, propagation.HeaderCarrier(req.Header))
 
 	for key, tmpl := range step.Headers {
 		val, err := tmpl.EvalString(env, EscapeNone)

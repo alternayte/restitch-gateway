@@ -1,7 +1,9 @@
 package composition
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -582,5 +584,49 @@ compositions:
 	_, exists := compiled.Upstreams["api"]
 	if !exists {
 		t.Fatal("upstream api not found in compiled config")
+	}
+}
+
+func TestCompileConfig_UnknownStepRefWarning(t *testing.T) {
+	// Capture slog output to verify warnings are logged.
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	yaml := `
+upstreams:
+  api:
+    url: "http://localhost:8080"
+
+compositions:
+  test:
+    path: "/test"
+    steps:
+      - name: user
+        upstream: api
+        path: "/users/1"
+    response:
+      status: 200
+      body:
+        data: "{{ steps.usre.body }}"
+`
+
+	cfg, err := ParseConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	// CompileConfig may return an error (from DAG validation),
+	// but the warning should still be logged before that.
+	_, _ = CompileConfig(context.Background(), cfg)
+
+	logged := buf.String()
+	if !strings.Contains(logged, "template references unknown step") {
+		t.Errorf("expected warning about unknown step reference, got: %s", logged)
+	}
+	if !strings.Contains(logged, "usre") {
+		t.Errorf("expected warning to mention 'usre', got: %s", logged)
 	}
 }

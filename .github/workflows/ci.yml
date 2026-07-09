@@ -52,14 +52,8 @@ jobs:
         working-directory: studio
 
       - name: Test
-        run: |
-          if npm run --silent test -- --passWithNoTests 2>/dev/null; then
-            echo "Tests passed"
-          else
-            echo "No test script or tests skipped"
-          fi
+        run: npm run test -- --passWithNoTests
         working-directory: studio
-        continue-on-error: true
 
       - run: npm run build
         working-directory: studio
@@ -72,3 +66,12 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t restitch:ci .
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -tags e2e ./tests/... -count=1 -v

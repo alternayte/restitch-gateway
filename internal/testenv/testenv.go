@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/restitch/restitch-gateway/internal/admin"
 	"github.com/restitch/restitch-gateway/internal/composition"
 	"github.com/restitch/restitch-gateway/internal/inbound"
 	"github.com/restitch/restitch-gateway/internal/server"
@@ -44,6 +45,7 @@ type Config struct {
 type Env struct {
 	GatewayURL string
 	Client     *http.Client
+	Requests   *admin.RingBuffer
 	hits       map[string]*atomic.Int64
 }
 
@@ -125,6 +127,14 @@ func Run(t *testing.T, cfg Config, fn func(t *testing.T, env *Env)) {
 	}
 
 	handler := composition.NewHandler(compiled, authenticator)
+
+	ring := admin.NewRingBuffer(100)
+	stats := admin.NewStats()
+	handler.SetRecorder(&admin.MultiRecorder{
+		Ring:  ring,
+		Stats: stats,
+	})
+	env.Requests = ring
 
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)

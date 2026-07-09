@@ -631,6 +631,235 @@ compositions:
 	}
 }
 
+func TestHandler_RateLimit_PerComposition(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer mockServer.Close()
+
+	configYAML := `
+upstreams:
+  mock:
+    url: ` + mockServer.URL + `
+
+compositions:
+  limited:
+    path: /limited
+    method: GET
+    rate_limit:
+      requests_per_second: 1
+      burst: 2
+      key: ip
+    steps:
+      - name: s
+        upstream: mock
+        path: /ok
+    response:
+      status: 200
+      body:
+        data: "{{ steps.s.body }}"
+`
+
+	cfg, err := ParseConfig([]byte(configYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+
+	compiled, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig: %v", err)
+	}
+
+	handler := NewHandler(compiled, nil)
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+	router.Finalize()
+
+	// First two requests should succeed (burst=2)
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest("GET", "/limited", nil)
+		req.RemoteAddr = "10.0.0.1:1234"
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d: expected 200, got %d", i+1, w.Code)
+		}
+	}
+
+	// Third request should be rate limited
+	req := httptest.NewRequest("GET", "/limited", nil)
+	req.RemoteAddr = "10.0.0.1:1234"
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d", w.Code)
+	}
+	if w.Header().Get("Retry-After") != "1" {
+		t.Errorf("Retry-After = %q, want \"1\"", w.Header().Get("Retry-After"))
+	}
+}
+
+func TestHandler_MaxRequestBytes(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer mockServer.Close()
+
+	configYAML := `
+upstreams:
+  mock:
+    url: ` + mockServer.URL + `
+
+compositions:
+  tiny:
+    path: /tiny
+    method: POST
+    max_request_bytes: 16
+    steps:
+      - name: s
+        upstream: mock
+        path: /ok
+    response:
+      status: 200
+      body:
+        data: "{{ steps.s.body }}"
+`
+
+	cfg, err := ParseConfig([]byte(configYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+
+	compiled, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig: %v", err)
+	}
+
+	handler := NewHandler(compiled, nil)
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+	router.Finalize()
+
+	// Small body should succeed
+	small := strings.NewReader(`{"a":1}`)
+	req := httptest.NewRequest("POST", "/tiny", small)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("small body: expected 200, got %d; body: %s", w.Code, w.Body.String())
+	}
+
+	// Large body should get 413
+	large := strings.NewReader(`{"data":"` + strings.Repeat("x", 100) + `"}`)
+	req2 := httptest.NewRequest("POST", "/tiny", large)
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	router.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("large body: expected 413, got %d; body: %s", w2.Code, w2.Body.String())
+	}
+
+	var errBody map[string]string
+	json.NewDecoder(w2.Body).Decode(&errBody)
+	if errBody["error"] != "request body too large" {
+		t.Errorf("error = %q, want \"request body too large\"", errBody["error"])
+	}
+}
+
+func TestHandler_RequestSchemaValidation(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer mockServer.Close()
+
+	configYAML := `
+upstreams:
+  mock:
+    url: ` + mockServer.URL + `
+
+compositions:
+  validated:
+    path: /validated
+    method: POST
+    request_schema:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        age:
+          type: integer
+    steps:
+      - name: s
+        upstream: mock
+        path: /ok
+    response:
+      status: 200
+      body:
+        data: "{{ steps.s.body }}"
+`
+
+	cfg, err := ParseConfig([]byte(configYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+
+	compiled, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig: %v", err)
+	}
+
+	handler := NewHandler(compiled, nil)
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+	router.Finalize()
+
+	// Valid body
+	validBody := strings.NewReader(`{"name":"Alice","age":30}`)
+	req := httptest.NewRequest("POST", "/validated", validBody)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("valid body: expected 200, got %d; body: %s", w.Code, w.Body.String())
+	}
+
+	// Invalid body (missing required field)
+	invalidBody := strings.NewReader(`{"age":30}`)
+	req2 := httptest.NewRequest("POST", "/validated", invalidBody)
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	router.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusBadRequest {
+		t.Fatalf("invalid body: expected 400, got %d; body: %s", w2.Code, w2.Body.String())
+	}
+
+	var errResp map[string]any
+	json.NewDecoder(w2.Body).Decode(&errResp)
+	if errResp["error"] != "request validation failed" {
+		t.Errorf("error = %v, want \"request validation failed\"", errResp["error"])
+	}
+	details, ok := errResp["details"].([]any)
+	if !ok || len(details) == 0 {
+		t.Errorf("expected details array with entries, got %v", errResp["details"])
+	}
+
+	// Wrong type body (age is string instead of integer)
+	wrongType := strings.NewReader(`{"name":"Alice","age":"not a number"}`)
+	req3 := httptest.NewRequest("POST", "/validated", wrongType)
+	req3.Header.Set("Content-Type", "application/json")
+	w3 := httptest.NewRecorder()
+	router.ServeHTTP(w3, req3)
+	if w3.Code != http.StatusBadRequest {
+		t.Fatalf("wrong type: expected 400, got %d; body: %s", w3.Code, w3.Body.String())
+	}
+}
+
 func TestHandler_ErrorTaxonomy_NoInternalLeak(t *testing.T) {
 	configYAML := `
 upstreams:

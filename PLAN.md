@@ -4,6 +4,42 @@ This document is the single source of truth for taking Restitch from its current
 state (v1.0 MVP, audited 2026-07-08) to the complete, feature-finished product:
 a production-grade REST API composition gateway plus the Restitch Studio web UI.
 
+## 0.1 Completion Status (audited 2026-07-09)
+
+All milestones M1–M19 (excluding deferred WASM M16) have been
+implemented and verified against the codebase.
+
+| Milestone | Tasks | Status |
+|-----------|-------|--------|
+| M1 — Foundation, tooling, hygiene | T1.1–T1.6 | DONE |
+| M2 — Expression/template engine rewrite | T2.1–T2.4 | DONE |
+| M3 — Executor semantics, partial-response | T3.1–T3.4 | DONE |
+| M4 — Router replacement, path parameters | T4.1–T4.3 | DONE |
+| M5 — Upstream clients, auth, config | T5.1–T5.6 | DONE |
+| M6 — Resilience: retry, breaker, coalesce | T6.1–T6.3 | DONE |
+| M7 — Per-step response caching | T7.1 | DONE |
+| M8 — Observability: metrics, admin server | T8.1–T8.3 | DONE |
+| M9 — Inbound authentication | T9.1 | DONE |
+| M10 — Hot reload + pipeline swap | T10.1 | DONE |
+| M11 — CLI subcommands | T11.1–T11.3 | DONE |
+| M12 — Studio backend | T12.1 | DONE |
+| M13 — Studio frontend | T13.1–T13.8 | DONE |
+| M14 — E2E test harness, hardening | T14.1–T14.3 | DONE |
+| M15 — Docs, examples, packaging | T15.1–T15.4 | DONE |
+| M16 — WASM plugins | — | DEFERRED |
+| M16 — Production Hardening (addendum) | T16.1–T16.10 | DONE |
+| M17 — Rate Limiting & Validation | T17.1–T17.5 | DONE |
+| M18 — OpenTelemetry Tracing | T18.1–T18.5 | DONE |
+| M19 — CI & Test Hardening | T19.1–T19.5 | DONE |
+
+Known drift from plan (see Addendum A1): Pipeline not moved to
+`internal/server/` (A1.7), extra admin endpoints and deps not in
+original schema (A1.1–A1.6). These are documentation-only items.
+
+All critical production gaps (A2.1–A2.4) and important production
+gaps (A3.1, A3.2, A3.4, A3.6, A3.8, A3.9) fixed in M16. CI gaps
+(A1.9 e2e job, A1.10 continue-on-error) fixed in M19.
+
 ## 0. How to use this plan (read this first, executor)
 
 - You see ONLY this file and the code. Everything you need is inline. Do not
@@ -337,6 +373,9 @@ Failure semantics (fixes D1):
 |-----------|--------|------|
 | No matching route | 404 | `{"error":"not found"}` |
 | Method mismatch | 405 + `Allow` | ServeMux default |
+| Rate limit exceeded | 429 + `Retry-After: 1` | `{"error":"rate limit exceeded"}` |
+| Request body too large | 413 | `{"error":"request body too large"}` |
+| Request body fails JSON Schema | 400 | `{"error":"request validation failed","details":[...]}` |
 | Inbound auth missing/invalid | 401 + `WWW-Authenticate` | `{"error":"unauthorized"}` |
 | Passthrough upstream, client sent no `Authorization` | 401 + `WWW-Authenticate: Bearer` | `{"error":"authorization header required"}` |
 | Required step failed (network, 5xx after retries, breaker open, auth failure) | 502 | `{"error":"upstream error","step":"<name>"}` |
@@ -351,19 +390,23 @@ Full detail goes to logs only.
 
 Go: `github.com/prometheus/client_golang`, `github.com/sony/gobreaker/v2`,
 `github.com/fsnotify/fsnotify`, `github.com/golang-jwt/jwt/v5`,
-`github.com/MicahParks/keyfunc/v3`, `github.com/getkin/kin-openapi`.
+`github.com/MicahParks/keyfunc/v3`, `github.com/getkin/kin-openapi`,
+`modernc.org/sqlite`, `golang.org/x/time/rate`,
+`github.com/santhosh-tekuri/jsonschema/v6`,
+`go.opentelemetry.io/otel`, `go.opentelemetry.io/otel/sdk`,
+`go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp`.
 Already present: `expr-lang/expr`, `google/uuid`, `oklog/ulid/v2`,
 `golang.org/x/sync`, `golang.org/x/oauth2`, `gopkg.in/yaml.v3`.
 
 Studio (npm): `react`, `react-dom`, `react-router-dom`, `tailwindcss` (v4),
 `@tailwindcss/vite`, shadcn/ui (CLI-managed), `@xyflow/react`, `js-yaml`,
-`@uiw/react-codemirror`, `@codemirror/lang-yaml`, `lucide-react`, dev:
-`vite`, `typescript`, `@vitejs/plugin-react`, `vitest`,
+`@uiw/react-codemirror`, `@codemirror/lang-yaml`, `lucide-react`,
+`recharts`, dev: `vite`, `typescript`, `@vitejs/plugin-react`, `vitest`,
 `@testing-library/react`, `jsdom`.
 
 ---
 
-# Milestone M1 — Foundation, tooling, hygiene
+# Milestone M1 — Foundation, tooling, hygiene [DONE]
 
 Goal: a clean, lintable, CI-guarded baseline; kill dead code and the wiring
 bugs that don't require redesign. No behavior redesign here.
@@ -471,7 +514,7 @@ go run ./cmd/restitch -config restitch.yaml -log-format=json 2>&1 | head -3
 
 ---
 
-# Milestone M2 — Expression/template engine rewrite
+# Milestone M2 — Expression/template engine rewrite [DONE]
 
 Goal: one evaluation core, everything compiled at startup, nil-safe, escaped.
 Fixes D1 (template half), D3, D4, D13, D19. This milestone touches only
@@ -646,7 +689,7 @@ curl -s 'localhost:8080/t?id=1%2F..%2Fadmin' | python3 -m json.tool
 
 ---
 
-# Milestone M3 — Executor semantics and the partial-response contract
+# Milestone M3 — Executor semantics and the partial-response contract [DONE]
 
 Goal: fix D1/D2 end-to-end; make degradation observable and correct.
 Touches `internal/composition/{dag,executor,handler,errors}.go`.
@@ -751,7 +794,7 @@ curl -si localhost:8080/p
 
 ---
 
-# Milestone M4 — Router replacement and path parameters
+# Milestone M4 — Router replacement and path parameters [DONE]
 
 Goal: delete the hand-rolled router (D10); routes use `http.ServeMux` Go 1.22
 patterns; compositions get `{param}` path parameters.
@@ -859,7 +902,7 @@ curl -sI localhost:8080/api/users/42 | head -1                # HEAD → 200
 
 ---
 
-# Milestone M5 — Upstream clients, auth ownership, config hygiene
+# Milestone M5 — Upstream clients, auth ownership, config hygiene [DONE]
 
 Goal: one client per upstream built at startup; `Authorization` scoped to
 passthrough only; OAuth2 refresh bounded; strict env expansion. Fixes D5, D6,
@@ -1064,7 +1107,7 @@ curl -s -H 'Authorization: Bearer SECRET' localhost:8080/e | grep -c SECRET   # 
 
 ---
 
-# Milestone M6 — Resilience: retries, circuit breaker, coalescing
+# Milestone M6 — Resilience: retries, circuit breaker, coalescing [DONE]
 
 All three are RoundTripper/step-level layers in `internal/upstream`, inserted
 by `upstream.Build` per K5, active only when configured.
@@ -1181,7 +1224,7 @@ for i in $(seq 1 6); do curl -s -o /dev/null -w '%{http_code} ' localhost:8080/f
 
 ---
 
-# Milestone M7 — Per-step response caching
+# Milestone M7 — Per-step response caching [DONE]
 
 ### T7.1 TTL cache
 - `internal/upstream/cache.go`:
@@ -1218,7 +1261,7 @@ go test ./internal/upstream/ ./internal/gwconfig/ -count=1
 
 ---
 
-# Milestone M8 — Observability: metrics, access log, admin server
+# Milestone M8 — Observability: metrics, access log, admin server [DONE]
 
 ### T8.1 Prometheus metrics
 - `go get github.com/prometheus/client_golang`.
@@ -1336,7 +1379,7 @@ curl -si localhost:8080/health/upstreams | head -1              # 404 (moved)
 
 ---
 
-# Milestone M9 — Inbound authentication
+# Milestone M9 — Inbound authentication [DONE]
 
 Gateway-level auth for composition routes (K10). `/health`, `/ready` stay
 public; admin has its own key (M8).
@@ -1385,7 +1428,7 @@ go test ./... -count=1 -race
 
 ---
 
-# Milestone M10 — Hot reload + pipeline swap
+# Milestone M10 — Hot reload + pipeline swap [DONE]
 
 Validate-then-swap per K8. A bad config NEVER takes down the running gateway.
 
@@ -1456,7 +1499,7 @@ git checkout -- /tmp/m4.yaml 2>/dev/null || <restore file>; kill %2 # restore + 
 
 ---
 
-# Milestone M11 — CLI subcommands
+# Milestone M11 — CLI subcommands [DONE]
 
 Shape: `restitch [run|check|version|import] ...`. Bare `restitch -config x`
 (no subcommand) must keep working == `run` (K18 compatibility).
@@ -1529,7 +1572,7 @@ go build -o bin/restitch ./cmd/restitch
 
 ---
 
-# Milestone M12 — Studio backend: `restitch-studio` binary
+# Milestone M12 — Studio backend: `restitch-studio` binary [DONE]
 
 ### T12.1 The studio server
 - `cmd/restitch-studio/main.go`:
@@ -1577,7 +1620,7 @@ curl -s localhost:3080/ | grep -i studio                   # placeholder page
 
 ---
 
-# Milestone M13 — Studio frontend (React + Tailwind v4 + shadcn/ui)
+# Milestone M13 — Studio frontend (React + Tailwind v4 + shadcn/ui) [DONE]
 
 All work under `studio/`. Node ≥ 20 assumed. The Studio talks ONLY to
 same-origin `/api/*` (the M12 proxy) — no CORS handling in the app.
@@ -1766,7 +1809,7 @@ curl -s localhost:8080/p >/dev/null   # generate traffic
 
 ---
 
-# Milestone M14 — End-to-end test harness and hardening
+# Milestone M14 — End-to-end test harness and hardening [DONE]
 
 Two complementary harnesses (patterns: Tyk `StartTest`, KrakenD
 `tests/integration.go`, Cosmo `testenv`).
@@ -1861,7 +1904,7 @@ make e2e
 
 ---
 
-# Milestone M15 — Docs, examples, packaging
+# Milestone M15 — Docs, examples, packaging [DONE]
 
 ### T15.1 README rewrite (D3 final closure)
 - Rewrite `README.md` top-to-bottom against the ACTUAL engine:
@@ -2118,27 +2161,27 @@ Sources: [KrakenD](https://www.krakend.io/), [Tyk](https://tyk.io/),
 
 ## A5. Proposed New Milestones
 
-### M16 — Production Hardening (pre-v1 release)
+### M16 — Production Hardening (pre-v1 release) [DONE]
 
 Priority: **Must complete before any production deployment.**
 
-| Task | Description | Files |
-|------|-------------|-------|
-| T16.1 | Add HTTP timeouts to admin server (A2.1) | `internal/admin/server.go` |
-| T16.2 | Add `ReadHeaderTimeout` to gateway server (A2.2) | `internal/server/server.go` |
-| T16.3 | Restrict admin CORS when API key is set (A2.3) | `internal/admin/server.go` |
-| T16.4 | Push SQL filters to QueryRequests query (A2.4) | `internal/admin/sql_storage.go` |
-| T16.5 | Flush accumulator on shutdown (A3.1) | `cmd/restitch/run.go` |
-| T16.6 | Validate upstream URLs at config time (A3.2) | `internal/composition/parser.go` |
-| T16.7 | Fix `handleValidate` body read (A3.4) | `internal/admin/server.go` |
-| T16.8 | Validate `admin.storage` config (A3.9) | `internal/gwconfig/config.go` |
-| T16.9 | Warn when `InsecureSkipVerify` is enabled (A3.8) | `internal/upstream/client.go` |
-| T16.10 | Update PLAN.md for drift items (A1.1–A1.10) | `PLAN.md` |
+| Task | Description | Files | Status |
+|------|-------------|-------|--------|
+| T16.1 | Add HTTP timeouts to admin server (A2.1) | `internal/admin/server.go` | DONE |
+| T16.2 | Add `ReadHeaderTimeout` to gateway server (A2.2) | `internal/server/server.go` | DONE |
+| T16.3 | Restrict admin CORS when API key is set (A2.3) | `internal/admin/server.go` | DONE |
+| T16.4 | Push SQL filters to QueryRequests query (A2.4) | `internal/admin/sql_storage.go` | DONE |
+| T16.5 | Flush accumulator on shutdown (A3.1) | `cmd/restitch/run.go` | DONE |
+| T16.6 | Validate upstream URLs at config time (A3.2) | `internal/composition/parser.go` | DONE |
+| T16.7 | Fix `handleValidate` body read (A3.4) | `internal/admin/server.go` | DONE |
+| T16.8 | Validate `admin.storage` config (A3.9) | `internal/gwconfig/config.go` | DONE |
+| T16.9 | Warn when `InsecureSkipVerify` is enabled (A3.8) | `internal/upstream/client.go` | DONE |
+| T16.10 | Update PLAN.md for drift items (A1.1–A1.10) | `PLAN.md` | DONE |
 
 Verification: `go build ./... && go vet ./... && go test ./... -count=1`
 green; admin server withstands `slowhttptest` without leaking connections.
 
-### M17 — Rate Limiting & Request Validation
+### M17 — Rate Limiting & Request Validation [DONE]
 
 Priority: **High — competitive table stakes.**
 
@@ -2150,7 +2193,7 @@ Priority: **High — competitive table stakes.**
 | T17.4 | Optional JSON Schema validation for request body (`request_schema` field on composition). Validate before executing steps. Reject with 400 + structured error. |
 | T17.5 | Admin API rate limiter — simple per-IP limit on mutation endpoints (`/reload`, `/validate`). |
 
-### M18 — Observability: OpenTelemetry Tracing
+### M18 — Observability: OpenTelemetry Tracing [DONE]
 
 Priority: **Medium — important for production debugging at scale.**
 
@@ -2162,7 +2205,7 @@ Priority: **Medium — important for production debugging at scale.**
 | T18.4 | Configure exporter via env vars (`OTEL_EXPORTER_OTLP_ENDPOINT`, standard OTel env config). |
 | T18.5 | Add trace ID to Studio request records. Show trace ID in the request explorer with a link to external trace viewer. |
 
-### M19 — CI & Test Hardening
+### M19 — CI & Test Hardening [DONE]
 
 Priority: **Medium — prevents regressions.**
 

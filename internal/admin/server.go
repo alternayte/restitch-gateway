@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/restitch/restitch-gateway/internal/ratelimit"
 )
 
 // Config holds admin server configuration.
@@ -97,6 +100,13 @@ func New(cfg Config, deps Deps) *Server {
 
 	mux := http.NewServeMux()
 
+	// Rate limiter for mutation endpoints: 10 req/s, burst 5, per IP
+	mutationLimiter := ratelimit.New(ratelimit.Config{
+		RequestsPerSecond: 10,
+		Burst:             5,
+		Key:               "ip",
+	})
+
 	mux.HandleFunc("GET /admin/api/info", s.requireKey(s.handleInfo))
 	mux.HandleFunc("GET /admin/api/compositions", s.requireKey(s.handleCompositions))
 	mux.HandleFunc("GET /admin/api/compositions/{name}", s.requireKey(s.handleCompositionByName))
@@ -106,8 +116,8 @@ func New(cfg Config, deps Deps) *Server {
 	mux.HandleFunc("GET /admin/api/requests/{id}", s.requireKey(s.handleRequestByID))
 	mux.HandleFunc("GET /admin/api/requests", s.requireKey(s.handleRequests))
 	mux.HandleFunc("GET /admin/api/stats", s.requireKey(s.handleStats))
-	mux.HandleFunc("POST /admin/api/validate", s.requireKey(s.handleValidate))
-	mux.HandleFunc("POST /admin/api/reload", s.requireKey(s.handleReload))
+	mux.HandleFunc("POST /admin/api/validate", s.requireKey(s.rateLimited(mutationLimiter, s.handleValidate)))
+	mux.HandleFunc("POST /admin/api/reload", s.requireKey(s.rateLimited(mutationLimiter, s.handleReload)))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -116,8 +126,12 @@ func New(cfg Config, deps Deps) *Server {
 	}
 
 	s.httpServer = &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: corsMiddleware(mux),
+		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		Handler:           corsMiddleware(mux, cfg.APIKey),
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	return s
@@ -146,6 +160,18 @@ func (s *Server) requireKey(next http.HandlerFunc) http.HandlerFunc {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 				return
 			}
+		}
+		next(w, r)
+	}
+}
+
+func (s *Server) rateLimited(limiter *ratelimit.Limiter, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !limiter.Allow(r) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Retry-After", "1")
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
+			return
 		}
 		next(w, r)
 	}
@@ -339,9 +365,15 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	var buf [1 << 20]byte
-	n, _ := r.Body.Read(buf[:])
-	errs := s.deps.Validate(buf[:n])
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"valid":  false,
+			"errors": []string{"failed to read request body"},
+		})
+		return
+	}
+	errs := s.deps.Validate(body)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"valid":  len(errs) == 0,
 		"errors": errs,
@@ -369,9 +401,17 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+func corsMiddleware(next http.Handler, apiKey string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if apiKey != "" {
+			origin := r.Header.Get("Origin")
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+			}
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Key")
 		if r.Method == "OPTIONS" {

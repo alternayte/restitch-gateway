@@ -34,11 +34,58 @@ scrape_configs:
 
 ---
 
+## Distributed Tracing
+
+Restitch supports OpenTelemetry (OTel) distributed tracing via the OTLP HTTP
+exporter. When enabled, the gateway creates spans for each composition
+execution and each upstream step call.
+
+### Enabling
+
+Set the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable to the address
+of your OTel collector:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 restitch run
+```
+
+When the variable is unset or empty, tracing is disabled (zero overhead).
+
+### Span Structure
+
+Each incoming request produces a root span for the composition, with child
+spans for each step:
+
+```
+composition: user-dashboard (root)
+  ├── step: user (upstream: users-api)
+  └── step: orders (upstream: orders-api)
+```
+
+Span attributes include composition name, step name, upstream name, HTTP
+method, status code, and whether the step was optional.
+
+### Context Propagation
+
+Trace context is propagated to upstream services via W3C `traceparent`
+headers. If the incoming request already carries a `traceparent`, the
+gateway continues that trace rather than starting a new one.
+
+### Request Records
+
+The `trace_id` field is included in request records returned by the admin
+API (`GET /admin/api/requests`) when tracing is active, making it easy to
+correlate gateway requests with downstream traces.
+
+---
+
 ## Admin API
 
 The admin API runs on a separate port (default 9090) from the data plane.
 If `admin.api_key` is configured, every request must include
-`X-Admin-Key: <key>`.
+`X-Admin-Key: <key>`. POST endpoints (`/admin/api/reload`,
+`/admin/api/validate`) are rate-limited at 10 requests per second with a
+burst of 5, per IP.
 
 ### Endpoints
 

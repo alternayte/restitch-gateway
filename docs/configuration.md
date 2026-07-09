@@ -67,6 +67,25 @@ Top-level server settings. All fields are optional.
 | `log_format` | string | `"json"` | Log output format: `json` or `text` |
 | `log_level` | string | `"info"` | Minimum log level: `debug`, `info`, `warn`, `error` |
 
+### server.rate_limit
+
+Optional global rate limiter applied to all incoming requests before
+composition dispatch.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `requests_per_second` | float | — | Sustained request rate |
+| `burst` | int | — | Maximum burst size above the sustained rate |
+| `key` | string | `"ip"` | Rate limit key: `ip`, `header:<name>`, or `api-key` |
+
+```yaml
+server:
+  rate_limit:
+    requests_per_second: 1000
+    burst: 50
+    key: "ip"
+```
+
 ### server.auth
 
 Inbound authentication applied to all compositions (unless `public: true`).
@@ -121,6 +140,26 @@ admin:
   request_log_size: 1000
 ```
 
+### admin.storage
+
+Persistent storage backend for request logs and statistics. When omitted,
+data is kept in memory only and lost on restart.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `type` | string | `"memory"` | Storage backend: `memory`, `sqlite`, or `turso` |
+| `url` | string | `""` | Database URL (required for `sqlite` and `turso`) |
+| `auth_token` | string | `""` | Auth token (required for `turso`) |
+| `retention` | duration | `"168h"` | How long to retain request records |
+
+```yaml
+admin:
+  storage:
+    type: sqlite
+    url: "file:restitch.db"
+    retention: 72h
+```
+
 ---
 
 ## upstreams
@@ -145,7 +184,7 @@ Fine-grained HTTP transport settings. All optional.
 | `tls_handshake_timeout` | duration | `"5s"` | TLS handshake timeout |
 | `response_header_timeout` | duration | `"10s"` | Time to wait for response headers |
 | `max_idle_conns_per_host` | int | `100` | Maximum idle connections per host |
-| `insecure_skip_verify` | bool | `false` | Skip TLS certificate verification (not recommended for production) |
+| `insecure_skip_verify` | bool | `false` | Skip TLS certificate verification (not recommended for production). Logs a warning at startup when enabled. |
 
 ### upstreams.*.auth
 
@@ -249,6 +288,9 @@ a DAG of upstream steps and a response template.
 | `path` | string | *required* | Route pattern. Supports Go 1.22 `http.ServeMux` path parameters: `/api/users/{id}`. |
 | `method` | string | *required* | HTTP method to match (`GET`, `POST`, etc.) |
 | `public` | bool | `false` | When `true`, skip inbound auth for this route |
+| `rate_limit` | object | — | Per-composition rate limiter. Same fields as `server.rate_limit`. |
+| `max_request_bytes` | int | `1048576` | Maximum request body size in bytes (default 1 MiB). Requests exceeding this are rejected with 413. |
+| `request_schema` | object | — | JSON Schema for request body validation. Invalid requests are rejected with 400. |
 
 ### compositions.*.steps
 

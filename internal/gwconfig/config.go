@@ -46,18 +46,26 @@ type File struct {
 	raw []byte // original bytes for hash
 }
 
+// RateLimitConfig configures gateway-wide rate limiting.
+type RateLimitConfig struct {
+	RequestsPerSecond float64 `yaml:"requests_per_second"`
+	Burst             int     `yaml:"burst"`
+	Key               string  `yaml:"key"` // "ip", "header:X-Client-ID", "api-key"
+}
+
 // ServerConfig holds gateway server settings.
 type ServerConfig struct {
-	Port            int      `yaml:"port"`
-	TLSPort         int      `yaml:"tls_port"`
-	TLSCert         string   `yaml:"tls_cert"`
-	TLSKey          string   `yaml:"tls_key"`
-	ReadTimeout     Duration `yaml:"read_timeout"`
-	WriteTimeout    Duration `yaml:"write_timeout"`
-	ShutdownTimeout Duration `yaml:"shutdown_timeout"`
-	LogFormat       string   `yaml:"log_format"`
-	LogLevel        string   `yaml:"log_level"`
+	Port            int               `yaml:"port"`
+	TLSPort         int               `yaml:"tls_port"`
+	TLSCert         string            `yaml:"tls_cert"`
+	TLSKey          string            `yaml:"tls_key"`
+	ReadTimeout     Duration          `yaml:"read_timeout"`
+	WriteTimeout    Duration          `yaml:"write_timeout"`
+	ShutdownTimeout Duration          `yaml:"shutdown_timeout"`
+	LogFormat       string            `yaml:"log_format"`
+	LogLevel        string            `yaml:"log_level"`
 	Auth            *InboundAuthConfig `yaml:"auth"`
+	RateLimit       *RateLimitConfig   `yaml:"rate_limit"`
 }
 
 // InboundAuthConfig configures gateway-level authentication.
@@ -188,6 +196,21 @@ func (f *File) Validate() error {
 		if f.Server.Auth.JWT.JWKSURL == "" {
 			errs = append(errs, fmt.Errorf("server.auth.jwt.jwks_url is required when jwt is configured"))
 		}
+	}
+
+	switch f.Admin.Storage.Type {
+	case "", "memory":
+		// valid, no additional fields required
+	case "sqlite":
+		if f.Admin.Storage.URL == "" {
+			errs = append(errs, fmt.Errorf("admin.storage.url is required when type is %q", f.Admin.Storage.Type))
+		}
+	case "turso":
+		if f.Admin.Storage.URL == "" {
+			errs = append(errs, fmt.Errorf("admin.storage.url is required when type is %q", f.Admin.Storage.Type))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("admin.storage.type must be memory, sqlite, or turso, got %q", f.Admin.Storage.Type))
 	}
 
 	if len(errs) == 0 {

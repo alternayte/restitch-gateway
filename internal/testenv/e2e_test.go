@@ -561,3 +561,75 @@ func TestE2E_HotReload(t *testing.T) {
 	// additional plumbing. Skipping until testenv supports it.
 	t.Skip("testenv does not wire admin server; reload tested in cmd/restitch/ and internal/admin/")
 }
+
+func TestE2E_AdminRequestLog(t *testing.T) {
+	Run(t, Config{
+		YAML: `
+upstreams:
+  mock:
+    url: "@@UPSTREAM_mock@@"
+compositions:
+  info:
+    path: /api/info
+    steps:
+      - name: detail
+        upstream: mock
+        path: /detail
+    response:
+      status: 200
+      body:
+        detail: "{{ steps.detail.body }}"
+`,
+		Upstreams: map[string]UpstreamSpec{
+			"mock": {Script: map[string]ScriptedResponse{
+				"GET /detail": {Body: `{"id":1,"info":"ok"}`},
+			}},
+		},
+	}, func(t *testing.T, env *Env) {
+		// Ring buffer should be empty before any requests.
+		if n := len(env.Requests.List(10)); n != 0 {
+			t.Fatalf("expected 0 recorded requests before traffic, got %d", n)
+		}
+
+		// Send a request through the gateway.
+		resp, err := env.Client.Get(env.GatewayURL + "/api/info")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		// Verify the request was recorded.
+		records := env.Requests.List(10)
+		if len(records) != 1 {
+			t.Fatalf("expected 1 recorded request, got %d", len(records))
+		}
+
+		rec := records[0]
+		if rec.Composition != "info" {
+			t.Errorf("composition = %q, want %q", rec.Composition, "info")
+		}
+		if rec.Status != 200 {
+			t.Errorf("status = %d, want 200", rec.Status)
+		}
+		if rec.Method != "GET" {
+			t.Errorf("method = %q, want GET", rec.Method)
+		}
+		if rec.Path != "/api/info" {
+			t.Errorf("path = %q, want /api/info", rec.Path)
+		}
+		if rec.DurationMS <= 0 {
+			t.Errorf("duration_ms = %f, want > 0", rec.DurationMS)
+		}
+		if len(rec.Steps) != 1 {
+			t.Fatalf("expected 1 step record, got %d", len(rec.Steps))
+		}
+		if rec.Steps[0].Name != "detail" {
+			t.Errorf("step name = %q, want %q", rec.Steps[0].Name, "detail")
+		}
+	})
+}

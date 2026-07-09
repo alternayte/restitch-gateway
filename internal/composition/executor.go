@@ -12,6 +12,9 @@ import (
 	"github.com/restitch/restitch-gateway/internal/auth"
 	"github.com/restitch/restitch-gateway/internal/observability"
 	upstreampkg "github.com/restitch/restitch-gateway/internal/upstream"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // StepStatus represents the outcome of a step execution.
@@ -165,12 +168,20 @@ func (e *Executor) executeStepWithErrorHandling(
 	waveNum int,
 	requestStart time.Time,
 ) (*stepError, *StepTiming) {
+	ctx, stepSpan := otel.Tracer("restitch").Start(ctx, "step:"+stepName)
+	defer stepSpan.End()
+	stepSpan.SetAttributes(
+		attribute.String("restitch.step", stepName),
+		attribute.Int("restitch.wave", waveNum),
+	)
+
 	stepStart := time.Now()
 	startOffsetMS := float64(stepStart.Sub(requestStart).Microseconds()) / 1000.0
 
 	step, exists := comp.Steps[stepName]
 	if !exists {
 		durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
+		stepSpan.SetStatus(codes.Error, "step not found")
 		return &stepError{stepName: stepName, err: fmt.Errorf("step not found"), optional: false},
 			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepFailed, Optional: false, StartOffsetMS: startOffsetMS, Error: "step not found"}
 	}
@@ -179,8 +190,11 @@ func (e *Executor) executeStepWithErrorHandling(
 	depFailed := checkDependenciesFailed(plan.Deps[stepName], results)
 	resultsMutex.Unlock()
 
+	stepSpan.SetAttributes(attribute.String("restitch.upstream", step.Step.Upstream))
+
 	if depFailed {
 		durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
+		stepSpan.SetStatus(codes.Error, "dependency_failed")
 		resultsMutex.Lock()
 		results[stepName] = nil
 		resultsMutex.Unlock()
@@ -195,6 +209,7 @@ func (e *Executor) executeStepWithErrorHandling(
 	up, exists := e.config.Upstreams[step.Step.Upstream]
 	if !exists {
 		durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
+		stepSpan.SetStatus(codes.Error, "upstream not found")
 		return &stepError{stepName: stepName, err: fmt.Errorf("upstream not found"), optional: step.Optional},
 			&StepTiming{Name: stepName, Wave: waveNum, DurationMS: durationMS, Status: StepFailed, Optional: step.Optional, Upstream: step.Step.Upstream, StartOffsetMS: startOffsetMS, Error: "upstream not found"}
 	}
@@ -309,6 +324,9 @@ func (e *Executor) executeStepWithErrorHandling(
 	durationMS := float64(time.Since(stepStart).Microseconds()) / 1000.0
 
 	if err != nil {
+		stepSpan.SetStatus(codes.Error, err.Error())
+		stepSpan.RecordError(err)
+
 		slog.WarnContext(ctx, "step failed",
 			"composition", compositionName,
 			"step", stepName,
@@ -351,6 +369,8 @@ func (e *Executor) executeStepWithErrorHandling(
 	resultsMutex.Lock()
 	results[stepName] = result
 	resultsMutex.Unlock()
+
+	stepSpan.SetStatus(codes.Ok, "")
 
 	slog.InfoContext(ctx, "step complete",
 		"composition", compositionName,

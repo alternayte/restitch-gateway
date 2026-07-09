@@ -2,13 +2,17 @@ package composition
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
 	"github.com/restitch/restitch-gateway/internal/gwconfig"
 	"github.com/restitch/restitch-gateway/internal/upstream"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
 
@@ -53,9 +57,10 @@ var DefaultStepTimeout = 30 * time.Second
 
 // CompiledComposition holds compiled expressions for a single composition.
 type CompiledComposition struct {
-	Steps         map[string]*CompiledStep
-	Response      *CompiledResponse
-	ExecutionPlan *ExecutionPlan
+	Steps           map[string]*CompiledStep
+	Response        *CompiledResponse
+	ExecutionPlan   *ExecutionPlan
+	RequestSchema   *jsonschema.Schema
 }
 
 // CompiledStep holds a step definition plus its compiled templates.
@@ -150,7 +155,7 @@ func CompileConfig(ctx context.Context, cfg *Config, opts ...CompileOptions) (*C
 	}
 
 	for compName, comp := range cfg.Compositions {
-		compiledComp, err := compileComposition(&comp)
+		compiledComp, err := compileComposition(compName, &comp)
 		if err != nil {
 			return nil, fmt.Errorf("composition %s: %w", compName, err)
 		}
@@ -160,7 +165,7 @@ func CompileConfig(ctx context.Context, cfg *Config, opts ...CompileOptions) (*C
 	return compiled, nil
 }
 
-func compileComposition(comp *Composition) (*CompiledComposition, error) {
+func compileComposition(name string, comp *Composition) (*CompiledComposition, error) {
 	stepNames := make([]string, len(comp.Steps))
 	for i, step := range comp.Steps {
 		stepNames[i] = step.Name
@@ -187,6 +192,43 @@ func compileComposition(comp *Composition) (*CompiledComposition, error) {
 	}
 	compiledComp.Response = compiledResp
 
+	// Check for unknown step references in templates (typo detection).
+	stepNameSet := make(map[string]bool, len(stepNames))
+	for _, sn := range stepNames {
+		stepNameSet[sn] = true
+	}
+	for stepName, cs := range compiledComp.Steps {
+		for _, dep := range cs.Deps {
+			if !stepNameSet[dep] {
+				slog.Warn("template references unknown step",
+					"composition", name,
+					"step", stepName,
+					"step_ref", dep,
+				)
+			}
+		}
+	}
+	if compiledComp.Response != nil && compiledComp.Response.Body != nil {
+		for _, dep := range collectBodyDeps(compiledComp.Response.Body) {
+			if !stepNameSet[dep] {
+				slog.Warn("template references unknown step",
+					"composition", name,
+					"location", "response",
+					"step_ref", dep,
+				)
+			}
+		}
+	}
+
+	// Compile JSON Schema for request validation if configured.
+	if comp.RequestSchema != nil {
+		schema, err := compileJSONSchema(comp.RequestSchema)
+		if err != nil {
+			return nil, fmt.Errorf("request_schema: %w", err)
+		}
+		compiledComp.RequestSchema = schema
+	}
+
 	executionPlan, err := BuildDAG(compiledComp)
 	if err != nil {
 		return nil, fmt.Errorf("invalid composition structure: %w", err)
@@ -194,6 +236,48 @@ func compileComposition(comp *Composition) (*CompiledComposition, error) {
 	compiledComp.ExecutionPlan = executionPlan
 
 	return compiledComp, nil
+}
+
+// collectBodyDeps recursively collects step dependency names from a compiled body node tree.
+func collectBodyDeps(node *CompiledBodyNode) []string {
+	if node == nil {
+		return nil
+	}
+	var deps []string
+	if node.Tmpl != nil {
+		deps = append(deps, node.Tmpl.Deps...)
+	}
+	for _, child := range node.Map {
+		deps = append(deps, collectBodyDeps(child)...)
+	}
+	for _, child := range node.List {
+		deps = append(deps, collectBodyDeps(child)...)
+	}
+	return deps
+}
+
+// compileJSONSchema compiles a map-based JSON Schema definition into a
+// validated *jsonschema.Schema ready for request validation.
+func compileJSONSchema(schemaMap map[string]any) (*jsonschema.Schema, error) {
+	schemaBytes, err := json.Marshal(schemaMap)
+	if err != nil {
+		return nil, fmt.Errorf("marshal schema: %w", err)
+	}
+
+	var schemaDoc any
+	if err := json.Unmarshal(schemaBytes, &schemaDoc); err != nil {
+		return nil, fmt.Errorf("unmarshal schema: %w", err)
+	}
+
+	c := jsonschema.NewCompiler()
+	if err := c.AddResource("schema.json", schemaDoc); err != nil {
+		return nil, fmt.Errorf("add resource: %w", err)
+	}
+	compiled, err := c.Compile("schema.json")
+	if err != nil {
+		return nil, fmt.Errorf("compile: %w", err)
+	}
+	return compiled, nil
 }
 
 func compileStep(step *Step, env map[string]any) (*CompiledStep, error) {
@@ -322,6 +406,14 @@ func compileBodyNode(body any, env map[string]any) (*CompiledBodyNode, error) {
 
 func validateAndApplyDefaults(cfg *Config) error {
 	for name, up := range cfg.Upstreams {
+		if up.URL == "" {
+			return fmt.Errorf("upstream %s: url is required", name)
+		}
+		if u, err := url.Parse(up.URL); err != nil {
+			return fmt.Errorf("upstream %s: invalid url %q: %w", name, up.URL, err)
+		} else if u.Scheme != "http" && u.Scheme != "https" {
+			return fmt.Errorf("upstream %s: url scheme must be http or https, got %q", name, u.Scheme)
+		}
 		if up.MaxResponseBytes <= 0 {
 			up.MaxResponseBytes = 10 * 1024 * 1024 // 10 MiB
 		}

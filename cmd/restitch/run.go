@@ -15,6 +15,7 @@ import (
 	"github.com/restitch/restitch-gateway/internal/composition"
 	"github.com/restitch/restitch-gateway/internal/gwconfig"
 	"github.com/restitch/restitch-gateway/internal/observability"
+	"github.com/restitch/restitch-gateway/internal/ratelimit"
 	"github.com/restitch/restitch-gateway/internal/server"
 	"github.com/restitch/restitch-gateway/internal/upstream"
 )
@@ -76,6 +77,19 @@ func runCmd(args []string) int {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}
+
+	tracingShutdown, err := observability.SetupTracing(context.Background(), "restitch-gateway", version)
+	if err != nil {
+		slog.Error("failed to initialize tracing", "error", err)
+		return 1
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tracingShutdown(ctx); err != nil {
+			slog.Error("tracing shutdown error", "error", err)
+		}
+	}()
 
 	srv := server.New(server.Config{
 		Port:    gwcfg.Server.Port,
@@ -185,7 +199,15 @@ func runCmd(args []string) int {
 				}
 			}
 		}()
-		defer flushCancel()
+		defer func() {
+			flushCancel()
+			buckets := acc.Flush()
+			for _, b := range buckets {
+				if err := store.RecordBucket(context.Background(), b); err != nil {
+					slog.Error("failed to flush bucket on shutdown", "error", err)
+				}
+			}
+		}()
 
 		handler.SetRecorder(&admin.MultiRecorder{Ring: ring, Stats: stats, Accumulator: acc, Storage: store})
 
@@ -198,11 +220,28 @@ func runCmd(args []string) int {
 
 		swapper := newSwapper(pipe)
 
-		wrapped := applyMiddleware(swapper,
+		middlewares := []func(http.Handler) http.Handler{
 			observability.RequestIDMiddleware,
 			server.NewLoggingMiddleware(),
 			recoveryMiddleware,
-		)
+		}
+
+		// Global gateway rate limiter
+		if gwcfg.Server.RateLimit != nil {
+			rl := gwcfg.Server.RateLimit
+			globalLimiter := ratelimit.New(ratelimit.Config{
+				RequestsPerSecond: rl.RequestsPerSecond,
+				Burst:             rl.Burst,
+				Key:               rl.Key,
+			})
+			middlewares = append(middlewares, globalLimiter.Middleware)
+			slog.Info("global rate limit enabled",
+				"rps", rl.RequestsPerSecond,
+				"burst", rl.Burst,
+				"key", rl.Key)
+		}
+
+		wrapped := applyMiddleware(swapper, middlewares...)
 		srv.SetHandler(wrapped)
 
 		// Reload function shared between admin API, SIGHUP, and fsnotify

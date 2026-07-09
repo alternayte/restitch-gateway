@@ -2,6 +2,7 @@ package upstream
 
 import (
 	"crypto/tls"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -82,6 +83,9 @@ type BuildConfig struct {
 // Build assembles a per-upstream *http.Client with the RoundTripper chain:
 // retry → breaker → auth → transport. Timeout: 0 — deadlines come from step context.
 func Build(cfg BuildConfig) *Upstream {
+	if cfg.Transport.InsecureSkipVerify {
+		slog.Warn("TLS verification disabled for upstream", "upstream", cfg.Name)
+	}
 	transport := BuildTransport(cfg.Transport)
 
 	var rt http.RoundTripper = transport

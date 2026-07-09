@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,8 +15,13 @@ import (
 	"github.com/restitch/restitch-gateway/internal/auth"
 	"github.com/restitch/restitch-gateway/internal/inbound"
 	"github.com/restitch/restitch-gateway/internal/observability"
+	"github.com/restitch/restitch-gateway/internal/ratelimit"
 	"github.com/restitch/restitch-gateway/internal/reqlog"
 	"github.com/restitch/restitch-gateway/internal/server"
+	"github.com/santhosh-tekuri/jsonschema/v6"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var paramPattern = regexp.MustCompile(`\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
@@ -74,6 +80,11 @@ func (h *Handler) RegisterRoutes(router *server.Router) {
 			handler = h.authenticator.Middleware(handler)
 		}
 
+		if comp.RateLimit != nil {
+			limiter := ratelimit.New(*comp.RateLimit)
+			handler = limiter.Middleware(handler)
+		}
+
 		router.Handle(comp.Method, comp.Path, handler.ServeHTTP)
 
 		slog.Info("registered composition route",
@@ -88,6 +99,15 @@ func (h *Handler) RegisterRoutes(router *server.Router) {
 func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compositionName string, params map[string]string) {
 	ctx := r.Context()
 
+	tracer := otel.Tracer("restitch")
+	ctx, span := tracer.Start(ctx, "composition:"+compositionName)
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("restitch.composition", compositionName),
+		attribute.String("http.method", r.Method),
+		attribute.String("http.route", r.URL.Path),
+	)
+
 	ctx = auth.WithClientAuthorization(ctx, r.Header.Get("Authorization"))
 
 	handlerStart := time.Now()
@@ -97,12 +117,39 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 		"method", r.Method,
 		"path", r.URL.Path)
 
+	// Determine max request body size (default 1 MiB).
+	maxBytes := int64(1 << 20)
+	if comp := h.config.Config.Compositions[compositionName]; comp.MaxRequestBytes > 0 {
+		maxBytes = comp.MaxRequestBytes
+	}
+
 	// Read and parse request body once
 	var body any
 	if r.Body != nil && r.ContentLength != 0 {
-		raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-		if err == nil && len(raw) > 0 && strings.Contains(r.Header.Get("Content-Type"), "json") {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				h.writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+				return
+			}
+			// other read error; continue with nil body
+		} else if len(raw) > 0 && strings.Contains(r.Header.Get("Content-Type"), "json") {
 			json.Unmarshal(raw, &body)
+		}
+	}
+
+	// Validate request body against JSON schema if configured.
+	compiledComp := h.config.Compositions[compositionName]
+	if compiledComp.RequestSchema != nil && body != nil {
+		if err := compiledComp.RequestSchema.Validate(body); err != nil {
+			details := extractValidationErrors(err)
+			h.writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error":   "request validation failed",
+				"details": details,
+			})
+			return
 		}
 	}
 
@@ -245,7 +292,7 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 				Retries:       t.Retries,
 			}
 		}
-		h.recorder.Record(reqlog.Record{
+		rec := reqlog.Record{
 			ID:          observability.GetRequestID(ctx),
 			Time:        handlerStart,
 			Composition: compositionName,
@@ -255,7 +302,11 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 			DurationMS:  durationMS,
 			Partial:     result.IsPartial,
 			Steps:       steps,
-		})
+		}
+		if sc := trace.SpanFromContext(ctx).SpanContext(); sc.HasTraceID() {
+			rec.TraceID = sc.TraceID().String()
+		}
+		h.recorder.Record(rec)
 	}
 }
 
@@ -281,4 +332,32 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+// extractValidationErrors converts jsonschema validation errors into a list
+// of human-readable strings.
+func extractValidationErrors(err error) []string {
+	var ve *jsonschema.ValidationError
+	if errors.As(err, &ve) {
+		causes := ve.BasicOutput().Errors
+		if len(causes) > 0 {
+			details := make([]string, 0, len(causes))
+			for _, c := range causes {
+				if c.Error == nil {
+					continue
+				}
+				msg := c.Error.String()
+				if c.InstanceLocation != "" {
+					msg = fmt.Sprintf("%s: %s", c.InstanceLocation, c.Error.String())
+				}
+				if msg != "" {
+					details = append(details, msg)
+				}
+			}
+			if len(details) > 0 {
+				return details
+			}
+		}
+	}
+	return []string{err.Error()}
 }
