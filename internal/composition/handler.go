@@ -9,9 +9,12 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
 	"github.com/restitch/restitch-gateway/internal/inbound"
+	"github.com/restitch/restitch-gateway/internal/observability"
+	"github.com/restitch/restitch-gateway/internal/reqlog"
 	"github.com/restitch/restitch-gateway/internal/server"
 )
 
@@ -22,6 +25,12 @@ type Handler struct {
 	executor      *Executor
 	config        *CompiledConfig
 	authenticator *inbound.Authenticator
+	recorder      reqlog.Recorder
+}
+
+// SetRecorder sets the request recorder for the handler.
+func (h *Handler) SetRecorder(r reqlog.Recorder) {
+	h.recorder = r
 }
 
 // Executor returns the handler's executor for lifecycle management.
@@ -80,6 +89,8 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 	ctx := r.Context()
 
 	ctx = auth.WithClientAuthorization(ctx, r.Header.Get("Authorization"))
+
+	execStart := time.Now()
 
 	slog.InfoContext(ctx, "executing composition",
 		"composition", compositionName,
@@ -169,6 +180,9 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 		return
 	}
 
+	durationMS := float64(time.Since(execStart).Nanoseconds()) / 1e6
+	durationSec := durationMS / 1000.0
+
 	timingSummary := make(map[string]float64)
 	for _, t := range result.StepTimings {
 		timingSummary[t.Name] = t.DurationMS
@@ -182,6 +196,54 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 		"step_timings", timingSummary,
 		"total_steps", len(result.StepTimings),
 		"slowest_step", findSlowestStep(result.StepTimings))
+
+	// Prometheus metrics
+	if m := observability.DefaultMetrics(); m != nil {
+		statusStr := observability.StatusStr(response.Status)
+		m.RequestsTotal.WithLabelValues(compositionName, r.Method, statusStr).Inc()
+		m.RequestDuration.WithLabelValues(compositionName).Observe(durationSec)
+		if result.IsPartial {
+			m.PartialResponsesTotal.WithLabelValues(compositionName).Inc()
+		}
+		for _, t := range result.StepTimings {
+			upstream := ""
+			if step, ok := h.config.Compositions[compositionName]; ok {
+				if cs, ok := step.Steps[t.Name]; ok {
+					upstream = cs.Step.Upstream
+				}
+			}
+			m.StepDuration.WithLabelValues(compositionName, t.Name, upstream, t.Status).Observe(t.DurationMS / 1000.0)
+		}
+	}
+
+	// Request recording (ring buffer + stats)
+	if h.recorder != nil {
+		steps := make([]reqlog.StepRecord, len(result.StepTimings))
+		for i, t := range result.StepTimings {
+			httpStatus := 0
+			if sr, ok := result.Steps[t.Name]; ok && sr != nil {
+				httpStatus = sr.Status
+			}
+			steps[i] = reqlog.StepRecord{
+				Name:       t.Name,
+				Status:     t.Status,
+				Wave:       t.Wave,
+				DurationMS: t.DurationMS,
+				HTTPStatus: httpStatus,
+			}
+		}
+		h.recorder.Record(reqlog.Record{
+			ID:          observability.GetRequestID(ctx),
+			Time:        execStart,
+			Composition: compositionName,
+			Method:      r.Method,
+			Path:        r.URL.Path,
+			Status:      response.Status,
+			DurationMS:  durationMS,
+			Partial:     result.IsPartial,
+			Steps:       steps,
+		})
+	}
 }
 
 // findSlowestStep returns the name and duration of the slowest step.

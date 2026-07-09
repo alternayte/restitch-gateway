@@ -114,3 +114,15 @@ func StatusClass(code int) string {
 func StatusStr(code int) string {
 	return strconv.Itoa(code)
 }
+
+var defaultMetrics *Metrics
+
+// SetDefaultMetrics sets the global metrics instance (called once from main).
+func SetDefaultMetrics(m *Metrics) {
+	defaultMetrics = m
+}
+
+// DefaultMetrics returns the global metrics instance, or nil if not set.
+func DefaultMetrics() *Metrics {
+	return defaultMetrics
+}
