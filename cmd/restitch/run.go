@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/admin"
@@ -66,12 +65,22 @@ func runCmd(args []string) int {
 			"upstreams", len(compiled.Config.Upstreams),
 			"compositions", len(compiled.Config.Compositions))
 
+		// Initialize Prometheus metrics
+		metrics := observability.NewMetrics()
+		observability.SetDefaultMetrics(metrics)
+
 		pipe := &Pipeline{
 			Compiled: compiled,
 			Executor: composition.NewExecutor(compiled),
 		}
 
 		handler := composition.NewHandler(compiled, nil)
+
+		// Wire request recording (ring buffer + stats)
+		ring := admin.NewRingBuffer(500)
+		stats := admin.NewStats()
+		handler.SetRecorder(&admin.MultiRecorder{Ring: ring, Stats: stats})
+
 		router := server.NewRouter()
 		handler.RegisterRoutes(router)
 		router.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
@@ -81,13 +90,6 @@ func runCmd(args []string) int {
 
 		swapper := newSwapper(pipe)
 
-		outerRouter := server.NewRouter()
-		outerRouter.Use(observability.RequestIDMiddleware)
-		outerRouter.Use(server.NewLoggingMiddleware())
-		outerRouter.Use(recoveryMiddleware)
-		outerRouter.Handle("", "/", swapper.ServeHTTP)
-		// Actually, we need a catch-all. Let me use the swapper directly with middleware wrapping.
-
 		wrapped := applyMiddleware(swapper,
 			observability.RequestIDMiddleware,
 			server.NewLoggingMiddleware(),
@@ -95,15 +97,51 @@ func runCmd(args []string) int {
 		)
 		srv.SetHandler(wrapped)
 
-		// Admin server
-		ring := admin.NewRingBuffer(500)
-		stats := admin.NewStats()
-		var reloadMu sync.Mutex
+		// Reload function shared between admin API, SIGHUP, and fsnotify
+		doReload := func() (string, error) {
+			newCfg, err := composition.LoadConfigFile(*configFile)
+			if err != nil {
+				return "", err
+			}
+			newCompiled, err := composition.CompileConfig(context.Background(), newCfg)
+			if err != nil {
+				return "", err
+			}
 
+			newPipe := &Pipeline{
+				Compiled: newCompiled,
+				Executor: composition.NewExecutor(newCompiled),
+			}
+			newHandler := composition.NewHandler(newCompiled, nil)
+			newRouter := server.NewRouter()
+			newHandler.RegisterRoutes(newRouter)
+			newRouter.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
+			newRouter.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
+			newRouter.Finalize()
+			newPipe.Handler = newRouter
+
+			hash := configHash(*configFile)
+			newPipe.Hash = hash
+
+			old := swapper.Swap(newPipe)
+			if old != nil {
+				time.AfterFunc(30*time.Second, old.Close)
+			}
+
+			return hash, nil
+		}
+
+		// Start reload watchers (SIGHUP + fsnotify)
+		rl := newReloader(*configFile, doReload)
+		rl.watchSignals()
+		rl.watchFile()
+
+		// Admin server
 		adminSrv := admin.New(admin.Config{
 			Enabled: true,
 			Port:    9090,
 		}, admin.Deps{
+			Metrics: metrics.Handler(),
 			Version:    version,
 			ConfigPath: *configFile,
 			ConfigHash: func() string { return swapper.Current().Hash },
@@ -116,42 +154,7 @@ func runCmd(args []string) int {
 				}
 				return nil
 			},
-			Reload: func() (string, error) {
-				reloadMu.Lock()
-				defer reloadMu.Unlock()
-
-				newCfg, err := composition.LoadConfigFile(*configFile)
-				if err != nil {
-					return "", err
-				}
-				newCompiled, err := composition.CompileConfig(context.Background(), newCfg)
-				if err != nil {
-					return "", err
-				}
-
-				newPipe := &Pipeline{
-					Compiled: newCompiled,
-					Executor: composition.NewExecutor(newCompiled),
-				}
-				newHandler := composition.NewHandler(newCompiled, nil)
-				newRouter := server.NewRouter()
-				newHandler.RegisterRoutes(newRouter)
-				newRouter.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
-				newRouter.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
-				newRouter.Finalize()
-				newPipe.Handler = newRouter
-
-				hash := configHash(*configFile)
-				newPipe.Hash = hash
-
-				old := swapper.Swap(newPipe)
-				if old != nil {
-					time.AfterFunc(30*time.Second, old.Close)
-				}
-
-				slog.Info("config reloaded", "hash", hash)
-				return hash, nil
-			},
+			Reload: rl.reload,
 		})
 		adminSrv.Start()
 		defer func() {
