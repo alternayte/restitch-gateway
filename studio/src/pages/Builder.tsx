@@ -1,25 +1,8 @@
 import { useState } from "react"
-import * as yaml from "js-yaml"
 import { api } from "../lib/api"
+import { buildYaml, type BuilderState } from "../lib/builder"
+import { computeWaves } from "../lib/dag"
 import { Plus, Trash2, CheckCircle2, XCircle, Copy, Download } from "lucide-react"
-
-interface StepState {
-  name: string
-  upstream: string
-  method: string
-  path: string
-  optional: boolean
-  depends_on: string
-}
-
-interface BuilderState {
-  compositionName: string
-  path: string
-  method: string
-  upstreams: { name: string; url: string }[]
-  steps: StepState[]
-  responseBody: string
-}
 
 const initial: BuilderState = {
   compositionName: "my-composition",
@@ -30,51 +13,19 @@ const initial: BuilderState = {
   responseBody: 'result: "{{ steps.main.body }}"',
 }
 
-function buildYaml(state: BuilderState): string {
-  const upstreams: Record<string, { url: string }> = {}
-  for (const u of state.upstreams) {
-    if (u.name) upstreams[u.name] = { url: u.url }
-  }
-
-  const steps = state.steps.map((s) => {
-    const step: Record<string, unknown> = {
-      name: s.name,
-      upstream: s.upstream,
-      path: s.path,
-      method: s.method,
-    }
-    if (s.optional) step.optional = true
-    if (s.depends_on.trim()) step.depends_on = s.depends_on.split(",").map((d) => d.trim())
-    return step
-  })
-
-  let responseBody: unknown
-  try {
-    responseBody = yaml.load(state.responseBody)
-  } catch {
-    responseBody = state.responseBody
-  }
-
-  const doc = {
-    upstreams,
-    compositions: {
-      [state.compositionName]: {
-        path: state.path,
-        method: state.method,
-        steps,
-        response: { status: 200, body: responseBody },
-      },
-    },
-  }
-
-  return yaml.dump(doc, { lineWidth: -1 })
-}
-
 export default function Builder() {
   const [state, setState] = useState<BuilderState>(initial)
   const [result, setResult] = useState<{ valid: boolean; errors: string[] } | null>(null)
 
   const generated = buildYaml(state)
+
+  const waves = computeWaves(
+    state.steps.map((s) => ({
+      name: s.name,
+      depends_on: s.depends_on.trim() ? s.depends_on.split(",").map((d) => d.trim()) : undefined,
+      path: s.path,
+    }))
+  )
 
   const update = <K extends keyof BuilderState>(key: K, val: BuilderState[K]) =>
     setState((s) => ({ ...s, [key]: val }))
@@ -125,7 +76,7 @@ export default function Builder() {
                 </button>
               </div>
             ))}
-            <button onClick={() => update("upstreams", [...state.upstreams, { name: "", url: "" }])} className="flex items-center gap-1.5 text-[13px] text-accent hover:text-accent-bright mt-1">
+            <button onClick={() => update("upstreams", [...state.upstreams, { name: "", url: "" }])} className="flex items-center gap-1.5 text-[13px] text-rs-accent hover:text-accent-bright mt-1">
               <Plus size={14} /> Add upstream
             </button>
           </Section>
@@ -158,7 +109,7 @@ export default function Builder() {
                 </div>
               </div>
             ))}
-            <button onClick={() => update("steps", [...state.steps, { name: "", upstream: state.upstreams[0]?.name ?? "", method: "GET", path: "/", optional: false, depends_on: "" }])} className="flex items-center gap-1.5 text-[13px] text-accent hover:text-accent-bright">
+            <button onClick={() => update("steps", [...state.steps, { name: "", upstream: state.upstreams[0]?.name ?? "", method: "GET", path: "/", optional: false, depends_on: "" }])} className="flex items-center gap-1.5 text-[13px] text-rs-accent hover:text-accent-bright">
               <Plus size={14} /> Add step
             </button>
           </Section>
@@ -174,17 +125,47 @@ export default function Builder() {
         </div>
 
         {/* Preview */}
-        <div>
-          <div className="text-[12px] font-semibold tracking-[0.6px] uppercase text-ink-subtle mb-3">
-            Generated YAML
-          </div>
-          <div className="bg-surface-1 border border-hairline rounded-xl overflow-hidden">
-            <pre className="p-5 font-mono text-[12px] leading-[1.6] text-ink overflow-auto max-h-[600px]">
-              {generated}
-            </pre>
+        <div className="space-y-6">
+          {/* DAG preview */}
+          {waves.length > 0 && (
+            <div>
+              <div className="text-[12px] font-semibold tracking-[0.6px] uppercase text-ink-subtle mb-3">
+                Execution waves
+              </div>
+              <div className="bg-surface-1 border border-hairline rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  {waves.map((wave, wi) => (
+                    <div key={wi} className="flex items-center gap-3">
+                      <div className="space-y-1.5">
+                        {wave.map((name) => (
+                          <div key={name} className="px-3 py-1.5 bg-surface-2 border border-hairline rounded-lg text-[12px] font-medium text-ink">
+                            {name || "(unnamed)"}
+                          </div>
+                        ))}
+                      </div>
+                      {wi < waves.length - 1 && (
+                        <div className="text-ink-subtle text-[16px]">&rarr;</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Generated YAML */}
+          <div>
+            <div className="text-[12px] font-semibold tracking-[0.6px] uppercase text-ink-subtle mb-3">
+              Generated YAML
+            </div>
+            <div className="bg-surface-1 border border-hairline rounded-xl overflow-hidden">
+              <pre className="p-5 font-mono text-[12px] leading-[1.6] text-ink overflow-auto max-h-[600px]">
+                {generated}
+              </pre>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 mt-4">
+          <div className="flex items-center gap-3">
             <button onClick={validate} className="inline-flex items-center gap-2 px-[18px] py-[10px] bg-inverse-canvas text-inverse-ink text-[14px] font-semibold rounded-lg hover:bg-ink-muted transition-colors">
               Validate
             </button>
@@ -202,7 +183,7 @@ export default function Builder() {
           </div>
 
           {result && (
-            <div className={`mt-4 rounded-xl border p-4 ${result.valid ? "bg-success/8 border-success/20" : "bg-error/8 border-error/20"}`}>
+            <div className={`rounded-xl border p-4 ${result.valid ? "bg-success/8 border-success/20" : "bg-error/8 border-error/20"}`}>
               <div className="flex items-center gap-2">
                 {result.valid ? <CheckCircle2 size={16} className="text-success" /> : <XCircle size={16} className="text-error" />}
                 <span className={`text-[13px] font-semibold ${result.valid ? "text-success" : "text-error"}`}>
@@ -234,7 +215,7 @@ function Input({ label, value, placeholder, onChange }: { label: string; value: 
     <div>
       {label && <label className="block text-[12px] text-ink-muted mb-1">{label}</label>}
       <input
-        className="w-full bg-canvas border border-hairline rounded-lg px-3 py-[7px] text-[13px] text-ink outline-none focus:border-accent/50"
+        className="w-full bg-canvas border border-hairline rounded-lg px-3 py-[7px] text-[13px] text-ink outline-none focus:border-rs-accent/50"
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
@@ -248,7 +229,7 @@ function Select({ label, value, options, onChange }: { label: string; value: str
     <div>
       {label && <label className="block text-[12px] text-ink-muted mb-1">{label}</label>}
       <select
-        className="w-full bg-canvas border border-hairline rounded-lg px-3 py-[7px] text-[13px] text-ink outline-none focus:border-accent/50"
+        className="w-full bg-canvas border border-hairline rounded-lg px-3 py-[7px] text-[13px] text-ink outline-none focus:border-rs-accent/50"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >

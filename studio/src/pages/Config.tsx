@@ -1,14 +1,43 @@
-import { useState } from "react"
+import { useState, useCallback } from "react"
+import CodeMirror from "@uiw/react-codemirror"
+import { yaml as yamlLang } from "@codemirror/lang-yaml"
+import * as yamlLib from "js-yaml"
 import { api } from "../lib/api"
-import { CheckCircle2, XCircle, Download } from "lucide-react"
+import { CheckCircle2, XCircle, Download, Upload } from "lucide-react"
+
+const SKELETON = `# Restitch configuration
+# Edit this YAML or use "Load current" to fetch runtime state.
+#
+# server:
+#   port: 8080
+#   log_format: json
+#   log_level: info
+#
+# upstreams:
+#   my-api:
+#     url: "http://localhost:8081"
+#     timeout: 10s
+#
+# compositions:
+#   example:
+#     path: "/api/example"
+#     method: GET
+#     steps:
+#       - name: data
+#         upstream: my-api
+#         path: "/data"
+#     response:
+#       body:
+#         result: "{{ steps.data.body }}"
+`
 
 export default function Config() {
-  const [yaml, setYaml] = useState("")
+  const [yamlContent, setYamlContent] = useState(SKELETON)
   const [result, setResult] = useState<{ valid: boolean; errors: string[] } | null>(null)
 
   const validate = async () => {
     try {
-      const res = await api.validate(yaml)
+      const res = await api.validate(yamlContent)
       setResult(res)
     } catch (e) {
       setResult({ valid: false, errors: [String(e)] })
@@ -16,7 +45,7 @@ export default function Config() {
   }
 
   const download = () => {
-    const blob = new Blob([yaml], { type: "text/yaml" })
+    const blob = new Blob([yamlContent], { type: "text/yaml" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -24,6 +53,46 @@ export default function Config() {
     a.click()
     URL.revokeObjectURL(url)
   }
+
+  const loadCurrent = useCallback(async () => {
+    try {
+      const [compositions, upstreams] = await Promise.all([
+        api.compositions(),
+        api.upstreams(),
+      ])
+
+      const upstreamsMap: Record<string, { url: string; timeout_ms?: number }> = {}
+      for (const u of upstreams) {
+        upstreamsMap[u.name] = { url: u.url }
+        if (u.timeout_ms > 0) upstreamsMap[u.name].timeout_ms = u.timeout_ms
+      }
+
+      const compositionsMap: Record<string, unknown> = {}
+      for (const c of compositions) {
+        compositionsMap[c.name] = {
+          path: c.path,
+          method: c.method,
+          ...(c.public ? { public: true } : {}),
+          steps: c.steps.map((s) => ({
+            name: s.name,
+            upstream: s.upstream,
+            path: `/${s.name}`,
+            method: s.method,
+            ...(s.optional ? { optional: true } : {}),
+            ...(s.depends_on?.length ? { depends_on: s.depends_on } : {}),
+          })),
+          response: { status: 200, body: {} },
+        }
+      }
+
+      const doc = { upstreams: upstreamsMap, compositions: compositionsMap }
+      const generated = `# Regenerated from runtime state — secrets and comments not included\n${yamlLib.dump(doc, { lineWidth: -1 })}`
+      setYamlContent(generated)
+      setResult(null)
+    } catch (e) {
+      setResult({ valid: false, errors: [`Failed to load: ${e}`] })
+    }
+  }, [])
 
   return (
     <div className="p-8 max-w-[1280px]">
@@ -37,26 +106,35 @@ export default function Config() {
       </div>
 
       <div className="bg-surface-1 border border-hairline rounded-xl overflow-hidden">
-        <textarea
-          className="w-full h-80 bg-transparent p-5 font-mono text-[13px] leading-[1.6] text-ink resize-y border-none outline-none placeholder:text-ink-subtle"
-          value={yaml}
-          onChange={(e) => { setYaml(e.target.value); setResult(null) }}
-          placeholder="Paste your restitch.yaml here..."
-          spellCheck={false}
+        <CodeMirror
+          value={yamlContent}
+          onChange={(val) => { setYamlContent(val); setResult(null) }}
+          extensions={[yamlLang()]}
+          height="380px"
+          theme="dark"
+          basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: true }}
+          style={{ fontSize: "13px" }}
         />
       </div>
 
       <div className="flex items-center gap-3 mt-4">
         <button
           onClick={validate}
-          disabled={!yaml.trim()}
+          disabled={!yamlContent.trim()}
           className="inline-flex items-center gap-2 px-[18px] py-[10px] bg-inverse-canvas text-inverse-ink text-[14px] font-semibold rounded-lg hover:bg-ink-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Validate
         </button>
         <button
+          onClick={loadCurrent}
+          className="inline-flex items-center gap-2 px-[18px] py-[10px] bg-surface-2 text-ink text-[14px] font-semibold rounded-lg hover:bg-surface-3 transition-colors"
+        >
+          <Upload size={14} />
+          Load current
+        </button>
+        <button
           onClick={download}
-          disabled={!yaml.trim()}
+          disabled={!yamlContent.trim()}
           className="inline-flex items-center gap-2 px-[18px] py-[10px] bg-surface-2 text-ink text-[14px] font-semibold rounded-lg hover:bg-surface-3 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Download size={14} />
