@@ -1,0 +1,34 @@
+# Docker Compose example — uses mockupstream as the backend.
+# Start with: docker-compose up --build
+
+upstreams:
+  mock:
+    url: "http://mockupstream:8081"
+    timeout: 10s
+
+compositions:
+  user-dashboard:
+    path: "/api/users/{id}/dashboard"
+    method: GET
+    steps:
+      - name: user
+        upstream: mock
+        path: "/users/{{ req.params.id }}"
+      - name: orders
+        upstream: mock
+        path: "/orders?userId={{ steps.user.body.id }}"
+    response:
+      body:
+        user: "{{ steps.user.body }}"
+        orders: "{{ steps.orders.body }}"
+
+  echo:
+    path: "/api/echo"
+    method: GET
+    steps:
+      - name: e
+        upstream: mock
+        path: "/echo"
+    response:
+      body:
+        echo: "{{ steps.e.body }}"
