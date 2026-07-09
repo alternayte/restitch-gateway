@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/restitch/restitch-gateway/internal/config"
+	"github.com/restitch/restitch-gateway/internal/gwconfig"
 )
 
 // HeaderStrategy implements static header injection for upstream authentication.
@@ -20,7 +20,7 @@ type HeaderStrategy struct {
 // Returns an error if referenced environment variables are missing or empty.
 func NewHeaderStrategy(cfg *HeaderConfig) (*HeaderStrategy, error) {
 	// Expand environment variables with validation
-	value, err := config.ExpandEnvWithValidation(cfg.Value)
+	value, err := gwconfig.ExpandEnvStrict(cfg.Value)
 	if err != nil {
 		return nil, fmt.Errorf("header auth value: %w", err)
 	}

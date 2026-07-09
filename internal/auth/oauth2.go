@@ -9,7 +9,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
-	"github.com/restitch/restitch-gateway/internal/config"
+	"github.com/restitch/restitch-gateway/internal/gwconfig"
 )
 
 const oauth2ExpiryDelta = 30 * time.Second
@@ -22,15 +22,15 @@ type OAuth2Strategy struct {
 // NewOAuth2Strategy creates an OAuth2 client credentials strategy.
 // Uses a dedicated refresh client with 10s timeout to bound hung IdP calls.
 func NewOAuth2Strategy(ctx context.Context, cfg *OAuth2Config) (*OAuth2Strategy, error) {
-	clientID, err := config.ExpandEnvWithValidation(cfg.ClientID)
+	clientID, err := gwconfig.ExpandEnvStrict(cfg.ClientID)
 	if err != nil {
 		return nil, fmt.Errorf("oauth2 client_id: %w", err)
 	}
-	clientSecret, err := config.ExpandEnvWithValidation(cfg.ClientSecret)
+	clientSecret, err := gwconfig.ExpandEnvStrict(cfg.ClientSecret)
 	if err != nil {
 		return nil, fmt.Errorf("oauth2 client_secret: %w", err)
 	}
-	tokenURL, err := config.ExpandEnvWithValidation(cfg.TokenURL)
+	tokenURL, err := gwconfig.ExpandEnvStrict(cfg.TokenURL)
 	if err != nil {
 		return nil, fmt.Errorf("oauth2 token_url: %w", err)
 	}

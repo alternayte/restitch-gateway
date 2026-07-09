@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/restitch/restitch-gateway/internal/config"
+	"github.com/restitch/restitch-gateway/internal/gwconfig"
 )
 
 // BasicStrategy implements HTTP Basic Authentication for upstream services.
@@ -21,11 +21,11 @@ type BasicStrategy struct {
 // Returns an error if referenced environment variables are missing or empty.
 func NewBasicStrategy(cfg *BasicConfig) (*BasicStrategy, error) {
 	// Expand environment variables with validation
-	username, err := config.ExpandEnvWithValidation(cfg.Username)
+	username, err := gwconfig.ExpandEnvStrict(cfg.Username)
 	if err != nil {
 		return nil, fmt.Errorf("basic auth username: %w", err)
 	}
-	password, err := config.ExpandEnvWithValidation(cfg.Password)
+	password, err := gwconfig.ExpandEnvStrict(cfg.Password)
 	if err != nil {
 		return nil, fmt.Errorf("basic auth password: %w", err)
 	}

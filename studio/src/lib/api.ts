@@ -5,6 +5,32 @@ export interface Info {
   config_path: string
 }
 
+export interface StepInfo {
+  name: string
+  upstream: string
+  method: string
+  optional: boolean
+  timeout_ms: number
+  depends_on: string[]
+}
+
+export interface CompositionInfo {
+  name: string
+  path: string
+  method: string
+  public: boolean
+  steps: StepInfo[]
+  waves: string[][]
+}
+
+export interface UpstreamInfo {
+  name: string
+  url: string
+  auth_type: string
+  timeout_ms: number
+  health: { status: string; latency_ms: number; checked_at: string; error?: string }
+}
+
 export interface StepRecord {
   name: string
   status: string
@@ -51,6 +77,9 @@ async function post<T>(path: string, body: string): Promise<T> {
 
 export const api = {
   info: () => get<Info>("/api/info"),
+  compositions: () => get<CompositionInfo[]>("/api/compositions"),
+  composition: (name: string) => get<CompositionInfo>(`/api/compositions/${name}`),
+  upstreams: () => get<UpstreamInfo[]>("/api/upstreams"),
   requests: (limit = 100) => get<RequestRecord[]>(`/api/requests?limit=${limit}`),
   stats: () => get<StatsResponse>("/api/stats"),
   validate: (yaml: string) => post<ValidateResult>("/api/validate", yaml),
