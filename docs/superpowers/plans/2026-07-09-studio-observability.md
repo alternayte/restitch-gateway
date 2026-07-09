@@ -185,7 +185,7 @@ Populate `StartOffsetMS` on every `StepTiming` return, and populate `Upstream`, 
 - For cached responses, set `timing.Cached = true`.
 - For errors, set `timing.Error = err.Error()`.
 - For successful responses, set `timing.BodySize = int64(len(result.RawBody))`.
-- For retries, check if the upstream client has retry info (the retry tripper already counts — add a retry count to the step result or context; if not easily accessible, set to 0 for now and note it as a follow-up).
+- For retries, the retry tripper in `internal/upstream/retry.go` does not currently expose retry count on a per-request basis. Set `Retries: 0` for now. The retry tripper uses a loop internally — to surface the count, a future change would add an `X-Restitch-Retries` response header in the retry tripper and read it back in the executor. This is not blocking for the observability feature.
 
 - [ ] **Step 6: Update handler.go to copy enriched fields into reqlog.StepRecord**
 
@@ -523,6 +523,7 @@ type StepBucket struct {
 	Errors   int64   `json:"errors"`
 	AvgMS    float64 `json:"avg_ms"`
 	P95MS    float64 `json:"p95_ms"`
+	Upstream string  `json:"upstream"`
 }
 
 type StepAggregate struct {
@@ -549,10 +550,31 @@ type Storage interface {
 	QueryTimeSeries(ctx context.Context, from, to time.Time, resolution time.Duration, composition string) ([]Bucket, error)
 	RecordRequest(ctx context.Context, record reqlog.Record) error
 	QueryRequests(ctx context.Context, opts RequestQuery) ([]reqlog.Record, error)
+	GetRequestByID(ctx context.Context, id string) (*reqlog.Record, error)
 	QueryStepMetrics(ctx context.Context, composition string, from, to time.Time) ([]StepAggregate, error)
 	Compact(ctx context.Context, retention time.Duration) error
 	Close() error
 }
+
+// MemoryStorage.GetRequestByID — linear scan (ring buffer is small):
+// func (m *MemoryStorage) GetRequestByID(_ context.Context, id string) (*reqlog.Record, error) {
+//     m.mu.RLock()
+//     defer m.mu.RUnlock()
+//     for i := len(m.requests) - 1; i >= 0; i-- {
+//         if m.requests[i].ID == id { r := m.requests[i]; return &r, nil }
+//     }
+//     return nil, nil
+// }
+//
+// SQLStorage.GetRequestByID — indexed lookup:
+// func (s *SQLStorage) GetRequestByID(ctx context.Context, id string) (*reqlog.Record, error) {
+//     row := s.db.QueryRowContext(ctx, `SELECT data FROM request_log WHERE id = ?`, id)
+//     var data string
+//     if err := row.Scan(&data); err != nil { return nil, nil }
+//     var r reqlog.Record
+//     json.Unmarshal([]byte(data), &r)
+//     return &r, nil
+// }
 
 type StepSample struct {
 	Name      string
@@ -683,6 +705,7 @@ func toBucket(ts time.Time, composition string, ab *accBucket) Bucket {
 			sb := &StepBucket{
 				Requests: int64(len(as.latencies)),
 				Errors:   as.errors,
+				Upstream: as.upstream,
 			}
 			if len(as.latencies) > 0 {
 				var sum float64
@@ -859,7 +882,7 @@ func (m *MemoryStorage) QueryStepMetrics(_ context.Context, composition string, 
 		for name, sm := range b.StepMetrics {
 			acc, ok := stepAcc[name]
 			if !ok {
-				acc = &stepAggAcc{}
+				acc = &stepAggAcc{upstream: sm.Upstream}
 				stepAcc[name] = acc
 			}
 			acc.requests += sm.Requests
@@ -873,6 +896,7 @@ func (m *MemoryStorage) QueryStepMetrics(_ context.Context, composition string, 
 	for name, acc := range stepAcc {
 		sa := StepAggregate{
 			Name:     name,
+			Upstream: acc.upstream,
 			Requests: acc.requests,
 			Errors:   acc.errors,
 		}
@@ -920,6 +944,7 @@ type stepAggAcc struct {
 	errors     int64
 	avgSum     float64
 	p95Samples []float64
+	upstream   string
 }
 
 func aggregateBuckets(buckets []Bucket, resolution time.Duration) []Bucket {
@@ -1254,7 +1279,7 @@ func (s *SQLStorage) QueryStepMetrics(ctx context.Context, composition string, f
 		for name, sm := range b.StepMetrics {
 			acc, ok := stepAcc[name]
 			if !ok {
-				acc = &stepAggAcc{}
+				acc = &stepAggAcc{upstream: sm.Upstream}
 				stepAcc[name] = acc
 			}
 			acc.requests += sm.Requests
@@ -1268,6 +1293,7 @@ func (s *SQLStorage) QueryStepMetrics(ctx context.Context, composition string, f
 	for name, acc := range stepAcc {
 		sa := StepAggregate{
 			Name:     name,
+			Upstream: acc.upstream,
 			Requests: acc.requests,
 			Errors:   acc.errors,
 		}
@@ -1342,6 +1368,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/restitch/restitch-gateway/internal/reqlog"
 )
 
 func TestHandleTimeSeries(t *testing.T) {
@@ -1398,7 +1426,7 @@ func TestHandleRequestByID(t *testing.T) {
 }
 ```
 
-(Add import for `reqlog` package at top.)
+(Import for `reqlog` is included in the import block above.)
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -1458,8 +1486,8 @@ func (s *Server) handleTimeSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rangeDur := parseDuration(r.URL.Query().Get("range"), time.Hour)
-	resolution := parseDuration(r.URL.Query().Get("resolution"), time.Minute)
+	rangeDur := ParseRangeDuration(r.URL.Query().Get("range"), time.Hour)
+	resolution := ParseRangeDuration(r.URL.Query().Get("resolution"), time.Minute)
 	composition := r.URL.Query().Get("composition")
 
 	to := time.Now()
@@ -1488,7 +1516,7 @@ func (s *Server) handleStepMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rangeDur := parseDuration(r.URL.Query().Get("range"), time.Hour)
+	rangeDur := ParseRangeDuration(r.URL.Query().Get("range"), time.Hour)
 	to := time.Now()
 	from := to.Add(-rangeDur)
 
@@ -1510,21 +1538,19 @@ func (s *Server) handleRequestByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := r.PathValue("id")
-	records, err := s.deps.Storage.QueryRequests(r.Context(), RequestQuery{Limit: 1000})
+	rec, err := s.deps.Storage.GetRequestByID(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	for _, rec := range records {
-		if rec.ID == id {
-			writeJSON(w, http.StatusOK, rec)
-			return
-		}
+	if rec == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "request not found"})
+		return
 	}
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "request not found"})
+	writeJSON(w, http.StatusOK, rec)
 }
 
-func parseDuration(s string, fallback time.Duration) time.Duration {
+func ParseRangeDuration(s string, fallback time.Duration) time.Duration {
 	switch s {
 	case "1h":
 		return time.Hour
@@ -1534,6 +1560,8 @@ func parseDuration(s string, fallback time.Duration) time.Duration {
 		return 24 * time.Hour
 	case "7d":
 		return 7 * 24 * time.Hour
+	case "30d":
+		return 30 * 24 * time.Hour
 	case "1m":
 		return time.Minute
 	case "5m":
@@ -1638,7 +1666,7 @@ var acc *admin.Accumulator
 switch adminCfg.Storage.Type {
 case "sqlite":
 	var err error
-	retention := parseDuration(adminCfg.Storage.Retention, 7*24*time.Hour)
+	retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 7*24*time.Hour)
 	store, err = admin.NewSQLStorage(adminCfg.Storage.URL, adminCfg.Storage.AuthToken, retention)
 	if err != nil {
 		slog.Error("failed to open SQLite storage", "error", err)
@@ -1647,14 +1675,14 @@ case "sqlite":
 	}
 case "turso":
 	var err error
-	retention := parseDuration(adminCfg.Storage.Retention, 30*24*time.Hour)
+	retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 30*24*time.Hour)
 	store, err = admin.NewSQLStorage(adminCfg.Storage.URL, adminCfg.Storage.AuthToken, retention)
 	if err != nil {
 		slog.Error("failed to connect to Turso", "error", err)
 		store = admin.NewMemoryStorage(retention)
 	}
 default:
-	retention := parseDuration(adminCfg.Storage.Retention, 24*time.Hour)
+	retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 24*time.Hour)
 	store = admin.NewMemoryStorage(retention)
 }
 
@@ -1673,7 +1701,7 @@ go func() {
 					slog.Error("failed to record time-series bucket", "error", err)
 				}
 			}
-			retentionDur := parseDuration(adminCfg.Storage.Retention, 24*time.Hour)
+			retentionDur := admin.ParseRangeDuration(adminCfg.Storage.Retention, 24*time.Hour)
 			store.Compact(context.Background(), retentionDur)
 		case <-ctx.Done():
 			return
@@ -1682,7 +1710,25 @@ go func() {
 }()
 ```
 
-Pass `store` to `admin.Deps{Storage: store}` and `acc` + `store` to the `MultiRecorder`.
+Then update the `admin.Deps{}` literal to include `Storage: store`, and update the `MultiRecorder` construction:
+
+```go
+recorder := &admin.MultiRecorder{
+	Ring:        ringBuf,
+	Stats:       stats,
+	Accumulator: acc,
+	Storage:     store,
+}
+```
+
+And in the `admin.Deps{}` literal:
+
+```go
+admin.Deps{
+	// ... existing fields ...
+	Storage: store,
+}
+```
 
 - [ ] **Step 8: Run all tests**
 
@@ -2091,9 +2137,73 @@ export function LatencyHeatmap({ data }: { data: TimeSeriesBucket[] }) {
 
 - [ ] **Step 5: Overhaul Dashboard.tsx**
 
-Rewrite `studio/src/pages/Dashboard.tsx` to use the new chart components. Keep the existing `usePoll(api.stats, 5000)` and `usePoll(api.upstreams, 10000)`, and add `usePoll(api.timeseries, 30000)`. Add time range state with `TimeRangeSelector`. Replace static `StatCard` with `SparklineCard`. Add `RequestRateChart`, `LatencyChart`, and `LatencyHeatmap` below the sparkline cards. Keep the upstream health strip and per-composition table, but add a mini sparkline column to the table and make rows clickable to navigate to `/compositions/:name`.
+Rewrite `studio/src/pages/Dashboard.tsx`. The structure:
 
-The full implementation follows the component APIs shown above. Use `useNavigate()` from `react-router-dom` for table row clicks.
+```tsx
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { usePoll } from "../hooks/usePoll"
+import { api } from "../lib/api"
+import { SparklineCard } from "../components/charts/SparklineCard"
+import { RequestRateChart } from "../components/charts/RequestRateChart"
+import { LatencyChart } from "../components/charts/LatencyChart"
+import { LatencyHeatmap } from "../components/charts/LatencyHeatmap"
+import { TimeRangeSelector, type TimeRange } from "../components/charts/TimeRangeSelector"
+
+export default function Dashboard() {
+  const [range, setRange] = useState<TimeRange>("1h")
+  const navigate = useNavigate()
+  const { data: stats } = usePoll(() => api.stats(), 5000)
+  const { data: upstreams } = usePoll(() => api.upstreams(), 10000)
+  const { data: timeseries } = usePoll(() => api.timeseries(range, "1m"), 30000)
+
+  // ... loading skeleton (keep existing pattern) ...
+
+  const errorRate = stats.total_requests > 0
+    ? ((stats.total_errors / stats.total_requests) * 100).toFixed(1) + "%"
+    : "—"
+
+  // Build sparkline data from timeseries
+  const requestSparkline = (timeseries || []).map((b) => ({ value: b.requests }))
+  const errorSparkline = (timeseries || []).map((b) => ({ value: b.errors }))
+  const partialSparkline = (timeseries || []).map((b) => ({ value: b.partials }))
+
+  return (
+    <div className="p-8 max-w-[1280px]">
+      {/* Header + TimeRangeSelector */}
+      <div className="mb-8 flex items-end justify-between">
+        <div>
+          <div className="text-[12px] font-semibold tracking-[0.6px] uppercase text-ink-subtle mb-2">Overview</div>
+          <h1 className="text-[28px] font-semibold leading-[1.21] tracking-[-0.6px] text-ink">Dashboard</h1>
+        </div>
+        <TimeRangeSelector value={range} onChange={setRange} />
+      </div>
+
+      {/* Sparkline stat cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <SparklineCard label="Total requests" value={stats.total_requests} data={requestSparkline} />
+        <SparklineCard label="Error rate" value={errorRate} data={errorSparkline} accent={stats.total_errors > 0} />
+        <SparklineCard label="Partial responses" value={stats.partial_responses} data={partialSparkline} />
+        <SparklineCard label="Compositions" value={Object.keys(stats.per_composition).length} data={[]} />
+      </div>
+
+      {/* Charts */}
+      {timeseries && timeseries.length > 0 && (
+        <div className="space-y-6 mb-10">
+          <RequestRateChart data={timeseries} />
+          <LatencyChart data={timeseries} />
+          <LatencyHeatmap data={timeseries} />
+        </div>
+      )}
+
+      {/* Upstream health strip — keep existing code */}
+      {/* Per-composition table — keep existing but add onClick={() => navigate(`/compositions/${name}`)} to rows */}
+    </div>
+  )
+}
+```
+
+Keep the existing upstream health strip and composition table JSX, but wrap each `<tr>` with `onClick={() => navigate(`/compositions/${name}`)}` and add `cursor-pointer` class.
 
 - [ ] **Step 6: Run build**
 
@@ -2135,12 +2245,15 @@ interface RequestFiltersProps {
   onStatusChange: (v: string) => void
   durationFilter: string
   onDurationChange: (v: string) => void
+  partialOnly: boolean
+  onPartialChange: (v: boolean) => void
 }
 
 export function RequestFilters({
   compositions, composition, onCompositionChange,
   statusFilter, onStatusChange,
   durationFilter, onDurationChange,
+  partialOnly, onPartialChange,
 }: RequestFiltersProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -2160,6 +2273,14 @@ export function RequestFilters({
           { value: "500", label: ">500ms" },
           { value: "1000", label: ">1s" },
         ]} />
+      <button
+        onClick={() => onPartialChange(!partialOnly)}
+        className={`px-3 py-1 rounded-lg text-[12px] font-medium border transition-colors ${
+          partialOnly ? "bg-warning/15 border-warning/30 text-warning" : "border-hairline text-ink-muted hover:text-ink"
+        }`}
+      >
+        Partial only
+      </button>
     </div>
   )
 }
@@ -2300,6 +2421,7 @@ Create `studio/src/components/waterfall/RequestSummary.tsx`:
 
 ```tsx
 import type { RequestRecord } from "../../lib/api"
+import { stepColors } from "../../lib/chart-theme"
 
 export function RequestSummary({ req }: { req: RequestRecord }) {
   const stepTime = req.steps?.reduce((sum, s) => sum + s.duration_ms, 0) ?? 0
@@ -2307,6 +2429,7 @@ export function RequestSummary({ req }: { req: RequestRecord }) {
 
   return (
     <div className="flex items-center gap-6 mb-3 text-[12px]">
+      <StepDonut steps={req.steps || []} totalDuration={req.duration_ms} />
       <div>
         <span className="text-ink-subtle">Total: </span>
         <span className="font-mono tabular-nums text-ink font-medium">{req.duration_ms.toFixed(1)}ms</span>
@@ -2322,17 +2445,97 @@ export function RequestSummary({ req }: { req: RequestRecord }) {
     </div>
   )
 }
+
+function StepDonut({ steps, totalDuration }: { steps: { name: string; duration_ms: number }[]; totalDuration: number }) {
+  if (steps.length === 0 || totalDuration <= 0) return null
+
+  const size = 32
+  const strokeWidth = 5
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+
+  let offset = 0
+  const segments = steps.map((s, i) => {
+    const pct = s.duration_ms / totalDuration
+    const dashLength = pct * circumference
+    const seg = { offset, dashLength, color: stepColors[i % stepColors.length], name: s.name }
+    offset += dashLength
+    return seg
+  })
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0 -rotate-90">
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(178,182,189,0.08)" strokeWidth={strokeWidth} />
+      {segments.map((seg, i) => (
+        <circle
+          key={i}
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={seg.color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${seg.dashLength} ${circumference - seg.dashLength}`}
+          strokeDashoffset={-seg.offset}
+          strokeLinecap="round"
+        >
+          <title>{`${seg.name}: ${((seg.dashLength / circumference) * 100).toFixed(0)}%`}</title>
+        </circle>
+      ))}
+    </svg>
+  )
+}
 ```
 
 - [ ] **Step 5: Overhaul Requests.tsx**
 
-Rewrite `studio/src/pages/Requests.tsx`:
-- Add filter state (`composition`, `statusFilter`, `durationFilter`) and `<RequestFilters>` component
-- Also poll `api.compositions()` to populate the composition dropdown
-- Pass filter params to `api.requests()` calls (the backend now accepts them, but for backward compat also filter client-side)
-- Replace the old `StepWaterfall` component with `<TimelineWaterfall>` + `<RequestSummary>`
-- Add `<StepDetailPanel>` state — when a step is clicked in the waterfall, show the panel
-- Keep the expandable row pattern but use the new components inside
+Rewrite `studio/src/pages/Requests.tsx`. Key changes to the existing file:
+
+```tsx
+import { useState } from "react"
+import { usePoll } from "../hooks/usePoll"
+import { api, type RequestRecord, type StepRecord } from "../lib/api"
+import { ChevronDown, ChevronRight } from "lucide-react"
+import { RequestFilters } from "../components/filters/RequestFilters"
+import { TimelineWaterfall } from "../components/waterfall/TimelineWaterfall"
+import { StepDetailPanel } from "../components/waterfall/StepDetailPanel"
+import { RequestSummary } from "../components/waterfall/RequestSummary"
+
+export default function Requests() {
+  const [limit, setLimit] = useState(100)
+  const [composition, setComposition] = useState("")
+  const [statusFilter, setStatusFilter] = useState("")
+  const [durationFilter, setDurationFilter] = useState("")
+  const [partialOnly, setPartialOnly] = useState(false)
+
+  const { data: compositions } = usePoll(() => api.compositions(), 10000)
+  const { data: requests } = usePoll(() => api.requests(limit), 3000)
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const [selectedStep, setSelectedStep] = useState<StepRecord | null>(null)
+
+  const compNames = (compositions || []).map((c) => c.name)
+
+  // Client-side filtering (backend also filters if params sent)
+  const filtered = (requests || []).filter((r) => {
+    if (composition && r.composition !== composition) return false
+    if (statusFilter === "2xx" && (r.status < 200 || r.status >= 300)) return false
+    if (statusFilter === "4xx" && (r.status < 400 || r.status >= 500)) return false
+    if (statusFilter === "5xx" && r.status < 500) return false
+    if (durationFilter && r.duration_ms < Number(durationFilter)) return false
+    if (partialOnly && !r.partial) return false
+    return true
+  })
+
+  // ... render with <RequestFilters> above the table ...
+  // ... in expanded row, replace old StepWaterfall with:
+  //   <RequestSummary req={req} />
+  //   <TimelineWaterfall steps={req.steps} totalDuration={req.duration_ms}
+  //     onStepClick={(s) => setSelectedStep(s)} />
+  //   {selectedStep && <StepDetailPanel step={selectedStep} onClose={() => setSelectedStep(null)} />}
+}
+```
+
+Keep the existing table structure (thead, tbody, RequestRow pattern) but swap the expanded-row content from `<StepWaterfall>` to the new components.
 
 - [ ] **Step 6: Run build**
 
@@ -2451,19 +2654,94 @@ export function StepComparisonChart({ data, stepNames }: { data: TimeSeriesBucke
 
 Modify `studio/src/pages/CompositionDetail.tsx`:
 
-- Change tab type to include `"metrics"`: `useState<"metrics" | "graph" | "steps" | "route">("metrics")`
-- Update tab bar order: `["metrics", "graph", "steps", "route"]` with display labels `["Metrics", "DAG", "Steps", "Route"]`
-- Add the `MetricsTab` component that renders:
-  - `<TimeRangeSelector>` at the top right
-  - Four `<SparklineCard>` components for request count, error rate, avg latency, p95
-  - `<RequestRateChart>` with composition-filtered data
-  - `<LatencyChart>` with composition-filtered data
-  - `<LatencyHeatmap>` with composition-filtered data
-  - `<StepBreakdownChart>` with step metrics
-  - `<StepComparisonChart>` with composition time-series and step names
-  - Recent traces section: last 20 requests filtered to this composition, with `<TimelineWaterfall>`
+Change tab state and bar:
+```tsx
+const [tab, setTab] = useState<"metrics" | "graph" | "steps" | "route">("metrics")
 
-Use `usePoll(api.timeseries(range, "1m", comp.name), 30000)` and `usePoll(api.stepMetrics(comp.name, range), 30000)` for data.
+// Tab bar:
+{(["metrics", "graph", "steps", "route"] as const).map((t) => (
+  <button key={t} onClick={() => setTab(t)}
+    className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors capitalize ${
+      tab === t ? "bg-surface-2 text-ink" : "text-ink-muted hover:text-ink hover:bg-surface-1"
+    }`}>
+    {t === "graph" ? "DAG" : t.charAt(0).toUpperCase() + t.slice(1)}
+  </button>
+))}
+```
+
+Add render: `{tab === "metrics" && <MetricsTab comp={comp} />}`
+
+Create the `MetricsTab` component in the same file:
+
+```tsx
+function MetricsTab({ comp }: { comp: CompositionInfo }) {
+  const [range, setRange] = useState<TimeRange>("1h")
+  const { data: timeseries } = usePoll(() => api.timeseries(range, "1m", comp.name), 30000)
+  const { data: stepMetrics } = usePoll(() => api.stepMetrics(comp.name, range), 30000)
+  const { data: recentRequests } = usePoll(() => api.requests(20), 5000)
+
+  const compRequests = (recentRequests || []).filter((r) => r.composition === comp.name)
+  const ts = timeseries || []
+
+  const totalReqs = ts.reduce((s, b) => s + b.requests, 0)
+  const totalErrs = ts.reduce((s, b) => s + b.errors, 0)
+  const errorRate = totalReqs > 0 ? ((totalErrs / totalReqs) * 100).toFixed(1) + "%" : "—"
+  const avgLatency = ts.length > 0
+    ? (ts.reduce((s, b) => s + b.latency_p50, 0) / ts.length).toFixed(1) + "ms"
+    : "—"
+  const p95 = ts.length > 0
+    ? Math.max(...ts.map((b) => b.latency_p95)).toFixed(1) + "ms"
+    : "—"
+
+  const stepNames = [...new Set((stepMetrics || []).map((s) => s.name))]
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-end"><TimeRangeSelector value={range} onChange={setRange} /></div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <SparklineCard label="Requests" value={totalReqs} data={ts.map((b) => ({ value: b.requests }))} />
+        <SparklineCard label="Error rate" value={errorRate} data={ts.map((b) => ({ value: b.errors }))} accent={totalErrs > 0} />
+        <SparklineCard label="Avg latency" value={avgLatency} data={ts.map((b) => ({ value: b.latency_p50 }))} />
+        <SparklineCard label="P95 latency" value={p95} data={ts.map((b) => ({ value: b.latency_p95 }))} />
+      </div>
+
+      {ts.length > 0 && (
+        <>
+          <RequestRateChart data={ts} />
+          <LatencyChart data={ts} />
+          <LatencyHeatmap data={ts} />
+        </>
+      )}
+
+      {stepMetrics && stepMetrics.length > 0 && (
+        <>
+          <StepBreakdownChart steps={stepMetrics} />
+          {ts.length > 0 && <StepComparisonChart data={ts} stepNames={stepNames} />}
+        </>
+      )}
+
+      {compRequests.length > 0 && (
+        <div>
+          <div className="text-[12px] font-semibold tracking-[0.6px] uppercase text-ink-subtle mb-3">Recent traces</div>
+          {compRequests.slice(0, 10).map((req) => (
+            <div key={req.id} className="mb-3 bg-surface-1 border border-hairline rounded-xl p-4">
+              <div className="flex items-center gap-4 text-[12px] mb-2">
+                <span className="font-mono text-ink-muted">{new Date(req.time).toLocaleTimeString()}</span>
+                <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${req.status < 300 ? "bg-success/15 text-success" : "bg-error/15 text-error"}`}>{req.status}</span>
+                <span className="font-mono text-ink-muted tabular-nums">{req.duration_ms.toFixed(1)}ms</span>
+              </div>
+              <TimelineWaterfall steps={req.steps || []} totalDuration={req.duration_ms} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+Add the necessary imports at the top of the file for all chart components.
 
 - [ ] **Step 4: Run build**
 
@@ -2509,6 +2787,8 @@ export interface StepInfo {
 
 In the `DAGView` component inside `CompositionDetail.tsx`, update the edge generation to include inferred deps:
 
+Note: `showOverlay` is a boolean state variable toggled by the "Show latest trace" button (see Step 4). When overlay is active, edges animate using React Flow's built-in `animated` prop which applies CSS `stroke-dasharray` animation.
+
 ```tsx
 const edges: Edge[] = [
   ...comp.steps.flatMap((step) =>
@@ -2516,8 +2796,8 @@ const edges: Edge[] = [
       id: `explicit-${dep}-${step.name}`,
       source: dep,
       target: step.name,
-      style: { stroke: "rgba(178,182,189,0.4)", strokeWidth: 2 },
-      animated: false,
+      style: { stroke: showOverlay ? "rgba(74,222,128,0.5)" : "rgba(178,182,189,0.4)", strokeWidth: 2 },
+      animated: showOverlay,
     }))
   ),
   ...comp.steps.flatMap((step) =>
@@ -2525,9 +2805,9 @@ const edges: Edge[] = [
       id: `inferred-${dep}-${step.name}`,
       source: dep,
       target: step.name,
-      style: { stroke: "rgba(178,182,189,0.25)", strokeWidth: 1.5, strokeDasharray: "6 3" },
-      animated: false,
-      label: "inferred",
+      style: { stroke: showOverlay ? "rgba(74,222,128,0.3)" : "rgba(178,182,189,0.25)", strokeWidth: 1.5, strokeDasharray: "6 3" },
+      animated: showOverlay,
+      label: showOverlay ? "" : "inferred",
       labelStyle: { fontSize: 9, fill: "rgba(178,182,189,0.4)" },
     }))
   ),
@@ -2539,6 +2819,22 @@ const edges: Edge[] = [
 Replace the `StepNode` component with a richer version:
 
 ```tsx
+```
+
+Define the `StepNodeData` type and the enhanced node component:
+
+```tsx
+interface StepNodeData {
+  label: string
+  upstream: string
+  method: string
+  optional: boolean
+  timeoutMs: number
+  wave: number
+  overlayBorder: string
+  durationLabel: string
+}
+
 const methodColors: Record<string, string> = {
   GET: "bg-blue-500/15 text-blue-400",
   POST: "bg-green-500/15 text-green-400",
@@ -2560,6 +2856,10 @@ function EnhancedStepNode({ data }: { data: StepNodeData }) {
           {data.method}
         </span>
         <span className="text-[11px] text-ink-muted truncate">{data.upstream}</span>
+      </div>
+      <div className="flex items-center gap-2 mt-1 text-[10px] text-ink-subtle">
+        <span>wave {data.wave + 1}</span>
+        {data.timeoutMs > 0 && <span>· {data.timeoutMs}ms timeout</span>}
       </div>
       {data.durationLabel && (
         <div className="mt-1.5 text-[11px] font-mono tabular-nums text-ink-subtle">
@@ -2602,7 +2902,7 @@ function DAGView({ comp }: { comp: CompositionInfo }) {
     return {
       id: step.name,
       position: { x: wave * 280, y: inWave * 130 },
-      data: { label: step.name, upstream: step.upstream, method: step.method, optional: step.optional, overlayBorder, durationLabel },
+      data: { label: step.name, upstream: step.upstream, method: step.method, optional: step.optional, timeoutMs: step.timeout_ms, wave, overlayBorder, durationLabel },
       type: "enhanced",
       style: {
         background: "#161618",
