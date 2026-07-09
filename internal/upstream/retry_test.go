@@ -26,7 +26,7 @@ func TestRetryTripper_SuccessAfterRetries(t *testing.T) {
 		Interval:    1 * time.Millisecond,
 		MaxBackoff:  10 * time.Millisecond,
 		BackoffOn:   []int{503},
-	}, "test")
+	}, "test", nil)
 
 	req, _ := http.NewRequest("GET", srv.URL+"/test", nil)
 	resp, err := rt.RoundTrip(req)
@@ -53,7 +53,7 @@ func TestRetryTripper_NoRetryOnNonBackoffStatus(t *testing.T) {
 		MaxAttempts: 3,
 		Interval:    1 * time.Millisecond,
 		BackoffOn:   []int{503},
-	}, "test")
+	}, "test", nil)
 
 	req, _ := http.NewRequest("GET", srv.URL+"/test", nil)
 	resp, err := rt.RoundTrip(req)
@@ -80,7 +80,7 @@ func TestRetryTripper_PostNotRetriedByDefault(t *testing.T) {
 		MaxAttempts: 3,
 		Interval:    1 * time.Millisecond,
 		BackoffOn:   []int{503},
-	}, "test")
+	}, "test", nil)
 
 	req, _ := http.NewRequest("POST", srv.URL+"/test", nil)
 	resp, err := rt.RoundTrip(req)
@@ -105,7 +105,7 @@ func TestRetryTripper_ContextCancellation(t *testing.T) {
 		MaxAttempts: 5,
 		Interval:    100 * time.Millisecond,
 		BackoffOn:   []int{503},
-	}, "test")
+	}, "test", nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -130,7 +130,7 @@ func TestRetryTripper_DropOn(t *testing.T) {
 		Interval:    1 * time.Millisecond,
 		BackoffOn:   []int{502},
 		DropOn:      []int{503},
-	}, "test")
+	}, "test", nil)
 
 	req, _ := http.NewRequest("GET", srv.URL+"/test", nil)
 	resp, err := rt.RoundTrip(req)

@@ -8,7 +8,21 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/restitch/restitch-gateway/internal/observability"
 )
+
+type retryOverrideKey struct{}
+
+// WithRetryOverride stores a per-step retry config override on the context.
+func WithRetryOverride(ctx context.Context, cfg *RetryConfig) context.Context {
+	return context.WithValue(ctx, retryOverrideKey{}, cfg)
+}
+
+func retryOverride(ctx context.Context) *RetryConfig {
+	v, _ := ctx.Value(retryOverrideKey{}).(*RetryConfig)
+	return v
+}
 
 // RetryConfig configures retry behavior.
 type RetryConfig struct {
@@ -37,26 +51,39 @@ func applyRetryDefaults(cfg RetryConfig) RetryConfig {
 }
 
 type retryTripper struct {
-	next http.RoundTripper
-	cfg  RetryConfig
-	name string
+	next    http.RoundTripper
+	cfg     RetryConfig
+	name    string
+	metrics *observability.Metrics
 }
 
-func newRetryTripper(next http.RoundTripper, cfg RetryConfig, name string) http.RoundTripper {
+func newRetryTripper(next http.RoundTripper, cfg RetryConfig, name string, metrics *observability.Metrics) http.RoundTripper {
 	cfg = applyRetryDefaults(cfg)
-	return &retryTripper{next: next, cfg: cfg, name: name}
+	return &retryTripper{next: next, cfg: cfg, name: name, metrics: metrics}
+}
+
+func (rt *retryTripper) effectiveConfig(ctx context.Context) RetryConfig {
+	if override := retryOverride(ctx); override != nil {
+		return applyRetryDefaults(*override)
+	}
+	return rt.cfg
 }
 
 func (rt *retryTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	if !rt.isRetryable(req.Method) {
+	cfg := rt.effectiveConfig(req.Context())
+
+	if !isRetryableMethod(req.Method, cfg.RetryNonIdempotent) {
 		return rt.next.RoundTrip(req)
 	}
 
 	var lastResp *http.Response
 	var lastErr error
 
-	for attempt := 0; attempt < rt.cfg.MaxAttempts; attempt++ {
+	for attempt := 0; attempt < cfg.MaxAttempts; attempt++ {
 		if attempt > 0 {
+			if rt.metrics != nil {
+				rt.metrics.RetriesTotal.WithLabelValues(rt.name).Inc()
+			}
 			if req.GetBody != nil {
 				body, err := req.GetBody()
 				if err != nil {
@@ -71,23 +98,23 @@ func (rt *retryTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		if err != nil {
 			lastErr = err
 			lastResp = nil
-			if !rt.shouldRetry(req.Context(), attempt, 0, nil) {
+			if !shouldRetry(req.Context(), attempt, cfg, nil) {
 				return nil, err
 			}
 			continue
 		}
 
-		if rt.isDropOn(resp.StatusCode) {
+		if isInStatusList(resp.StatusCode, cfg.DropOn) {
 			return resp, nil
 		}
 
-		if rt.isBackoffOn(resp.StatusCode) {
+		if isInStatusList(resp.StatusCode, cfg.BackoffOn) {
 			if lastResp != nil {
 				drainBody(lastResp.Body)
 			}
 			lastResp = resp
 			lastErr = nil
-			if !rt.shouldRetry(req.Context(), attempt, resp.StatusCode, resp) {
+			if !shouldRetry(req.Context(), attempt, cfg, resp) {
 				return resp, nil
 			}
 			drainBody(resp.Body)
@@ -103,8 +130,8 @@ func (rt *retryTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return nil, lastErr
 }
 
-func (rt *retryTripper) isRetryable(method string) bool {
-	if rt.cfg.RetryNonIdempotent {
+func isRetryableMethod(method string, retryNonIdempotent bool) bool {
+	if retryNonIdempotent {
 		return true
 	}
 	switch method {
@@ -114,8 +141,8 @@ func (rt *retryTripper) isRetryable(method string) bool {
 	return false
 }
 
-func (rt *retryTripper) isBackoffOn(status int) bool {
-	for _, s := range rt.cfg.BackoffOn {
+func isInStatusList(status int, list []int) bool {
+	for _, s := range list {
 		if s == status {
 			return true
 		}
@@ -123,27 +150,18 @@ func (rt *retryTripper) isBackoffOn(status int) bool {
 	return false
 }
 
-func (rt *retryTripper) isDropOn(status int) bool {
-	for _, s := range rt.cfg.DropOn {
-		if s == status {
-			return true
-		}
-	}
-	return false
-}
-
-func (rt *retryTripper) shouldRetry(ctx context.Context, attempt, status int, resp *http.Response) bool {
-	if attempt+1 >= rt.cfg.MaxAttempts {
+func shouldRetry(ctx context.Context, attempt int, cfg RetryConfig, resp *http.Response) bool {
+	if attempt+1 >= cfg.MaxAttempts {
 		return false
 	}
 
-	sleepDur := rt.backoff(attempt)
+	sleepDur := retryBackoff(attempt, cfg)
 	if resp != nil {
 		if ra := resp.Header.Get("Retry-After"); ra != "" {
 			if secs, err := strconv.Atoi(ra); err == nil {
 				sleepDur = time.Duration(secs) * time.Second
-				if sleepDur > rt.cfg.MaxBackoff {
-					sleepDur = rt.cfg.MaxBackoff
+				if sleepDur > cfg.MaxBackoff {
+					sleepDur = cfg.MaxBackoff
 				}
 			}
 		}
@@ -157,12 +175,12 @@ func (rt *retryTripper) shouldRetry(ctx context.Context, attempt, status int, re
 	}
 }
 
-func (rt *retryTripper) backoff(attempt int) time.Duration {
-	base := float64(rt.cfg.Interval) * math.Pow(2, float64(attempt))
+func retryBackoff(attempt int, cfg RetryConfig) time.Duration {
+	base := float64(cfg.Interval) * math.Pow(2, float64(attempt))
 	jitter := 0.8 + 0.4*rand.Float64()
 	d := time.Duration(base * jitter)
-	if d > rt.cfg.MaxBackoff {
-		d = rt.cfg.MaxBackoff
+	if d > cfg.MaxBackoff {
+		d = cfg.MaxBackoff
 	}
 	return d
 }

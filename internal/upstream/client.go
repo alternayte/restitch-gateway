@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/auth"
+	"github.com/restitch/restitch-gateway/internal/observability"
 )
 
 // TransportConfig mirrors the YAML upstream.transport block.
@@ -75,6 +76,7 @@ type BuildConfig struct {
 	Auth             auth.Strategy
 	Retry            *RetryConfig
 	Breaker          *BreakerConfig
+	Metrics          *observability.Metrics
 }
 
 // Build assembles a per-upstream *http.Client with the RoundTripper chain:
@@ -90,8 +92,9 @@ func Build(cfg BuildConfig) *Upstream {
 		rt = newBreakerTripper(rt, *cfg.Breaker, cfg.Name)
 	}
 	if cfg.Retry != nil {
-		rt = newRetryTripper(rt, *cfg.Retry, cfg.Name)
+		rt = newRetryTripper(rt, *cfg.Retry, cfg.Name, cfg.Metrics)
 	}
+	rt = newMetricsTripper(rt, cfg.Name, cfg.Metrics)
 
 	return &Upstream{
 		Name:    cfg.Name,

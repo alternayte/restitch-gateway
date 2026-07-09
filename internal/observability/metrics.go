@@ -115,6 +115,20 @@ func StatusStr(code int) string {
 	return strconv.Itoa(code)
 }
 
+// BreakerStateValue maps gobreaker state strings to gauge values.
+func BreakerStateValue(state string) float64 {
+	switch state {
+	case "closed":
+		return 0
+	case "half-open":
+		return 1
+	case "open":
+		return 2
+	default:
+		return -1
+	}
+}
+
 var defaultMetrics *Metrics
 
 // SetDefaultMetrics sets the global metrics instance (called once from main).

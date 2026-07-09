@@ -11,6 +11,10 @@ import (
 	"github.com/sony/gobreaker/v2"
 )
 
+// OnBreakerStateChange is called when a circuit breaker changes state.
+// Set by the metrics package to update the breaker_state gauge.
+var OnBreakerStateChange func(name string, from, to string)
+
 // BreakerConfig configures a circuit breaker for an upstream.
 type BreakerConfig struct {
 	MaxFailures int
@@ -39,6 +43,9 @@ func newBreakerTripper(next http.RoundTripper, cfg BreakerConfig, name string) h
 				"upstream", name,
 				"from", from.String(),
 				"to", to.String())
+			if OnBreakerStateChange != nil {
+				OnBreakerStateChange(name, from.String(), to.String())
+			}
 		},
 	}
 
