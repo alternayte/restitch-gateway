@@ -90,7 +90,7 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 
 	ctx = auth.WithClientAuthorization(ctx, r.Header.Get("Authorization"))
 
-	execStart := time.Now()
+	handlerStart := time.Now()
 
 	slog.InfoContext(ctx, "executing composition",
 		"composition", compositionName,
@@ -106,7 +106,10 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 		}
 	}
 
-	result, err := h.executor.Execute(ctx, compositionName, r, params, body)
+	rd := NewRequestData(r, params, body)
+	executeStart := time.Now()
+	result, err := h.executor.Execute(ctx, compositionName, rd)
+	executeDuration := time.Since(executeStart)
 	if err != nil {
 		if r.Context().Err() != nil {
 			slog.InfoContext(ctx, "client canceled",
@@ -155,7 +158,7 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 		}
 	}
 
-	response, err := BuildResponse(comp.Response, result.Steps, r, result.StepErrors, failedSteps)
+	response, err := BuildResponse(ctx, comp.Response, result.Steps, rd, result.StepErrors, failedSteps)
 	if err != nil {
 		slog.ErrorContext(ctx, "response template evaluation failed",
 			"composition", compositionName,
@@ -180,8 +183,10 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 		return
 	}
 
-	durationMS := float64(time.Since(execStart).Nanoseconds()) / 1e6
+	durationMS := float64(time.Since(handlerStart).Nanoseconds()) / 1e6
 	durationSec := durationMS / 1000.0
+	executeDurationMS := float64(executeDuration.Nanoseconds()) / 1e6
+	gatewayOverheadMS := durationMS - executeDurationMS
 
 	timingSummary := make(map[string]float64)
 	for _, t := range result.StepTimings {
@@ -195,7 +200,8 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 		"errors", len(result.StepErrors),
 		"step_timings", timingSummary,
 		"total_steps", len(result.StepTimings),
-		"slowest_step", findSlowestStep(result.StepTimings))
+		"slowest_step", findSlowestStep(result.StepTimings),
+		"gateway_overhead_ms", gatewayOverheadMS)
 
 	// Prometheus metrics
 	if m := observability.DefaultMetrics(); m != nil {
@@ -225,16 +231,23 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 				httpStatus = sr.Status
 			}
 			steps[i] = reqlog.StepRecord{
-				Name:       t.Name,
-				Status:     t.Status,
-				Wave:       t.Wave,
-				DurationMS: t.DurationMS,
-				HTTPStatus: httpStatus,
+				Name:          t.Name,
+				Status:        t.Status,
+				Wave:          t.Wave,
+				DurationMS:    t.DurationMS,
+				HTTPStatus:    httpStatus,
+				Upstream:      t.Upstream,
+				URL:           t.URL,
+				StartOffsetMS: t.StartOffsetMS,
+				BodySize:      t.BodySize,
+				Error:         t.Error,
+				Cached:        t.Cached,
+				Retries:       t.Retries,
 			}
 		}
 		h.recorder.Record(reqlog.Record{
 			ID:          observability.GetRequestID(ctx),
-			Time:        execStart,
+			Time:        handlerStart,
 			Composition: compositionName,
 			Method:      r.Method,
 			Path:        r.URL.Path,

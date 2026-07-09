@@ -17,11 +17,18 @@ type Record struct {
 
 // StepRecord represents a single step's outcome within a request.
 type StepRecord struct {
-	Name       string  `json:"name"`
-	Status     string  `json:"status"`
-	Wave       int     `json:"wave"`
-	DurationMS float64 `json:"duration_ms"`
-	HTTPStatus int     `json:"http_status"`
+	Name          string  `json:"name"`
+	Status        string  `json:"status"`
+	Wave          int     `json:"wave"`
+	DurationMS    float64 `json:"duration_ms"`
+	HTTPStatus    int     `json:"http_status"`
+	Upstream      string  `json:"upstream"`
+	URL           string  `json:"url"`
+	StartOffsetMS float64 `json:"start_offset_ms"`
+	BodySize      int64   `json:"body_size"`
+	Error         string  `json:"error,omitempty"`
+	Cached        bool    `json:"cached"`
+	Retries       int     `json:"retries"`
 }
 
 // Recorder is the interface composition uses to report request records.
