@@ -2217,3 +2217,172 @@ Priority: **Medium — prevents regressions.**
 | T19.4 | Add E2E test for admin integration path: data-plane request → ring buffer → admin API response → time-series storage. |
 | T19.5 | Add expression-typo detection: config warning when a `{{ steps.X.body }}` reference doesn't match any step name. |
 
+---
+
+# Future Milestones — Candidates from `experimental/v1.1-v1.2`
+
+The `experimental/v1.1-v1.2` branch (preserved on remote) contains prior
+implementations of features not yet on the main development branch. The code
+below is reference material — not copy-paste-ready — but captures proven
+designs worth adopting. Milestones are numbered M20+ to avoid collisions.
+
+## M20 — Config Registry & Centralized Management
+
+Priority: **High — enables Studio-driven config workflow.**
+
+Replaces file-based config distribution with a database-backed registry.
+Compositions are created/edited/versioned through the Studio API, validated
+by running them through the gateway parser before saving.
+
+| Task | Description |
+|------|-------------|
+| T20.1 | Config registry domain types: `Config`, `ConfigVersion`, `CreateConfigInput`, `UpdateConfigInput`. ULID-based IDs, semantic versioning per config, `active` flag for the live version. |
+| T20.2 | Registry store with CRUD operations: create, list, get, update, delete, activate a version, diff between versions. Store in SQLite (dev) / Postgres (prod) via the existing `db` package. |
+| T20.3 | Validation layer: parse YAML → compile composition → build a handler to verify correctness before persisting. Return structured validation errors on failure. |
+| T20.4 | YAML bundle generation: `GET /api/v1/registry/bundle` returns all active configs as a single YAML document. SHA-256 ETag for change detection. |
+| T20.5 | CRUD API endpoints under `/api/v1/configs`: create, list, get, update, delete, activate, diff. Huma-registered with OpenAPI docs. |
+| T20.6 | Database migration for registry schema (configs table, config_versions table). |
+
+Reference: `experimental/v1.1-v1.2` → `internal/studio/registry/`, `internal/studio/api/configs.go`, `internal/studio/api/configs_polling.go`, `internal/studio/db/migrations/`
+
+### M20 Verification gate
+
+```
+curl -X POST localhost:8090/api/v1/configs -d '{"name":"test","yaml":"..."}' → 201
+curl localhost:8090/api/v1/configs → list with version history
+curl localhost:8090/api/v1/registry/bundle → YAML bundle with ETag header
+# Repeat bundle request with If-None-Match → 304
+# Invalid YAML → 400 with validation errors
+```
+
+---
+
+## M21 — Gateway Registry Polling (extends M10)
+
+Priority: **High — closes the centralized config loop.**
+
+Adds a registry polling mode to the gateway as an alternative to file-watching.
+The gateway periodically fetches the config bundle from Studio's registry
+endpoint, using ETag-based change detection and exponential backoff on errors.
+
+| Task | Description |
+|------|-------------|
+| T21.1 | Registry HTTP client: fetch `GET /api/v1/registry/bundle` with `If-None-Match` ETag support. Return `FetchResult` with YAML bytes, ETag, composition count, and change flag. |
+| T21.2 | Polling engine with exponential backoff (cenkalti/backoff). Classify errors: `ErrorTypeFetch` (network), `ErrorTypeInvalidConfig` (bad YAML), `ErrorTypeReload` (swap failed). Backoff on transient errors, stop on persistent config errors. |
+| T21.3 | Wire registry mode into gateway CLI: `--config-source=registry --registry-url=http://studio:8090`. Mutually exclusive with `--config` file mode. |
+| T21.4 | Status endpoint: expose last poll time, ETag, composition count, error state via the admin API `/admin/api/registry/status`. |
+| T21.5 | SIGHUP triggers immediate poll (skip backoff timer). |
+
+Reference: `experimental/v1.1-v1.2` → `internal/hotreload/poller.go`, `internal/hotreload/registry_client.go`, `internal/hotreload/signals.go`, `cmd/restitch/cmd/gateway.go`
+
+### M21 Verification gate
+
+```
+# Start gateway in registry mode pointing at Studio
+restitch gateway --config-source=registry --registry-url=http://localhost:8090
+# Verify it loads compositions from Studio bundle
+curl localhost:8081/admin/api/registry/status → last_poll, etag, count
+# Update a config in Studio → gateway picks it up within poll interval
+# Kill Studio → gateway retries with backoff, keeps serving last known config
+# Send SIGHUP → immediate poll
+```
+
+---
+
+## M22 — Dev Mode Orchestrator (extends M11)
+
+Priority: **Medium — developer experience.**
+
+`restitch dev` runs gateway + studio together with process management,
+auto-restart on crash, and colored log output for local development.
+
+| Task | Description |
+|------|-------------|
+| T22.1 | `ProcessManager`: spawn and supervise child processes with configurable restart policy using exponential backoff (initial 1s, max 30s). Reset backoff after process is stable for a configurable duration. |
+| T22.2 | `PrefixWriter`: wrap each child's stdout/stderr with a colored prefix (`[gateway]` blue, `[studio]` green) using `fatih/color`. Thread-safe via mutex. |
+| T22.3 | Health-check waiting: `WaitForHealth(url, timeout)` polls a health endpoint before considering a process ready. |
+| T22.4 | `restitch dev` CLI subcommand: fixed ports (gateway 8080, admin 8081, studio 8090), passes `ExtraEnv` to child processes (e.g. OTEL config), graceful shutdown on SIGINT/SIGTERM. |
+| T22.5 | Support `--gateway-args` and `--studio-args` for passing through flags to child processes. |
+
+Reference: `experimental/v1.1-v1.2` → `internal/devmode/manager.go`, `internal/devmode/writer.go`, `cmd/restitch/cmd/dev.go`
+
+### M22 Verification gate
+
+```
+restitch dev
+# Both gateway and studio start, logs are color-prefixed
+# Kill gateway process → auto-restarts within backoff interval
+# Ctrl+C → both processes shut down cleanly
+```
+
+---
+
+## M23 — Upstream HTTP Client Optimization (extends M5)
+
+Priority: **Medium — performance under load.**
+
+| Task | Description |
+|------|-------------|
+| T23.1 | Set `MaxIdleConnsPerHost: 100` on the upstream HTTP transport (Go default is 2, causing 4-5x latency penalty under concurrent fan-out). Enforce TLS 1.2 minimum. |
+| T23.2 | Add `DrainAndClose` helper: drain response body before closing to return connections to the pool instead of destroying them. Use in all upstream response handling paths. |
+| T23.3 | Make `MaxIdleConnsPerHost` configurable per-upstream in composition YAML: `upstreams.*.pool: { max_idle: 100 }`. |
+
+Reference: `experimental/v1.1-v1.2` → `internal/client/client.go`
+
+### M23 Verification gate
+
+```
+# Load test with k6: fan-out composition hitting 5 upstreams
+# Before: observe connection churn in netstat, P95 latency > 200ms
+# After: stable idle connections, P95 latency < 50ms
+```
+
+---
+
+## M24 — Production Monitoring & Load Testing (extends M14, M15)
+
+Priority: **Medium — operational readiness.**
+
+| Task | Description |
+|------|-------------|
+| T24.1 | Prometheus recording rules: pre-compute dashboard queries (composition request rate, P50/P95/P99 latency, error rate by composition). |
+| T24.2 | Prometheus alert rules: P95 latency > threshold (configurable, default 1s), error rate > 5% sustained 5m, config reload failures, gateway down. |
+| T24.3 | k6 load test script: exercise gateway compositions and Studio API at ~1000 RPS (50 VUs). Thresholds: P95 < 1s, error rate < 1%. Run as part of CI on release branches. |
+| T24.4 | Docker Compose production stack: gateway, studio, Prometheus, Jaeger, with `deploy/` directory containing all configs, `.env.example`, and a `docker-compose.yml`. |
+
+Reference: `experimental/v1.1-v1.2` → `deploy/prometheus/`, `test/loadtest.js`, `deploy/docker-compose.yml`
+
+### M24 Verification gate
+
+```
+docker compose -f deploy/docker-compose.yml up -d
+# Prometheus loads rules without error
+# Trigger alert condition → alert fires
+# k6 run test/loadtest.js → all thresholds pass
+```
+
+---
+
+## M25 — Browser Session & User Preferences (extends M12)
+
+Priority: **Low — quality-of-life for Studio users.**
+
+| Task | Description |
+|------|-------------|
+| T25.1 | Browser session middleware: set `restitch_browser_id` cookie (256-bit random, 1-year expiry, `HttpOnly`, `SameSite=Strict`). Store sessions in DB. No login required. |
+| T25.2 | Preferences CRUD API: `GET/PUT /api/v1/preferences` scoped to browser session. Store pinned compositions, sidebar collapsed state, default time range. |
+| T25.3 | Database migration for browser_sessions table. |
+| T25.4 | Wire preferences into Studio frontend: pin button on composition cards, persist sidebar state, restore on reload. |
+
+Reference: `experimental/v1.1-v1.2` → `internal/studio/session/session.go`, `internal/studio/api/preferences.go`
+
+### M25 Verification gate
+
+```
+# Open Studio in browser → cookie is set
+curl -b cookies.txt localhost:8090/api/v1/preferences → empty prefs
+curl -X PUT -b cookies.txt localhost:8090/api/v1/preferences -d '{"pinned":["comp-1"]}' → 200
+# Refresh browser → pinned compositions persist
+# Different browser → independent preferences
+```
+

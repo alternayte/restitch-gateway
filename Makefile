@@ -1,4 +1,4 @@
-.PHONY: build test race vet lint run ci e2e studio build-all docker
+.PHONY: build test race vet lint run ci e2e studio build-all docker verify verify-all ledger-check
 
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
@@ -34,3 +34,12 @@ build-all: build
 
 docker:
 	docker build -t restitch:dev .
+
+verify:
+	scripts/verify.sh $(GATE)
+
+verify-all:
+	scripts/verify.sh all
+
+ledger-check:
+	scripts/check-ledger.sh
