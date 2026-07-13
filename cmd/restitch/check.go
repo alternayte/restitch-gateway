@@ -13,7 +13,7 @@ func checkCmd(args []string) int {
 	flags := flag.NewFlagSet("check", flag.ExitOnError)
 	configFile := flags.String("config", "restitch.yaml", "path to config file")
 	quiet := flags.Bool("q", false, "quiet mode (errors only)")
-	flags.Parse(args)
+	_ = flags.Parse(args)
 
 	cfg, err := composition.LoadConfigFile(*configFile)
 	if err != nil {

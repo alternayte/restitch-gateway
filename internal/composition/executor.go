@@ -379,7 +379,7 @@ func (e *Executor) executeStepWithErrorHandling(
 		"status", result.Status,
 		"duration_ms", durationMS)
 
-	if result != nil && result.ErrorRuleMatched {
+	if result.ErrorRuleMatched {
 		errRule := NewErrorRuleMatchedError(result.Status)
 		return &stepError{
 				stepName: stepName,

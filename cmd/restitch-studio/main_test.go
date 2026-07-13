@@ -14,7 +14,7 @@ func TestProxyRewrite(t *testing.T) {
 		gotPath = r.URL.Path
 		gotKey = r.Header.Get("X-Admin-Key")
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"version":"test"}`))
+		_, _ = w.Write([]byte(`{"version":"test"}`))
 	}))
 	defer admin.Close()
 

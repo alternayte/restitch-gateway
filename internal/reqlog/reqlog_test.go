@@ -48,7 +48,7 @@ func TestStepRecord_ErrorOmitted(t *testing.T) {
 	if string(data) != `{"name":"x","status":"success","wave":0,"duration_ms":0,"http_status":0,"upstream":"","url":"","start_offset_ms":0,"body_size":0,"cached":false,"retries":0}` {
 		// Just check error is not present (omitempty)
 		var m map[string]any
-		json.Unmarshal(data, &m)
+		_ = json.Unmarshal(data, &m)
 		if _, hasErr := m["error"]; hasErr {
 			t.Error("empty error should be omitted from JSON")
 		}

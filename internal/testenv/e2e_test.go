@@ -56,7 +56,7 @@ compositions:
 		}
 
 		var body map[string]any
-		json.NewDecoder(resp.Body).Decode(&body)
+		_ = json.NewDecoder(resp.Body).Decode(&body)
 		if body["user"] == nil {
 			t.Error("user should be populated")
 		}
@@ -120,7 +120,7 @@ compositions:
 		}
 
 		var body map[string]any
-		json.NewDecoder(resp.Body).Decode(&body)
+		_ = json.NewDecoder(resp.Body).Decode(&body)
 		if body["user"] == nil {
 			t.Error("user should be populated")
 		}
@@ -179,7 +179,7 @@ compositions:
 		}
 
 		var body map[string]any
-		json.NewDecoder(resp.Body).Decode(&body)
+		_ = json.NewDecoder(resp.Body).Decode(&body)
 		if body["error"] != "upstream error" {
 			t.Errorf("error = %v, want 'upstream error'", body["error"])
 		}
@@ -226,7 +226,7 @@ compositions:
 		}
 
 		var body map[string]any
-		json.NewDecoder(resp.Body).Decode(&body)
+		_ = json.NewDecoder(resp.Body).Decode(&body)
 		if body["error"] != "upstream timeout" {
 			t.Errorf("error = %v, want 'upstream timeout'", body["error"])
 		}
@@ -269,7 +269,7 @@ compositions:
 		}
 
 		var body map[string]any
-		json.NewDecoder(resp.Body).Decode(&body)
+		_ = json.NewDecoder(resp.Body).Decode(&body)
 		user, ok := body["user"].(map[string]any)
 		if !ok {
 			t.Fatalf("user not a map: %T", body["user"])
@@ -510,14 +510,14 @@ compositions:
 				ptHeaders = r.Header.Clone()
 				ptMu.Unlock()
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"from":"pt"}`))
+				_, _ = w.Write([]byte(`{"from":"pt"}`))
 			})},
 			"noauth-svc": {Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				noauthMu.Lock()
 				noauthHeaders = r.Header.Clone()
 				noauthMu.Unlock()
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"from":"na"}`))
+				_, _ = w.Write([]byte(`{"from":"na"}`))
 			})},
 		},
 	}, func(t *testing.T, env *Env) {

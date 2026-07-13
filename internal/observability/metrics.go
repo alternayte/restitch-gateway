@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -28,7 +29,7 @@ type Metrics struct {
 // NewMetrics creates a new Metrics instance with a private registry.
 func NewMetrics() *Metrics {
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(prometheus.NewGoCollector())
+	reg.MustRegister(collectors.NewGoCollector())
 
 	f := promauto.With(reg)
 

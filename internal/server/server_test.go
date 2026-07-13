@@ -38,7 +38,7 @@ func TestSetHandler(t *testing.T) {
 func TestNewLoggingMiddleware(t *testing.T) {
 	mw := NewLoggingMiddleware()
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	}))
 
 	rec := httptest.NewRecorder()
@@ -59,7 +59,7 @@ func TestResponseWriter_Flush(t *testing.T) {
 
 func TestResponseWriter_BytesWritten(t *testing.T) {
 	rw := newResponseWriter(httptest.NewRecorder())
-	rw.Write([]byte("hello"))
+	_, _ = rw.Write([]byte("hello"))
 	if rw.bytesWritten != 5 {
 		t.Errorf("bytesWritten = %d, want 5", rw.bytesWritten)
 	}

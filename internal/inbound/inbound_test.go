@@ -20,7 +20,7 @@ func TestCheckAPIKey(t *testing.T) {
 
 	handler := a.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	}))
 
 	t.Run("correct key passes", func(t *testing.T) {
@@ -54,7 +54,7 @@ func TestCheckAPIKey(t *testing.T) {
 			t.Errorf("expected 401, got %d", rec.Code)
 		}
 		var body map[string]string
-		json.NewDecoder(rec.Body).Decode(&body)
+		_ = json.NewDecoder(rec.Body).Decode(&body)
 		if body["error"] != "unauthorized" {
 			t.Errorf("expected error=unauthorized, got %s", body["error"])
 		}
@@ -79,7 +79,7 @@ func jwksServer(t *testing.T, key *rsa.PublicKey) *httptest.Server {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(jwks)
+		_ = json.NewEncoder(w).Encode(jwks)
 	}))
 }
 
@@ -125,7 +125,7 @@ func TestJWTValidation(t *testing.T) {
 	handler := a.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims := GetClaims(r.Context())
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(claims)
+		_ = json.NewEncoder(w).Encode(claims)
 	}))
 
 	t.Run("valid JWT passes and claims available", func(t *testing.T) {
@@ -151,7 +151,7 @@ func TestJWTValidation(t *testing.T) {
 		}
 
 		var claims map[string]any
-		json.NewDecoder(rec.Body).Decode(&claims)
+		_ = json.NewDecoder(rec.Body).Decode(&claims)
 		if claims["sub"] != "user-42" {
 			t.Errorf("expected sub=user-42, got %v", claims["sub"])
 		}

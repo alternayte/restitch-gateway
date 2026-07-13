@@ -19,14 +19,14 @@ func TestHandler_ServeHTTP(t *testing.T) {
 		case "/users/1":
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id":   1,
 				"name": "Alice",
 			})
 		case "/posts":
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode([]interface{}{
+			_ = json.NewEncoder(w).Encode([]interface{}{
 				map[string]interface{}{"id": 101, "title": "Post 1"},
 				map[string]interface{}{"id": 102, "title": "Post 2"},
 			})
@@ -122,7 +122,7 @@ compositions:
 func TestHandler_PathParams(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":   r.URL.Path[len("/users/"):],
 			"name": "user-" + r.URL.Path[len("/users/"):],
 		})
@@ -269,7 +269,7 @@ func TestHandler_PassthroughAuthPresent(t *testing.T) {
 			t.Errorf("expected Authorization: Bearer test-token-123, got %q", authHeader)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok"})
 	}))
 	defer mockServer.Close()
 
@@ -334,7 +334,7 @@ func TestHandler_HeaderAuth(t *testing.T) {
 			t.Errorf("expected X-API-Key: test-api-key-456, got %q", apiKey)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok"})
 	}))
 	defer mockServer.Close()
 
@@ -402,7 +402,7 @@ compositions:
 func TestHandler_PartialResponse_OptionalStepInTemplate(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":   1,
 			"name": "Alice",
 		})
@@ -526,7 +526,7 @@ compositions:
 	}
 
 	var body map[string]any
-	json.NewDecoder(w.Body).Decode(&body)
+	_ = json.NewDecoder(w.Body).Decode(&body)
 	if body["error"] != "upstream error" {
 		t.Errorf("error = %v, want 'upstream error'", body["error"])
 	}
@@ -575,7 +575,7 @@ compositions:
 	}
 
 	var body map[string]any
-	json.NewDecoder(w.Body).Decode(&body)
+	_ = json.NewDecoder(w.Body).Decode(&body)
 	if body["error"] != "upstream timeout" {
 		t.Errorf("error = %v, want 'upstream timeout'", body["error"])
 	}
@@ -587,7 +587,7 @@ compositions:
 func TestHandler_ErrorTaxonomy_TemplateError500(t *testing.T) {
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer mock.Close()
 
@@ -625,7 +625,7 @@ compositions:
 	}
 
 	var body map[string]any
-	json.NewDecoder(w.Body).Decode(&body)
+	_ = json.NewDecoder(w.Body).Decode(&body)
 	if body["error"] != "internal error" {
 		t.Errorf("error = %v, want 'internal error' (must not leak internals)", body["error"])
 	}
@@ -634,7 +634,7 @@ compositions:
 func TestHandler_RateLimit_PerComposition(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	}))
 	defer mockServer.Close()
 
@@ -703,7 +703,7 @@ compositions:
 func TestHandler_MaxRequestBytes(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	}))
 	defer mockServer.Close()
 
@@ -763,7 +763,7 @@ compositions:
 	}
 
 	var errBody map[string]string
-	json.NewDecoder(w2.Body).Decode(&errBody)
+	_ = json.NewDecoder(w2.Body).Decode(&errBody)
 	if errBody["error"] != "request body too large" {
 		t.Errorf("error = %q, want \"request body too large\"", errBody["error"])
 	}
@@ -772,7 +772,7 @@ compositions:
 func TestHandler_RequestSchemaValidation(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	}))
 	defer mockServer.Close()
 
@@ -840,7 +840,7 @@ compositions:
 	}
 
 	var errResp map[string]any
-	json.NewDecoder(w2.Body).Decode(&errResp)
+	_ = json.NewDecoder(w2.Body).Decode(&errResp)
 	if errResp["error"] != "request validation failed" {
 		t.Errorf("error = %v, want \"request validation failed\"", errResp["error"])
 	}

@@ -46,7 +46,7 @@ func TestCoalescer_DifferentKeysNotCoalesced(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			c.Do(key, func() (any, error) {
+			_, _, _ = c.Do(key, func() (any, error) {
 				calls.Add(1)
 				time.Sleep(10 * time.Millisecond)
 				return "result", nil

@@ -9,10 +9,10 @@ import (
 func TestRouter_MethodRouting(t *testing.T) {
 	r := NewRouter()
 	r.Handle("GET", "/api/test", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("get"))
+		_, _ = w.Write([]byte("get"))
 	})
 	r.Handle("POST", "/api/test", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("post"))
+		_, _ = w.Write([]byte("post"))
 	})
 	r.Finalize()
 
@@ -34,7 +34,7 @@ func TestRouter_MethodRouting(t *testing.T) {
 func TestRouter_MethodNotAllowed(t *testing.T) {
 	r := NewRouter()
 	r.Handle("GET", "/api/test", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	})
 	r.Finalize()
 
@@ -52,7 +52,7 @@ func TestRouter_MethodNotAllowed(t *testing.T) {
 func TestRouter_HeadServedByGet(t *testing.T) {
 	r := NewRouter()
 	r.Handle("GET", "/api/test", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	})
 	r.Finalize()
 
@@ -66,7 +66,7 @@ func TestRouter_HeadServedByGet(t *testing.T) {
 func TestRouter_PathParams(t *testing.T) {
 	r := NewRouter()
 	r.Handle("GET", "/api/users/{id}", func(w http.ResponseWriter, req *http.Request) {
-		w.Write([]byte(req.PathValue("id")))
+		_, _ = w.Write([]byte(req.PathValue("id")))
 	})
 	r.Finalize()
 
@@ -125,7 +125,7 @@ func TestRouter_FinalizePanic(t *testing.T) {
 func TestRouter_NotFound(t *testing.T) {
 	r := NewRouter()
 	r.Handle("GET", "/exists", func(w http.ResponseWriter, req *http.Request) {
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	})
 	r.Finalize()
 

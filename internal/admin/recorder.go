@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/reqlog"
@@ -36,6 +37,8 @@ func (mr *MultiRecorder) Record(rec reqlog.Record) {
 	if mr.Storage != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		mr.Storage.RecordRequest(ctx, rec)
+		if err := mr.Storage.RecordRequest(ctx, rec); err != nil {
+			slog.Error("failed to persist request record", "error", err)
+		}
 	}
 }

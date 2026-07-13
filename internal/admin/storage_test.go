@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -78,14 +79,14 @@ func TestMemoryStorage_QueryTimeSeries(t *testing.T) {
 
 	now := time.Now().Truncate(time.Minute)
 	for i := 0; i < 5; i++ {
-		s.RecordBucket(nil, Bucket{
+		_ = s.RecordBucket(context.Background(), Bucket{
 			Timestamp:   now.Add(time.Duration(i) * time.Minute),
 			Composition: "",
 			Requests:    int64(i + 1),
 		})
 	}
 
-	results, err := s.QueryTimeSeries(nil, now, now.Add(5*time.Minute), time.Minute, "")
+	results, err := s.QueryTimeSeries(context.Background(), now, now.Add(5*time.Minute), time.Minute, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,12 +102,12 @@ func TestMemoryStorage_Compact(t *testing.T) {
 	old := time.Now().Add(-2 * time.Minute).Truncate(time.Minute)
 	recent := time.Now().Truncate(time.Minute)
 
-	s.RecordBucket(nil, Bucket{Timestamp: old, Composition: "", Requests: 1})
-	s.RecordBucket(nil, Bucket{Timestamp: recent, Composition: "", Requests: 2})
+	_ = s.RecordBucket(context.Background(), Bucket{Timestamp: old, Composition: "", Requests: 1})
+	_ = s.RecordBucket(context.Background(), Bucket{Timestamp: recent, Composition: "", Requests: 2})
 
-	s.Compact(nil, time.Minute)
+	_ = s.Compact(context.Background(), time.Minute)
 
-	results, _ := s.QueryTimeSeries(nil, old, recent.Add(time.Minute), time.Minute, "")
+	results, _ := s.QueryTimeSeries(context.Background(), old, recent.Add(time.Minute), time.Minute, "")
 	if len(results) != 1 {
 		t.Errorf("after compact, results = %d, want 1 (only recent)", len(results))
 	}
@@ -116,10 +117,10 @@ func TestMemoryStorage_GetRequestByID(t *testing.T) {
 	s := NewMemoryStorage(time.Hour)
 	defer s.Close()
 
-	s.RecordRequest(nil, reqlog.Record{ID: "req-1", Composition: "comp1", Time: time.Now()})
-	s.RecordRequest(nil, reqlog.Record{ID: "req-2", Composition: "comp2", Time: time.Now()})
+	_ = s.RecordRequest(context.Background(), reqlog.Record{ID: "req-1", Composition: "comp1", Time: time.Now()})
+	_ = s.RecordRequest(context.Background(), reqlog.Record{ID: "req-2", Composition: "comp2", Time: time.Now()})
 
-	rec, err := s.GetRequestByID(nil, "req-2")
+	rec, err := s.GetRequestByID(context.Background(), "req-2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +131,7 @@ func TestMemoryStorage_GetRequestByID(t *testing.T) {
 		t.Errorf("composition = %q, want comp2", rec.Composition)
 	}
 
-	missing, err := s.GetRequestByID(nil, "does-not-exist")
+	missing, err := s.GetRequestByID(context.Background(), "does-not-exist")
 	if err != nil {
 		t.Fatal(err)
 	}

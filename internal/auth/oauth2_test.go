@@ -44,7 +44,7 @@ func mockTokenServer(t *testing.T, accessToken string, expiresIn int) (*httptest
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 
 	return server, &requestCount
@@ -354,7 +354,7 @@ func TestOAuth2Strategy_Singleflight(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp)
 		}))
 		defer server.Close()
 
@@ -427,13 +427,13 @@ func TestOAuth2Strategy_TokenRefresh(t *testing.T) {
 			// With 30-second buffer, it should trigger refresh almost immediately
 			// But since expiry is only 2 seconds, it will expire faster than the buffer
 			resp := tokenResponse{
-				AccessToken: "token-" + string(rune('a'+count-1)),
+				AccessToken: "token-" + string('a'+count-1),
 				TokenType:   "Bearer",
 				ExpiresIn:   2, // Very short expiry for testing
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(resp)
 		}))
 		defer server.Close()
 

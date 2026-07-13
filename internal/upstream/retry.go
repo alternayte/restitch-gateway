@@ -187,7 +187,7 @@ func retryBackoff(attempt int, cfg RetryConfig) time.Duration {
 
 func drainBody(body io.ReadCloser) {
 	if body != nil {
-		io.Copy(io.Discard, body)
+		_, _ = io.Copy(io.Discard, body)
 		body.Close()
 	}
 }

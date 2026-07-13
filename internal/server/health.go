@@ -23,7 +23,7 @@ func HealthHandler(srv *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(HealthResponse{Status: "ok"})
+		_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ok"})
 	}
 }
 
@@ -34,10 +34,10 @@ func ReadyHandler(srv *Server) http.HandlerFunc {
 
 		if srv.Ready() {
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(ReadyResponse{Status: "ready"})
+			_ = json.NewEncoder(w).Encode(ReadyResponse{Status: "ready"})
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(ReadyResponse{Status: "not_ready"})
+			_ = json.NewEncoder(w).Encode(ReadyResponse{Status: "not_ready"})
 		}
 	}
 }

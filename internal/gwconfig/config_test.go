@@ -69,7 +69,7 @@ compositions:
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	os.WriteFile(path, []byte(yaml), 0644)
+	_ = os.WriteFile(path, []byte(yaml), 0644)
 
 	f, err := Load(path)
 	if err != nil {
@@ -110,7 +110,7 @@ compositions:
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	os.WriteFile(path, []byte(yaml), 0644)
+	_ = os.WriteFile(path, []byte(yaml), 0644)
 
 	f, err := Load(path)
 	if err != nil {

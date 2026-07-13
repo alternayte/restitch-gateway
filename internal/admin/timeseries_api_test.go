@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +14,7 @@ import (
 func TestHandleTimeSeries(t *testing.T) {
 	store := NewMemoryStorage(time.Hour)
 	now := time.Now().Truncate(time.Minute)
-	store.RecordBucket(nil, Bucket{
+	_ = store.RecordBucket(context.Background(), Bucket{
 		Timestamp:   now,
 		Composition: "",
 		Requests:    10,
@@ -33,7 +34,7 @@ func TestHandleTimeSeries(t *testing.T) {
 	}
 
 	var buckets []Bucket
-	json.NewDecoder(w.Body).Decode(&buckets)
+	_ = json.NewDecoder(w.Body).Decode(&buckets)
 	if len(buckets) == 0 {
 		t.Error("expected at least one bucket")
 	}
@@ -41,7 +42,7 @@ func TestHandleTimeSeries(t *testing.T) {
 
 func TestHandleRequestByID(t *testing.T) {
 	store := NewMemoryStorage(time.Hour)
-	store.RecordRequest(nil, reqlog.Record{
+	_ = store.RecordRequest(context.Background(), reqlog.Record{
 		ID:          "test-123",
 		Composition: "comp1",
 		Status:      200,

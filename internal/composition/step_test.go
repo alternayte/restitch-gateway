@@ -33,7 +33,7 @@ func TestExecuteStep(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id":   123,
 				"name": "Alice",
 			})
@@ -82,7 +82,7 @@ func TestExecuteStep(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": 456,
 			})
 		}))
@@ -133,7 +133,7 @@ func TestExecuteStep(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 		}))
 		defer server.Close()
 
@@ -175,7 +175,7 @@ func TestExecuteStep(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 		}))
 		defer server.Close()
 
@@ -206,7 +206,7 @@ func TestExecuteStep(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(100 * time.Millisecond)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 		}))
 		defer server.Close()
 
@@ -242,7 +242,7 @@ func TestExecuteStep(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"error": "user not found",
 			})
 		}))
@@ -286,7 +286,7 @@ func TestExecuteStep(t *testing.T) {
 		bigBody := strings.Repeat("x", 200)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"data":"` + bigBody + `"}`))
+			_, _ = w.Write([]byte(`{"data":"` + bigBody + `"}`))
 		}))
 		defer server.Close()
 
@@ -317,7 +317,7 @@ func TestExecuteStep(t *testing.T) {
 		bigBody := strings.Repeat("x", 200)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"data":"` + bigBody + `"}`))
+			_, _ = w.Write([]byte(`{"data":"` + bigBody + `"}`))
 		}))
 		defer server.Close()
 

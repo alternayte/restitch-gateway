@@ -85,7 +85,7 @@ func TestCompositionInfo_InferredDeps(t *testing.T) {
 	}
 	data, _ := json.Marshal(si)
 	var m map[string]any
-	json.Unmarshal(data, &m)
+	_ = json.Unmarshal(data, &m)
 
 	inferred, ok := m["inferred_deps"].([]any)
 	if !ok {
@@ -175,7 +175,7 @@ func TestServer_Info(t *testing.T) {
 	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/info", nil))
 
 	var info map[string]any
-	json.NewDecoder(rec.Body).Decode(&info)
+	_ = json.NewDecoder(rec.Body).Decode(&info)
 
 	if info["version"] != "v2.0.0" {
 		t.Errorf("version = %v, want v2.0.0", info["version"])
@@ -206,7 +206,7 @@ func TestServer_Validate(t *testing.T) {
 	srv.httpServer.Handler.ServeHTTP(rec, req)
 
 	var result map[string]any
-	json.NewDecoder(rec.Body).Decode(&result)
+	_ = json.NewDecoder(rec.Body).Decode(&result)
 	if result["valid"] != true {
 		t.Errorf("expected valid=true, got %v", result["valid"])
 	}
@@ -216,7 +216,7 @@ func TestServer_Validate(t *testing.T) {
 	srv.httpServer.Handler.ServeHTTP(rec, req)
 
 	result = map[string]any{}
-	json.NewDecoder(rec.Body).Decode(&result)
+	_ = json.NewDecoder(rec.Body).Decode(&result)
 	if result["valid"] != false {
 		t.Errorf("expected valid=false, got %v", result["valid"])
 	}
@@ -233,7 +233,7 @@ func TestServer_Compositions(t *testing.T) {
 	}
 
 	var comps []CompositionInfo
-	json.NewDecoder(rec.Body).Decode(&comps)
+	_ = json.NewDecoder(rec.Body).Decode(&comps)
 	if len(comps) != 2 {
 		t.Fatalf("expected 2 compositions, got %d", len(comps))
 	}
@@ -269,7 +269,7 @@ func TestServer_CompositionByName(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 	var comp CompositionInfo
-	json.NewDecoder(rec.Body).Decode(&comp)
+	_ = json.NewDecoder(rec.Body).Decode(&comp)
 	if comp.Name != "user-dashboard" {
 		t.Errorf("name = %s, want user-dashboard", comp.Name)
 	}
@@ -293,7 +293,7 @@ func TestServer_Upstreams(t *testing.T) {
 	}
 
 	var ups []UpstreamInfo
-	json.NewDecoder(rec.Body).Decode(&ups)
+	_ = json.NewDecoder(rec.Body).Decode(&ups)
 	if len(ups) != 2 {
 		t.Fatalf("expected 2 upstreams, got %d", len(ups))
 	}
@@ -374,7 +374,7 @@ func TestServer_MutationRateLimit(t *testing.T) {
 	}
 
 	var body map[string]string
-	json.NewDecoder(rec.Body).Decode(&body)
+	_ = json.NewDecoder(rec.Body).Decode(&body)
 	if body["error"] != "rate limit exceeded" {
 		t.Errorf("error = %q, want \"rate limit exceeded\"", body["error"])
 	}

@@ -136,7 +136,7 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 			}
 			// other read error; continue with nil body
 		} else if len(raw) > 0 && strings.Contains(r.Header.Get("Content-Type"), "json") {
-			json.Unmarshal(raw, &body)
+			_ = json.Unmarshal(raw, &body)
 		}
 	}
 
@@ -331,7 +331,7 @@ func findSlowestStep(timings []StepTiming) map[string]interface{} {
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // extractValidationErrors converts jsonschema validation errors into a list

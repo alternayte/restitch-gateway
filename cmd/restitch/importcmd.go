@@ -23,7 +23,7 @@ func importCmd(args []string) int {
 	baseURL := flags.String("base-url", "", "base URL (default: from spec servers[0])")
 	ops := flags.String("ops", "", "comma-separated operationIds to include (default: all)")
 	outFile := flags.String("o", "", "output file (default: stdout)")
-	flags.Parse(args[2:])
+	_ = flags.Parse(args[2:])
 
 	loader := openapi3.NewLoader()
 	doc, err := loader.LoadFromFile(specFile)

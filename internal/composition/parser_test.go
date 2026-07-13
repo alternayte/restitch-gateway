@@ -501,7 +501,7 @@ compositions:
 `
 	dir := t.TempDir()
 	path := dir + "/test.yaml"
-	os.WriteFile(path, []byte(yamlContent), 0644)
+	_ = os.WriteFile(path, []byte(yamlContent), 0644)
 
 	_, err := LoadConfigFile(path)
 	if err == nil {

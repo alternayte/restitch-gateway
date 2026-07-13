@@ -43,7 +43,7 @@ func Handler() http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
-		json.NewEncoder(w).Encode(map[string]any{"status": code})
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": code})
 	})
 
 	mux.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
@@ -82,5 +82,5 @@ func Handler() http.Handler {
 
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }

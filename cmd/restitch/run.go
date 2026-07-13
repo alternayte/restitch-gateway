@@ -30,7 +30,7 @@ func runCmd(args []string) int {
 	certFile := flags.String("cert", "", "Path to TLS certificate file")
 	keyFile := flags.String("key", "", "Path to TLS private key file")
 	configFile := flags.String("config", "restitch.yaml", "path to composition config file")
-	flags.Parse(args)
+	_ = flags.Parse(args)
 
 	// Load and parse gateway config (server/admin blocks + compositions)
 	expanded, raw, readErr := gwconfig.ReadAndExpand(*configFile)
@@ -353,11 +353,15 @@ func runCmd(args []string) int {
 			},
 			Reload: rl.reload,
 		})
-		adminSrv.Start()
+		if err := adminSrv.Start(); err != nil {
+			slog.Error("admin server failed to start", "error", err)
+		}
 		defer func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			adminSrv.Shutdown(ctx)
+			if err := adminSrv.Shutdown(ctx); err != nil {
+				slog.Error("admin server shutdown error", "error", err)
+			}
 		}()
 		defer func() {
 			if err := store.Close(); err != nil {

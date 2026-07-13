@@ -25,7 +25,7 @@ func main() {
 	flag.Parse()
 
 	if v := os.Getenv("STUDIO_PORT"); v != "" {
-		fmt.Sscanf(v, "%d", port)
+		_, _ = fmt.Sscanf(v, "%d", port)
 	}
 	if v := os.Getenv("STUDIO_GATEWAY_ADMIN_URL"); v != "" {
 		*gatewayAdminURL = v

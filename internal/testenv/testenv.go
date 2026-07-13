@@ -161,7 +161,7 @@ func buildScriptedHandler(script map[string]ScriptedResponse) http.Handler {
 		}
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]string{"error": "not scripted: " + key})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not scripted: " + key})
 			return
 		}
 
@@ -182,7 +182,7 @@ func buildScriptedHandler(script map[string]ScriptedResponse) http.Handler {
 		}
 		w.WriteHeader(status)
 		if resp.Body != "" {
-			w.Write([]byte(resp.Body))
+			_, _ = w.Write([]byte(resp.Body))
 		}
 	})
 }

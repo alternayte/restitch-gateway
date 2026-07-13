@@ -28,12 +28,12 @@ func TestExecutor(t *testing.T) {
 
 			w.Header().Set("Content-Type", "application/json")
 			if r.URL.Path == "/user" {
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"id":   123,
 					"name": "Alice",
 				})
 			} else if r.URL.Path == "/profile" {
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"bio": "Software engineer",
 				})
 			}
@@ -103,12 +103,12 @@ compositions:
 
 			w.Header().Set("Content-Type", "application/json")
 			if r.URL.Path == "/users/123" {
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"id":   123,
 					"name": "Alice",
 				})
 			} else if strings.HasPrefix(r.URL.Path, "/orders") {
-				json.NewEncoder(w).Encode([]interface{}{
+				_ = json.NewEncoder(w).Encode([]interface{}{
 					map[string]interface{}{"id": 1},
 					map[string]interface{}{"id": 2},
 				})
@@ -175,13 +175,13 @@ compositions:
 			if r.URL.Path == "/error" {
 				// Upstream returns 500 - this is passthrough, not step failure
 				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"error": "internal server error",
 				})
 				return
 			}
 
-			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 		}))
 		defer server.Close()
 
@@ -235,19 +235,19 @@ compositions:
 			w.Header().Set("Content-Type", "application/json")
 
 			if r.URL.Path == "/user" {
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"id":    123,
 					"email": "alice@example.com",
 				})
 			} else if r.URL.Path == "/profile" {
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"userId": 123,
 					"bio":    "Engineer",
 				})
 			} else if strings.HasPrefix(r.URL.Path, "/combined") {
 				// This step depends on both user and profile
 				// Verify it can access both results
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"success": true,
 				})
 			}
@@ -307,7 +307,7 @@ compositions:
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(100 * time.Millisecond)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 		}))
 		defer server.Close()
 
@@ -372,7 +372,7 @@ func TestExecutor_InferredDependencySkipped(t *testing.T) {
 			bHits++
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"id": 1})
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 1})
 	}))
 	defer mockServer.Close()
 

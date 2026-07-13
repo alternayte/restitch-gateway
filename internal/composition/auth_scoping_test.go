@@ -21,7 +21,7 @@ func TestHandler_AuthorizationScoping_D8(t *testing.T) {
 		passthroughHeaders = r.Header.Clone()
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"from": "passthrough"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"from": "passthrough"})
 	}))
 	defer passthroughUpstream.Close()
 
@@ -30,7 +30,7 @@ func TestHandler_AuthorizationScoping_D8(t *testing.T) {
 		noAuthHeaders = r.Header.Clone()
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"from": "noauth"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"from": "noauth"})
 	}))
 	defer noAuthUpstream.Close()
 

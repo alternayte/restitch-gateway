@@ -226,10 +226,10 @@ func TestSQLStorage_Compact(t *testing.T) {
 	old := time.Now().Add(-2 * time.Minute).Truncate(time.Minute)
 	recent := time.Now().Truncate(time.Minute)
 
-	s.RecordBucket(ctx, Bucket{Timestamp: old, Requests: 1})
-	s.RecordBucket(ctx, Bucket{Timestamp: recent, Requests: 2})
+	_ = s.RecordBucket(ctx, Bucket{Timestamp: old, Requests: 1})
+	_ = s.RecordBucket(ctx, Bucket{Timestamp: recent, Requests: 2})
 
-	s.Compact(ctx, time.Minute)
+	_ = s.Compact(ctx, time.Minute)
 
 	results, _ := s.QueryTimeSeries(ctx, old, recent.Add(time.Minute), time.Minute, "")
 	if len(results) != 1 {
