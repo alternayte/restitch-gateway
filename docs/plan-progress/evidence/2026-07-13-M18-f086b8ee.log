@@ -1,0 +1,49 @@
+=== GATE M18 (commit f086b8ee, 2026-07-13) ===
+
+
+##[T18.1]
+$ grep -q go.opentelemetry.io/otel /Users/nathananderson-tennant/Development/restitch/go.mod
+
+exit_code=0
+PASS T18.1 OTel dependency
+$ grep -rq SetupTracing\|InitTracing /Users/nathananderson-tennant/Development/restitch/internal/observability/
+
+exit_code=0
+PASS T18.1 tracing setup exists
+
+##[T18.2]
+$ grep -rq StartSpan\|Start(ctx\|tracer\.Start /Users/nathananderson-tennant/Development/restitch/internal/composition/
+
+exit_code=0
+PASS T18.2 span creation in executor or step
+
+##[T18.3]
+$ grep -rq traceparent\|otelhttp\|Inject /Users/nathananderson-tennant/Development/restitch/internal/
+
+exit_code=0
+PASS T18.3 traceparent propagation
+
+##[T18.4]
+$ grep -rq otlptrace\|OTEL_EXPORTER /Users/nathananderson-tennant/Development/restitch/internal/observability/
+
+exit_code=0
+PASS T18.4 OTLP exporter in code
+
+##[T18.5]
+$ grep -rq TraceID\|trace_id /Users/nathananderson-tennant/Development/restitch/internal/reqlog/ /Users/nathananderson-tennant/Development/restitch/internal/admin/
+
+exit_code=0
+PASS T18.5 trace_id field exists
+
+##[M18.gate]
+# Starting OTLP sink on port 59097...
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-76-gf086b8ee" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 59095...
+# Starting gateway on port 59093 (admin 59094)...
+FAIL M18.gate OTLP sink log not found
+Echo body: {"result":{"body":"","headers":{"Accept":"*/*","Accept-Encoding":"gzip","Traceparent":"00-3fd77350fbd62bbc3b3c6420ef79d77e-a747debb5e323dfb-01","User-Agent":"Go-http-client/1.1","X-Request-Id":"123bc6f5-7d65-40fb-9da0-e19e69388e9f"},"method":"GET","path":"/echo","query":{}}}
+PASS M18.gate traceparent propagated to upstream
+PASS M18.gate trace_id present in admin request records
+
+RESULT M18: FAIL (8 pass, 1 fail, 0 manual, 0 skip)
