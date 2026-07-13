@@ -34,3 +34,14 @@ Chronological index of gate verification runs.
 | 2026-07-13 | M2 | 9a1c3964 | PASS | 2026-07-13-M2-9a1c3964.log |
 | 2026-07-13 | M2 | 9a1c3964 | PASS | 2026-07-13-M2-9a1c3964.log |
 | 2026-07-13 | M9 | dd737e61 | PASS | 2026-07-13-M9-dd737e61.log |
+| 2026-07-13 | M10 | 72d1b959 | FAIL | 2026-07-13-M10-72d1b959.log |
+| 2026-07-13 | M10 | 8afdda7d | PASS | 2026-07-13-M10-8afdda7d.log |
+| 2026-07-13 | M12 | 8afdda7d | PASS | 2026-07-13-M12-8afdda7d.log |
+| 2026-07-13 | M18 | 8afdda7d | FAIL | 2026-07-13-M18-8afdda7d.log |
+| 2026-07-13 | M18 | 8afdda7d | FAIL | 2026-07-13-M18-8afdda7d.log |
+| 2026-07-13 | M1 | 8afdda7d | FAIL | 2026-07-13-M1-8afdda7d.log |
+| 2026-07-13 | M1 | 8afdda7d | FAIL | 2026-07-13-M1-8afdda7d.log |
+| 2026-07-13 | M1 | be7a6e44 | PASS | 2026-07-13-M1-be7a6e44.log |
+| 2026-07-13 | M14 | be7a6e44 | FAIL | 2026-07-13-M14-be7a6e44.log |
+| 2026-07-13 | final | be7a6e44 | FAIL | 2026-07-13-final-be7a6e44.log |
+| 2026-07-13 | final | 05e25b43 | FAIL | 2026-07-13-final-05e25b43.log |

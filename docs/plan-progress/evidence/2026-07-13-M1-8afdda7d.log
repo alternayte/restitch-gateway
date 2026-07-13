@@ -1,0 +1,206 @@
+=== GATE M1 (commit 8afdda7d, 2026-07-13) ===
+
+
+##[T1.1]
+$ go vet ./...
+
+exit_code=0
+PASS T1.1 go vet clean
+$ grep -rn 'ShutdownContext\|WaitForShutdown(' internal/ cmd/
+  (no matches)
+count=0
+PASS T1.1 only WaitForShutdownSignal remains
+
+##[T1.2]
+$ go build ./...
+
+exit_code=0
+PASS T1.2 build + tests green
+$ grep -rn 'NoneStrategy\|trimSpaces' internal/
+  (no matches)
+count=0
+PASS T1.2 dead code removed
+
+##[T1.3]
+$ grep -q func Setup /Users/nathananderson-tennant/Development/restitch/internal/observability/logging.go
+
+exit_code=0
+PASS T1.3 observability.Setup exists
+$ grep -q ContextHandler /Users/nathananderson-tennant/Development/restitch/internal/observability/logging.go
+
+exit_code=0
+PASS T1.3 ContextHandler exists
+
+##[T1.4]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-73-g8afdda7d" -o bin/restitch ./cmd/restitch
+PASS T1.4 unreadable config exits non-zero
+$ bin/restitch run -config /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.YU5Is1oDsm/unreadable.yaml
+failed to load config file: reading config: open /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.YU5Is1oDsm/unreadable.yaml: permission denied
+
+##[T1.5]
+$ grep -q ^ci: /Users/nathananderson-tennant/Development/restitch/Makefile
+
+exit_code=0
+PASS T1.5 Makefile exists with ci target
+$ test -f /Users/nathananderson-tennant/Development/restitch/.golangci.yml
+
+exit_code=0
+PASS T1.5 .golangci.yml exists
+$ test -f /Users/nathananderson-tennant/Development/restitch/LICENSE
+
+exit_code=0
+PASS T1.5 LICENSE exists
+$ go build -o /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.YU5Is1oDsm/mockupstream ./cmd/mockupstream
+
+exit_code=0
+PASS T1.5 mockupstream builds
+
+##[T1.6]
+$ python3 -c import yaml; yaml.safe_load(open('/Users/nathananderson-tennant/Development/restitch/.github/workflows/ci.yml'))
+
+exit_code=0
+PASS T1.6 ci.yml is valid YAML
+
+##[M1.gate]
+$ make -C /Users/nathananderson-tennant/Development/restitch ci
+go vet ./...
+golangci-lint run
+internal/reqlog/reqlog_test.go:51:17: Error return value of `json.Unmarshal` is not checked (errcheck)
+		json.Unmarshal(data, &m)
+		              ^
+internal/mockupstream/handler.go:46:28: Error return value of `(*encoding/json.Encoder).Encode` is not checked (errcheck)
+		json.NewEncoder(w).Encode(map[string]any{"status": code})
+		                         ^
+internal/mockupstream/handler.go:85:27: Error return value of `(*encoding/json.Encoder).Encode` is not checked (errcheck)
+	json.NewEncoder(w).Encode(v)
+	                         ^
+internal/ratelimit/ratelimit.go:79:29: Error return value of `(*encoding/json.Encoder).Encode` is not checked (errcheck)
+			json.NewEncoder(w).Encode(map[string]string{"error": "rate limit exceeded"})
+			                         ^
+internal/server/router_test.go:12:10: Error return value of `w.Write` is not checked (errcheck)
+		w.Write([]byte("get"))
+		       ^
+internal/server/router_test.go:15:10: Error return value of `w.Write` is not checked (errcheck)
+		w.Write([]byte("post"))
+		       ^
+internal/server/router_test.go:37:10: Error return value of `w.Write` is not checked (errcheck)
+		w.Write([]byte("ok"))
+		       ^
+internal/server/server_test.go:62:10: Error return value of `rw.Write` is not checked (errcheck)
+	rw.Write([]byte("hello"))
+	        ^
+cmd/restitch-studio/main.go:28:13: Error return value of `fmt.Sscanf` is not checked (errcheck)
+		fmt.Sscanf(v, "%d", port)
+		          ^
+internal/inbound/inbound_test.go:57:35: Error return value of `(*encoding/json.Decoder).Decode` is not checked (errcheck)
+		json.NewDecoder(rec.Body).Decode(&body)
+		                                ^
+internal/inbound/inbound_test.go:154:35: Error return value of `(*encoding/json.Decoder).Decode` is not checked (errcheck)
+		json.NewDecoder(rec.Body).Decode(&claims)
+		                                ^
+internal/upstream/coalesce_test.go:49:8: Error return value of `c.Do` is not checked (errcheck)
+			c.Do(key, func() (any, error) {
+			    ^
+internal/upstream/retry.go:190:10: Error return value of `io.Copy` is not checked (errcheck)
+		io.Copy(io.Discard, body)
+		       ^
+internal/admin/admin_test.go:88:16: Error return value of `json.Unmarshal` is not checked (errcheck)
+	json.Unmarshal(data, &m)
+	              ^
+internal/admin/admin_test.go:178:34: Error return value of `(*encoding/json.Decoder).Decode` is not checked (errcheck)
+	json.NewDecoder(rec.Body).Decode(&info)
+	                                ^
+internal/admin/recorder.go:39:27: Error return value of `mr.Storage.RecordRequest` is not checked (errcheck)
+		mr.Storage.RecordRequest(ctx, rec)
+		                        ^
+internal/admin/sql_storage_test.go:229:16: Error return value of `s.RecordBucket` is not checked (errcheck)
+	s.RecordBucket(ctx, Bucket{Timestamp: old, Requests: 1})
+	              ^
+internal/admin/sql_storage_test.go:230:16: Error return value of `s.RecordBucket` is not checked (errcheck)
+	s.RecordBucket(ctx, Bucket{Timestamp: recent, Requests: 2})
+	              ^
+internal/admin/sql_storage_test.go:232:11: Error return value of `s.Compact` is not checked (errcheck)
+	s.Compact(ctx, time.Minute)
+	         ^
+internal/admin/storage_test.go:81:17: Error return value of `s.RecordBucket` is not checked (errcheck)
+		s.RecordBucket(nil, Bucket{
+		              ^
+internal/admin/storage_test.go:107:11: Error return value of `s.Compact` is not checked (errcheck)
+	s.Compact(nil, time.Minute)
+	         ^
+internal/admin/storage_test.go:119:17: Error return value of `s.RecordRequest` is not checked (errcheck)
+	s.RecordRequest(nil, reqlog.Record{ID: "req-1", Composition: "comp1", Time: time.Now()})
+	               ^
+internal/admin/storage_test.go:120:17: Error return value of `s.RecordRequest` is not checked (errcheck)
+	s.RecordRequest(nil, reqlog.Record{ID: "req-2", Composition: "comp2", Time: time.Now()})
+	               ^
+internal/admin/timeseries_api_test.go:16:20: Error return value of `store.RecordBucket` is not checked (errcheck)
+	store.RecordBucket(nil, Bucket{
+	                  ^
+internal/admin/timeseries_api_test.go:44:21: Error return value of `store.RecordRequest` is not checked (errcheck)
+	store.RecordRequest(nil, reqlog.Record{
+	                   ^
+internal/gwconfig/config_test.go:72:14: Error return value of `os.WriteFile` is not checked (errcheck)
+	os.WriteFile(path, []byte(yaml), 0644)
+	            ^
+internal/gwconfig/config_test.go:113:14: Error return value of `os.WriteFile` is not checked (errcheck)
+	os.WriteFile(path, []byte(yaml), 0644)
+	            ^
+internal/composition/handler.go:139:18: Error return value of `json.Unmarshal` is not checked (errcheck)
+			json.Unmarshal(raw, &body)
+			              ^
+internal/composition/parser_test.go:504:14: Error return value of `os.WriteFile` is not checked (errcheck)
+	os.WriteFile(path, []byte(yamlContent), 0644)
+	            ^
+cmd/restitch/check.go:16:13: Error return value of `flags.Parse` is not checked (errcheck)
+	flags.Parse(args)
+	           ^
+cmd/restitch/importcmd.go:26:13: Error return value of `flags.Parse` is not checked (errcheck)
+	flags.Parse(args[2:])
+	           ^
+cmd/restitch/run.go:33:13: Error return value of `flags.Parse` is not checked (errcheck)
+	flags.Parse(args)
+	           ^
+cmd/restitch/run.go:356:17: Error return value of `adminSrv.Start` is not checked (errcheck)
+		adminSrv.Start()
+		              ^
+cmd/restitch/run.go:360:21: Error return value of `adminSrv.Shutdown` is not checked (errcheck)
+			adminSrv.Shutdown(ctx)
+			                 ^
+internal/auth/oauth2_test.go:430:40: unnecessary conversion (unconvert)
+				AccessToken: "token-" + string(rune('a'+count-1)),
+				                                   ^
+cmd/restitch/pipeline.go:35:6: func `buildPipeline` is unused (unused)
+func buildPipeline(ctx context.Context, path string, deps PipelineDeps) (*Pipeline, error) {
+     ^
+cmd/restitch/pipeline.go:64:6: func `configHash` is unused (unused)
+func configHash(path string) string {
+     ^
+internal/admin/storage_test.go:88:36: SA1012: do not pass a nil Context, even if a function permits it; pass context.TODO if you are unsure about which Context to use (staticcheck)
+	results, err := s.QueryTimeSeries(nil, now, now.Add(5*time.Minute), time.Minute, "")
+	                                  ^
+internal/admin/storage_test.go:109:34: SA1012: do not pass a nil Context, even if a function permits it; pass context.TODO if you are unsure about which Context to use (staticcheck)
+	results, _ := s.QueryTimeSeries(nil, old, recent.Add(time.Minute), time.Minute, "")
+	                                ^
+internal/admin/storage_test.go:122:31: SA1012: do not pass a nil Context, even if a function permits it; pass context.TODO if you are unsure about which Context to use (staticcheck)
+	rec, err := s.GetRequestByID(nil, "req-2")
+	                             ^
+internal/observability/metrics.go:31:19: SA1019: prometheus.NewGoCollector is deprecated: Use collectors.NewGoCollector instead. (staticcheck)
+	reg.MustRegister(prometheus.NewGoCollector())
+	                 ^
+internal/composition/executor.go:379:20: SA5011: possible nil pointer dereference (staticcheck)
+		"status", result.Status,
+		                 ^
+internal/composition/executor.go:382:5: SA5011(related information): this check suggests that the pointer can be nil (staticcheck)
+	if result != nil && result.ErrorRuleMatched {
+	   ^
+make: *** [lint] Error 1
+exit_code=2
+FAIL M1.gate make ci
+# Starting mockupstream on port 57391...
+# Starting gateway on port 57389 (admin 57390)...
+JSON log validation: 12 lines, all valid JSON
+PASS M1.gate all log lines are valid JSON
+
+RESULT M1: FAIL (13 pass, 1 fail, 0 manual, 0 skip)

@@ -1,0 +1,92 @@
+=== GATE M1 (commit be7a6e44, 2026-07-13) ===
+
+
+##[T1.1]
+$ go vet ./...
+
+exit_code=0
+PASS T1.1 go vet clean
+$ grep -rn 'ShutdownContext\|WaitForShutdown(' internal/ cmd/
+  (no matches)
+count=0
+PASS T1.1 only WaitForShutdownSignal remains
+
+##[T1.2]
+$ go build ./...
+
+exit_code=0
+PASS T1.2 build + tests green
+$ grep -rn 'NoneStrategy\|trimSpaces' internal/
+  (no matches)
+count=0
+PASS T1.2 dead code removed
+
+##[T1.3]
+$ grep -q func Setup /Users/nathananderson-tennant/Development/restitch/internal/observability/logging.go
+
+exit_code=0
+PASS T1.3 observability.Setup exists
+$ grep -q ContextHandler /Users/nathananderson-tennant/Development/restitch/internal/observability/logging.go
+
+exit_code=0
+PASS T1.3 ContextHandler exists
+
+##[T1.4]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-74-gbe7a6e44" -o bin/restitch ./cmd/restitch
+PASS T1.4 unreadable config exits non-zero
+$ bin/restitch run -config /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.x6ynR25BeC/unreadable.yaml
+failed to load config file: reading config: open /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.x6ynR25BeC/unreadable.yaml: permission denied
+
+##[T1.5]
+$ grep -q ^ci: /Users/nathananderson-tennant/Development/restitch/Makefile
+
+exit_code=0
+PASS T1.5 Makefile exists with ci target
+$ test -f /Users/nathananderson-tennant/Development/restitch/.golangci.yml
+
+exit_code=0
+PASS T1.5 .golangci.yml exists
+$ test -f /Users/nathananderson-tennant/Development/restitch/LICENSE
+
+exit_code=0
+PASS T1.5 LICENSE exists
+$ go build -o /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.x6ynR25BeC/mockupstream ./cmd/mockupstream
+
+exit_code=0
+PASS T1.5 mockupstream builds
+
+##[T1.6]
+$ python3 -c import yaml; yaml.safe_load(open('/Users/nathananderson-tennant/Development/restitch/.github/workflows/ci.yml'))
+
+exit_code=0
+PASS T1.6 ci.yml is valid YAML
+
+##[M1.gate]
+$ make -C /Users/nathananderson-tennant/Development/restitch ci
+go vet ./...
+golangci-lint run
+go test -race ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	(cached)
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	(cached)
+ok  	github.com/restitch/restitch-gateway/internal/admin	(cached)
+ok  	github.com/restitch/restitch-gateway/internal/auth	(cached)
+ok  	github.com/restitch/restitch-gateway/internal/composition	(cached)
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	(cached)
+ok  	github.com/restitch/restitch-gateway/internal/inbound	(cached)
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	(cached)
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	(cached)
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	(cached)
+ok  	github.com/restitch/restitch-gateway/internal/server	(cached)
+ok  	github.com/restitch/restitch-gateway/internal/testenv	(cached)
+ok  	github.com/restitch/restitch-gateway/internal/upstream	(cached)
+exit_code=0
+PASS M1.gate make ci
+# Starting mockupstream on port 58206...
+# Starting gateway on port 58204 (admin 58205)...
+JSON log validation: 12 lines, all valid JSON
+PASS M1.gate all log lines are valid JSON
+
+RESULT M1: PASS (14 pass, 0 fail, 0 manual, 0 skip)
