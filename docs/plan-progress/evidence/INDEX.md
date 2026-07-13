@@ -31,3 +31,5 @@ Chronological index of gate verification runs.
 | 2026-07-13 | M24 | bba6fae7 | FAIL | 2026-07-13-M24-bba6fae7.log |
 | 2026-07-13 | M25 | bba6fae7 | FAIL | 2026-07-13-M25-bba6fae7.log |
 | 2026-07-13 | final | bba6fae7 | FAIL | 2026-07-13-final-bba6fae7.log |
+| 2026-07-13 | M2 | 9a1c3964 | PASS | 2026-07-13-M2-9a1c3964.log |
+| 2026-07-13 | M2 | 9a1c3964 | PASS | 2026-07-13-M2-9a1c3964.log |

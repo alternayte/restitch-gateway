@@ -109,3 +109,13 @@ Latest row per task ID wins. Never edit or delete existing rows.
 | 2026-07-13 | T19.5 | M19 | PASS | bba6fae7 | evidence/2026-07-13-M19-bba6fae7.log#T19.5 | audit run |
 | 2026-07-13 | M19.gate | M19 | PASS | bba6fae7 | evidence/2026-07-13-M19-bba6fae7.log#M19.gate | audit run |
 | 2026-07-13 | final | final | FAIL | bba6fae7 | evidence/2026-07-13-final-bba6fae7.log | config path bug in gate script + studio flag bug. Gate scripts fixed in 01fc4a2e. Re-run needed |
+| 2026-07-13 | T2.1 | M2 | PASS | 9a1c3964 | 2026-07-13-M2-9a1c3964.log#T2.1 | auto (h_finish) |
+| 2026-07-13 | T2.2 | M2 | PASS | 9a1c3964 | 2026-07-13-M2-9a1c3964.log#T2.2 | auto (h_finish) |
+| 2026-07-13 | T2.3 | M2 | PASS | 9a1c3964 | 2026-07-13-M2-9a1c3964.log#T2.3 | auto (h_finish) |
+| 2026-07-13 | T2.4 | M2 | PASS | 9a1c3964 | 2026-07-13-M2-9a1c3964.log#T2.4 | auto (h_finish) |
+| 2026-07-13 | M2.gate | M2 | PASS | 9a1c3964 | 2026-07-13-M2-9a1c3964.log#M2.gate | auto (h_finish) |
+| 2026-07-13 | T2.1 | M2 | PASS | 9a1c3964 | evidence/2026-07-13-M2-9a1c3964.log#T2.1 | auto (h_finish) |
+| 2026-07-13 | T2.2 | M2 | PASS | 9a1c3964 | evidence/2026-07-13-M2-9a1c3964.log#T2.2 | auto (h_finish) |
+| 2026-07-13 | T2.3 | M2 | PASS | 9a1c3964 | evidence/2026-07-13-M2-9a1c3964.log#T2.3 | auto (h_finish) |
+| 2026-07-13 | T2.4 | M2 | PASS | 9a1c3964 | evidence/2026-07-13-M2-9a1c3964.log#T2.4 | auto (h_finish) |
+| 2026-07-13 | M2.gate | M2 | PASS | 9a1c3964 | evidence/2026-07-13-M2-9a1c3964.log#M2.gate | auto (h_finish) |

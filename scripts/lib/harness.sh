@@ -23,6 +23,10 @@ H_SKIP_COUNT=0
 H_CURRENT_TASK=""
 H_BUILT=false
 
+# Per-task outcome tracking (parallel indexed arrays — bash 3.2 safe)
+H_TASK_NAMES=()
+H_TASK_STATUS=()
+
 # Ports assigned by h_free_port
 GW_PORT=""
 ADMIN_PORT=""
@@ -210,10 +214,38 @@ h_config() {
 # ── Task tracking ────────────────────────────────────────────────────────────
 h_task() {
     H_CURRENT_TASK="$1"
+    H_TASK_NAMES+=("$1")
+    H_TASK_STATUS+=("NONE")
     {
         echo ""
         echo "##[${H_CURRENT_TASK}]"
     } >> "${H_EVIDENCE_FILE}"
+}
+
+# Upgrade the current task's status (severity: FAIL > MANUAL > PASS > NONE)
+_h_upgrade_task_status() {
+    local new_status="$1"
+    local idx=$((${#H_TASK_NAMES[@]} - 1))
+    if [[ $idx -lt 0 ]]; then
+        return
+    fi
+    local current="${H_TASK_STATUS[$idx]}"
+    case "${current}" in
+        FAIL) ;; # FAIL is highest severity, never downgrade
+        MANUAL)
+            if [[ "${new_status}" == "FAIL" ]]; then
+                H_TASK_STATUS[$idx]="FAIL"
+            fi
+            ;;
+        PASS)
+            if [[ "${new_status}" == "FAIL" || "${new_status}" == "MANUAL" ]]; then
+                H_TASK_STATUS[$idx]="${new_status}"
+            fi
+            ;;
+        NONE)
+            H_TASK_STATUS[$idx]="${new_status}"
+            ;;
+    esac
 }
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -229,18 +261,21 @@ h_evidence() {
 # ── Status reporting ─────────────────────────────────────────────────────────
 h_pass() {
     H_PASS_COUNT=$((H_PASS_COUNT + 1))
+    _h_upgrade_task_status "PASS"
     echo "PASS $*"
     echo "PASS $*" >> "${H_EVIDENCE_FILE}"
 }
 
 h_fail() {
     H_FAIL_COUNT=$((H_FAIL_COUNT + 1))
+    _h_upgrade_task_status "FAIL"
     echo "FAIL $*"
     echo "FAIL $*" >> "${H_EVIDENCE_FILE}"
 }
 
 h_manual() {
     H_MANUAL_COUNT=$((H_MANUAL_COUNT + 1))
+    _h_upgrade_task_status "MANUAL"
     echo "MANUAL $*"
     echo "MANUAL $*" >> "${H_EVIDENCE_FILE}"
 }
@@ -582,11 +617,30 @@ h_finish() {
         echo "  └─────────────────────────────────────────────────────────────┘"
     fi
 
-    # Append to evidence INDEX if not in dry-run mode
+    # Auto-append ledger rows + evidence INDEX when not in dry-run mode
     if [[ "${H_NO_EVIDENCE}" != "true" ]]; then
-        local index_file="${H_EVIDENCE_DIR}/INDEX.md"
+        local ledger_file="${REPO_ROOT}/docs/plan-progress/LEDGER.md"
         local evidence_basename
         evidence_basename="$(basename "${H_EVIDENCE_FILE}")"
+
+        # Append one ledger row per tracked task
+        if [[ -f "${ledger_file}" ]]; then
+            local i
+            for i in $(seq 0 $((${#H_TASK_NAMES[@]} - 1))); do
+                local task_name="${H_TASK_NAMES[$i]}"
+                local task_status="${H_TASK_STATUS[$i]}"
+                local ledger_status=""
+                case "${task_status}" in
+                    PASS) ledger_status="PASS" ;;
+                    FAIL) ledger_status="FAIL" ;;
+                    MANUAL) ledger_status="PENDING" ;;
+                    NONE) continue ;; # no assertions ran for this task
+                esac
+                echo "| ${H_DATE} | ${task_name} | ${H_GATE} | ${ledger_status} | ${H_COMMIT} | evidence/${evidence_basename}#${task_name} | auto (h_finish) |" >> "${ledger_file}"
+            done
+        fi
+
+        local index_file="${H_EVIDENCE_DIR}/INDEX.md"
         echo "| ${H_DATE} | ${H_GATE} | ${H_COMMIT} | ${result} | ${evidence_basename} |" >> "${index_file}"
     fi
 
