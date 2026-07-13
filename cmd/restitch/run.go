@@ -14,6 +14,7 @@ import (
 	"github.com/restitch/restitch-gateway/internal/admin"
 	"github.com/restitch/restitch-gateway/internal/composition"
 	"github.com/restitch/restitch-gateway/internal/gwconfig"
+	"github.com/restitch/restitch-gateway/internal/inbound"
 	"github.com/restitch/restitch-gateway/internal/observability"
 	"github.com/restitch/restitch-gateway/internal/ratelimit"
 	"github.com/restitch/restitch-gateway/internal/server"
@@ -140,7 +141,21 @@ func runCmd(args []string) int {
 			Executor: composition.NewExecutor(compiled),
 		}
 
-		handler := composition.NewHandler(compiled, nil)
+		var authenticator *inbound.Authenticator
+		if gwcfg.Server.Auth != nil {
+			authCfg := gwconfigToInboundAuth(gwcfg.Server.Auth)
+			var authErr error
+			authenticator, authErr = inbound.New(context.Background(), authCfg)
+			if authErr != nil {
+				slog.Error("failed to initialize inbound auth", "error", authErr)
+				return 1
+			}
+			slog.Info("inbound authentication enabled",
+				"api_keys", len(gwcfg.Server.Auth.APIKeys),
+				"jwt", gwcfg.Server.Auth.JWT != nil)
+		}
+
+		handler := composition.NewHandler(compiled, authenticator)
 
 		// Wire request recording (ring buffer + stats)
 		ringSize := gwcfg.Admin.RequestLogSize
@@ -270,12 +285,21 @@ func runCmd(args []string) int {
 				return "", err
 			}
 
+			var newAuth *inbound.Authenticator
+			if newGwcfg.Server.Auth != nil {
+				authCfg := gwconfigToInboundAuth(newGwcfg.Server.Auth)
+				newAuth, err = inbound.New(context.Background(), authCfg)
+				if err != nil {
+					return "", fmt.Errorf("inbound auth: %w", err)
+				}
+			}
+
 			newPipe := &Pipeline{
 				Hash:     newHash,
 				Compiled: newCompiled,
 				Executor: composition.NewExecutor(newCompiled),
 			}
-			newHandler := composition.NewHandler(newCompiled, nil)
+			newHandler := composition.NewHandler(newCompiled, newAuth)
 			newRouter := server.NewRouter()
 			newHandler.RegisterRoutes(newRouter)
 			newRouter.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
@@ -504,4 +528,18 @@ func upstreamsFromPipeline(p *Pipeline, checker *upstream.Checker, ctx context.C
 		result = append(result, ui)
 	}
 	return result
+}
+
+func gwconfigToInboundAuth(auth *gwconfig.InboundAuthConfig) inbound.InboundAuthConfig {
+	cfg := inbound.InboundAuthConfig{
+		APIKeys: auth.APIKeys,
+	}
+	if auth.JWT != nil {
+		cfg.JWT = &inbound.JWTConfig{
+			JWKSURL:  auth.JWT.JWKSURL,
+			Issuer:   auth.JWT.Issuer,
+			Audience: auth.JWT.Audience,
+		}
+	}
+	return cfg
 }

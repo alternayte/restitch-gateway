@@ -119,3 +119,5 @@ Latest row per task ID wins. Never edit or delete existing rows.
 | 2026-07-13 | T2.3 | M2 | PASS | 9a1c3964 | evidence/2026-07-13-M2-9a1c3964.log#T2.3 | auto (h_finish) |
 | 2026-07-13 | T2.4 | M2 | PASS | 9a1c3964 | evidence/2026-07-13-M2-9a1c3964.log#T2.4 | auto (h_finish) |
 | 2026-07-13 | M2.gate | M2 | PASS | 9a1c3964 | evidence/2026-07-13-M2-9a1c3964.log#M2.gate | auto (h_finish) |
+| 2026-07-13 | T9.1 | M9 | PASS | dd737e61 | evidence/2026-07-13-M9-dd737e61.log#T9.1 | auto (h_finish) |
+| 2026-07-13 | M9.gate | M9 | PASS | dd737e61 | evidence/2026-07-13-M9-dd737e61.log#M9.gate | auto (h_finish) |

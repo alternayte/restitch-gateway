@@ -1,0 +1,49 @@
+=== GATE M9 (commit dd737e61, 2026-07-13) ===
+
+
+##[T9.1]
+$ test -d /Users/nathananderson-tennant/Development/restitch/internal/inbound
+
+exit_code=0
+PASS T9.1 inbound package exists
+$ go test -count=1 -race ./internal/inbound/ ./internal/composition/
+ok  	github.com/restitch/restitch-gateway/internal/inbound	1.449s
+ok  	github.com/restitch/restitch-gateway/internal/composition	1.717s
+exit_code=0
+PASS T9.1 inbound + composition tests
+
+##[M9.gate]
+$ go test -count=1 -race ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	3.538s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	1.399s
+ok  	github.com/restitch/restitch-gateway/internal/admin	1.821s
+ok  	github.com/restitch/restitch-gateway/internal/auth	5.130s
+ok  	github.com/restitch/restitch-gateway/internal/composition	2.593s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	3.849s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	3.132s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	2.805s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	2.730s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	2.589s
+ok  	github.com/restitch/restitch-gateway/internal/server	2.142s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	3.009s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	2.548s
+exit_code=0
+PASS M9.gate full tests (race)
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-70-gdd737e61" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 56334...
+# Starting gateway on port 56332 (admin 56333)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:56332/protected
+status=401
+body={"error":"unauthorized"}
+PASS M9.gate no API key returns 401
+$ curl -H 'X-API-Key: test-key-123' /protected → 200
+PASS M9.gate valid API key returns 200
+$ curl -s -w '%{http_code}' http://127.0.0.1:56332/health
+status=200
+body={"status":"ok"}
+PASS M9.gate /health open without key
+
+RESULT M9: PASS (6 pass, 0 fail, 0 manual, 0 skip)
