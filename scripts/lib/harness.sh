@@ -136,7 +136,7 @@ h_start_studio() {
     fi
     h_log "Starting studio on port ${STUDIO_PORT}..."
     "${REPO_ROOT}/bin/restitch-studio" -port "${STUDIO_PORT}" \
-        -admin "http://127.0.0.1:${ADMIN_PORT}" \
+        -gateway-admin-url "http://127.0.0.1:${ADMIN_PORT}" \
         "$@" \
         > "${H_TMP}/studio.log" 2>&1 &
     local pid=$!

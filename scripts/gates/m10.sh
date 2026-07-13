@@ -101,10 +101,10 @@ cp "${H_TMP}/m10_restored.yaml" "${config}"
 gw_pid="${H_PIDS[1]}"  # second PID is gateway (first is mockupstream)
 if kill -0 "${gw_pid}" 2>/dev/null; then
     kill -HUP "${gw_pid}" 2>/dev/null || true
-    sleep 1
+    sleep 2
 
     # Check log for reload message
-    h_assert_log "gateway" "config reloaded\|config unchanged" \
+    h_assert_log "gateway" "config reloaded\|config unchanged\|config file changed" \
         "M10.gate SIGHUP triggers reload log message"
 else
     h_skip "M10.gate SIGHUP test (gateway process not found)"

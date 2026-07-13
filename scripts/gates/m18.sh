@@ -27,7 +27,7 @@ h_run "T18.4 OTLP exporter in code" -- \
 # ── T18.5 Trace ID in request records ────────────────────────────────────────
 h_task T18.5
 h_run "T18.5 trace_id field exists" -- \
-    grep -rq 'TraceID\|trace_id' "${REPO_ROOT}/internal/admin/"
+    grep -rq 'TraceID\|trace_id' "${REPO_ROOT}/internal/reqlog/" "${REPO_ROOT}/internal/admin/"
 
 # ── M18 Verification gate ───────────────────────────────────────────────────
 h_task M18.gate
@@ -60,10 +60,10 @@ YAML
 )
 
 # Start gateway with OTel env vars pointing at our sink
-OTEL_EXPORTER_OTLP_ENDPOINT="${OTLP_SINK_URL}" \
-OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf" \
-OTEL_SERVICE_NAME="restitch-test" \
-    h_start_gateway "${config}"
+export OTEL_EXPORTER_OTLP_ENDPOINT="${OTLP_SINK_URL}"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+export OTEL_SERVICE_NAME="restitch-test"
+h_start_gateway "${config}"
 
 # Make a request to generate a trace
 curl -s "http://127.0.0.1:${GW_PORT}/echo" > /dev/null 2>&1

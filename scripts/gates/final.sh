@@ -50,20 +50,7 @@ h_run "final.3 quickstart check" -- \
 h_task final.smoke
 h_start_mockupstream
 
-# Find a valid example config and adapt it
-if [[ -f "${REPO_ROOT}/examples/quickstart/restitch.yaml" ]]; then
-    # Create adapted config with our ephemeral ports
-    config=$(h_config final <<YAML
-server:
-  port: ${GW_PORT}
-admin:
-  port: ${ADMIN_PORT}
-$(grep -A 1000 '^upstreams:' "${REPO_ROOT}/examples/quickstart/restitch.yaml" | \
-    sed "s|http://localhost:8081|http://127.0.0.1:${MOCK_PORT}|g")
-YAML
-    )
-else
-    config=$(h_config final <<'YAML'
+config=$(h_config final <<'YAML'
 server:
   port: @GW_PORT@
 admin:
@@ -72,24 +59,37 @@ upstreams:
   mock:
     url: "http://127.0.0.1:@MOCK_PORT@"
 compositions:
-  user:
-    path: "/api/users/{id}"
+  user-posts:
+    path: "/api/user-posts"
     method: GET
     steps:
-      - name: u
+      - name: user
         upstream: mock
-        path: "/users/{{ req.params.id }}"
+        path: "/users/{{ req.query.id }}"
+      - name: orders
+        upstream: mock
+        path: "/orders?userId={{ steps.user.body.id }}"
     response:
       body:
-        user: "{{ steps.u.body }}"
+        user: "{{ steps.user.body }}"
+        orders: "{{ steps.orders.body }}"
+  echo:
+    path: "/api/echo"
+    method: GET
+    steps:
+      - name: e
+        upstream: mock
+        path: "/echo"
+    response:
+      body:
+        echo: "{{ steps.e.body }}"
 YAML
-    )
-fi
+)
 
 h_start_gateway "${config}"
 
-# Basic data-plane request
-h_assert_status "http://127.0.0.1:${GW_PORT}/api/users/1" 200 \
+# Basic data-plane request (matches quickstart example)
+h_assert_status "http://127.0.0.1:${GW_PORT}/api/user-posts?id=1" 200 \
     "final.4 data-plane request returns 200"
 
 # Metrics

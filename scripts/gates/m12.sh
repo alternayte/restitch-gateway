@@ -38,7 +38,7 @@ YAML
 )
 
 h_start_gateway "${config}"
-h_start_studio -admin "http://127.0.0.1:${ADMIN_PORT}"
+h_start_studio
 
 # Studio proxies /api/info
 h_assert_status "http://127.0.0.1:${STUDIO_PORT}/api/info" 200 \
