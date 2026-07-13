@@ -113,7 +113,7 @@ gw_pid="${H_PIDS[1]}"
 if kill -0 "${gw_pid}" 2>/dev/null; then
     kill -HUP "${gw_pid}" 2>/dev/null || true
     sleep 1
-    h_assert_log "gateway" "config reloaded\|config unchanged" \
+    h_assert_log "gateway" "config reloaded|config unchanged" \
         "final.4 SIGHUP triggers config reload/unchanged log"
 fi
 

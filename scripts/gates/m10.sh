@@ -104,7 +104,7 @@ if kill -0 "${gw_pid}" 2>/dev/null; then
     sleep 2
 
     # Check log for reload message
-    h_assert_log "gateway" "config reloaded\|config unchanged\|config file changed" \
+    h_assert_log "gateway" "config reloaded|config unchanged|config file changed" \
         "M10.gate SIGHUP triggers reload log message"
 else
     h_skip "M10.gate SIGHUP test (gateway process not found)"
