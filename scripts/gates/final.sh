@@ -119,7 +119,7 @@ fi
 
 # Studio proxy (if binary available)
 if [[ -f "${REPO_ROOT}/bin/restitch-studio" ]]; then
-    h_start_studio -admin "http://127.0.0.1:${ADMIN_PORT}"
+    h_start_studio
     h_assert_status "http://127.0.0.1:${STUDIO_PORT}/api/info" 200 \
         "final.4 studio proxy works"
 else
