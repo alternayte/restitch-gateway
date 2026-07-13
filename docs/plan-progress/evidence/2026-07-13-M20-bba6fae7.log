@@ -1,0 +1,5 @@
+=== GATE M20 (commit bba6fae7, 2026-07-13) ===
+
+FAIL M20 gate not implemented: milestone M20 has not been expanded. Write this gate script (from PLAN.md 'M20 Verification gate') as the first task of the milestone expansion, per CLAUDE.md rule 2.
+
+RESULT M20: FAIL (0 pass, 1 fail, 0 manual, 0 skip)

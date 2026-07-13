@@ -1,0 +1,74 @@
+=== GATE M5 (commit bba6fae7, 2026-07-13) ===
+
+
+##[T5.1]
+$ test -d /Users/nathananderson-tennant/Development/restitch/internal/upstream
+
+exit_code=0
+PASS T5.1 upstream package exists
+$ test -f /Users/nathananderson-tennant/Development/restitch/internal/upstream/client.go
+
+exit_code=0
+PASS T5.1 upstream client.go exists
+
+##[T5.2]
+$ go test -count=1 -race ./internal/auth/
+ok  	github.com/restitch/restitch-gateway/internal/auth	4.315s
+exit_code=0
+PASS T5.2 auth tests pass
+
+##[T5.3]
+$ grep -rq TestOAuth2 /Users/nathananderson-tennant/Development/restitch/internal/auth/
+
+exit_code=0
+PASS T5.3 OAuth2 test exists
+
+##[T5.4]
+$ grep -q TransportConfig /Users/nathananderson-tennant/Development/restitch/internal/upstream/client.go
+
+exit_code=0
+PASS T5.4 TransportConfig struct exists
+
+##[T5.5]
+$ grep internal/client or internal/config (excluding gwconfig)
+  (no matches)
+PASS T5.5 old client/config packages not imported
+
+##[T5.6]
+$ test -d /Users/nathananderson-tennant/Development/restitch/internal/gwconfig
+
+exit_code=0
+PASS T5.6 gwconfig package exists
+
+##[M5.gate]
+$ go test -count=1 -race ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	1.446s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	1.629s
+ok  	github.com/restitch/restitch-gateway/internal/admin	1.914s
+ok  	github.com/restitch/restitch-gateway/internal/auth	5.121s
+ok  	github.com/restitch/restitch-gateway/internal/composition	2.530s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	2.833s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	2.647s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	3.055s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	1.825s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	1.809s
+ok  	github.com/restitch/restitch-gateway/internal/server	1.708s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	2.018s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	1.642s
+exit_code=0
+PASS M5.gate full tests (race)
+$ go vet ./...
+
+exit_code=0
+PASS M5.gate go vet
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-67-gbba6fae7" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 50400...
+# Starting gateway on port 50398 (admin 50399)...
+$ curl -H 'Authorization: Bearer SECRET' /e
+{"h":{"Accept":"*/*","Accept-Encoding":"gzip","User-Agent":"Go-http-client/1.1","X-Request-Id":"13c5da4e-9886-4c2b-b463-513dbe5124b3"}}
+PASS M5.gate Authorization header not leaked to upstream
+
+RESULT M5: PASS (10 pass, 0 fail, 0 manual, 0 skip)

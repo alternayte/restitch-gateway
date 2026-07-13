@@ -1,0 +1,359 @@
+=== GATE M15 (commit bba6fae7, 2026-07-13) ===
+
+
+##[T15.1]
+$ test -f /Users/nathananderson-tennant/Development/restitch/README.md
+
+exit_code=0
+PASS T15.1 README.md exists
+$ test -f /Users/nathananderson-tennant/Development/restitch/tests/readme_test.go
+
+exit_code=0
+PASS T15.1 readme_test.go exists
+
+##[T15.2]
+$ bash -c test $(find '/Users/nathananderson-tennant/Development/restitch/docs' -name '*.md' -not -path '*/superpowers/*' -not -path '*/plan-progress/*' | wc -l) -ge 5
+
+exit_code=0
+PASS T15.2 docs directory populated
+$ test -d /Users/nathananderson-tennant/Development/restitch/examples
+
+exit_code=0
+PASS T15.2 examples directory exists
+$ test -f /Users/nathananderson-tennant/Development/restitch/tests/examples_test.go
+
+exit_code=0
+PASS T15.2 examples_test.go exists
+
+##[T15.3]
+$ test -f /Users/nathananderson-tennant/Development/restitch/Dockerfile
+
+exit_code=0
+PASS T15.3 Dockerfile exists
+
+##[T15.4]
+$ test -f /Users/nathananderson-tennant/Development/restitch/CHANGELOG.md
+
+exit_code=0
+PASS T15.4 CHANGELOG.md exists
+
+##[M15.gate]
+$ make -C /Users/nathananderson-tennant/Development/restitch e2e
+go test -tags e2e ./tests/ -count=1 -v
+=== RUN   TestSpecs
+2026/07/13 16:20:12 INFO registered composition route composition=user method=GET path=/api/users/{id} public=false
+2026/07/13 16:20:12 INFO registered composition route composition=partial method=GET path=/partial public=false
+2026/07/13 16:20:12 INFO registered composition route composition=timeout method=GET path=/timeout public=false
+2026/07/13 16:20:12 INFO registered composition route composition=echo method=GET path=/echo public=false
+=== RUN   TestSpecs/happy_path_-_user_lookup
+2026/07/13 16:20:12 INFO executing composition composition=user method=GET path=/api/users/42
+2026/07/13 16:20:12 INFO executing composition composition=user waves=1 total_steps=1 execution_order=[[user]]
+2026/07/13 16:20:12 INFO step starting composition=user step=user wave=1 upstream=http://127.0.0.1:51559 optional=false
+2026/07/13 16:20:12 INFO step complete composition=user step=user wave=1 status=200 duration_ms=0.321
+2026/07/13 16:20:12 INFO composition complete composition=user status=200 partial=false errors=0 step_timings=map[user:0.321] total_steps=1 slowest_step="map[duration_ms:0.321 name:user]" gateway_overhead_ms=0.05112500000000003
+=== RUN   TestSpecs/method_not_allowed_-_POST_to_GET-only_route
+=== RUN   TestSpecs/not_found_-_unknown_route
+=== RUN   TestSpecs/partial_response_-_optional_step_failure
+2026/07/13 16:20:12 INFO executing composition composition=partial method=GET path=/partial
+2026/07/13 16:20:12 INFO executing composition composition=partial waves=1 total_steps=2 execution_order="[[main failing]]"
+2026/07/13 16:20:12 INFO step starting composition=partial step=failing wave=1 upstream=http://127.0.0.1:1 optional=true
+2026/07/13 16:20:12 INFO step starting composition=partial step=main wave=1 upstream=http://127.0.0.1:51559 optional=false
+2026/07/13 16:20:12 INFO step complete composition=partial step=main wave=1 status=200 duration_ms=0.122
+2026/07/13 16:20:12 WARN step failed composition=partial step=failing wave=1 optional=true duration_ms=0.127 error="request failed: Get \"http://127.0.0.1:1/unreachable\": dial tcp 127.0.0.1:1: connect: connection refused"
+2026/07/13 16:20:12 INFO composition complete composition=partial status=200 partial=true errors=1 step_timings="map[failing:0.127 main:0.122]" total_steps=2 slowest_step="map[duration_ms:0.127 name:failing]" gateway_overhead_ms=0.04916699999999999
+=== RUN   TestSpecs/path_parameters_-_id_passed_through_to_upstream
+2026/07/13 16:20:12 INFO executing composition composition=user method=GET path=/api/users/99
+2026/07/13 16:20:12 INFO executing composition composition=user waves=1 total_steps=1 execution_order=[[user]]
+2026/07/13 16:20:12 INFO step starting composition=user step=user wave=1 upstream=http://127.0.0.1:51559 optional=false
+2026/07/13 16:20:12 INFO step complete composition=user step=user wave=1 status=200 duration_ms=0.102
+2026/07/13 16:20:12 INFO composition complete composition=user status=200 partial=false errors=0 step_timings=map[user:0.102] total_steps=1 slowest_step="map[duration_ms:0.102 name:user]" gateway_overhead_ms=0.007457999999999992
+=== RUN   TestSpecs/timeout_-_required_step_timeout_returns_504
+2026/07/13 16:20:12 INFO executing composition composition=timeout method=GET path=/timeout
+2026/07/13 16:20:12 INFO executing composition composition=timeout waves=1 total_steps=1 execution_order=[[slow]]
+2026/07/13 16:20:12 INFO step starting composition=timeout step=slow wave=1 upstream=http://127.0.0.1:51559 optional=false
+2026/07/13 16:20:12 WARN step failed composition=timeout step=slow wave=1 optional=false duration_ms=50.825 error="timeout after 50ms: Get \"http://127.0.0.1:51559/slow?ms=5000\": context deadline exceeded"
+2026/07/13 16:20:12 ERROR required step failed in wave wave=0 step=slow error="timeout after 50ms: Get \"http://127.0.0.1:51559/slow?ms=5000\": context deadline exceeded"
+2026/07/13 16:20:12 ERROR composition execution failed composition=timeout error="required step \"slow\" failed: timeout after 50ms: Get \"http://127.0.0.1:51559/slow?ms=5000\": context deadline exceeded"
+--- PASS: TestSpecs (5.01s)
+    --- PASS: TestSpecs/happy_path_-_user_lookup (0.00s)
+    --- PASS: TestSpecs/method_not_allowed_-_POST_to_GET-only_route (0.00s)
+    --- PASS: TestSpecs/not_found_-_unknown_route (0.00s)
+    --- PASS: TestSpecs/partial_response_-_optional_step_failure (0.00s)
+    --- PASS: TestSpecs/path_parameters_-_id_passed_through_to_upstream (0.00s)
+    --- PASS: TestSpecs/timeout_-_required_step_timeout_returns_504 (0.05s)
+=== RUN   TestExampleConfigs
+=== RUN   TestExampleConfigs/examples/auth/restitch.yaml
+=== RUN   TestExampleConfigs/examples/docker-compose/restitch.yaml
+=== RUN   TestExampleConfigs/examples/quickstart/restitch.yaml
+=== RUN   TestExampleConfigs/examples/resilience/restitch.yaml
+--- PASS: TestExampleConfigs (0.01s)
+    --- PASS: TestExampleConfigs/examples/auth/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/docker-compose/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/quickstart/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/resilience/restitch.yaml (0.00s)
+=== RUN   TestReadmeYAMLBlocks
+=== RUN   TestReadmeYAMLBlocks/block_0
+--- PASS: TestReadmeYAMLBlocks (0.00s)
+    --- PASS: TestReadmeYAMLBlocks/block_0 (0.00s)
+PASS
+ok  	github.com/restitch/restitch-gateway/tests	5.364s
+exit_code=0
+PASS M15.gate make e2e (includes readme + examples tests)
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-67-gbba6fae7" -o bin/restitch ./cmd/restitch
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch check -config /Users/nathananderson-tennant/Development/restitch/examples/quickstart/restitch.yaml
+  user-posts: 2 steps, 2 waves [user] → [orders]
+  echo: 1 steps, 1 waves [e]
+Syntax OK
+exit_code=0
+PASS M15.gate quickstart config check
+$ make -C /Users/nathananderson-tennant/Development/restitch docker
+docker build -t restitch:dev .
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 930B done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for gcr.io/distroless/static-debian12:latest
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:20-alpine
+#3 ...
+
+#4 [auth] library/golang:pull token for registry-1.docker.io
+#4 DONE 0.0s
+
+#5 [auth] library/node:pull token for registry-1.docker.io
+#5 DONE 0.0s
+
+#6 [internal] load metadata for docker.io/library/golang:1.25-alpine
+#6 DONE 1.4s
+
+#3 [internal] load metadata for docker.io/library/node:20-alpine
+#3 DONE 1.4s
+
+#7 [internal] load .dockerignore
+#7 transferring context: 116B done
+#7 DONE 0.0s
+
+#8 [studio 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#8 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+#8 sha256:cd266ddf7e80183cbac3cb23b49e90ab83a06f14f95d28681d8468f89dc00615 6.54kB / 6.54kB done
+#8 sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 7.67kB / 7.67kB done
+#8 sha256:d63c387675b0ec5d7ef0c15b03691ac9f82803a8b30c87de3ce8a16960831cbc 1.72kB / 1.72kB done
+#8 ...
+
+#9 [stage-2 1/3] FROM gcr.io/distroless/static-debian12:latest
+#9 DONE 0.2s
+
+#10 [builder 1/9] FROM docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+#10 resolve docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 0.0s done
+#10 sha256:5de55e5ef9c033997441461efe7ba23a986db059c0bb78b38f84ee0d72b99167 2.81MB / 4.18MB 0.3s
+#10 sha256:199fe782dffabc4068c0303c858ee5863b903d374fb872fc7ecffca5377b67ac 0B / 247.50kB 0.3s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 0B / 57.74MB 0.3s
+#10 sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 10.30kB / 10.30kB done
+#10 sha256:6779780b49fee40ea72c8f30bb17e6f35c410129940be57ca3cba0efb1c4c777 1.92kB / 1.92kB done
+#10 sha256:86571d4881e62ff1e449ad3c3d0030b886e05f5534ba0e15814816def8260ebe 2.21kB / 2.21kB done
+#10 sha256:5de55e5ef9c033997441461efe7ba23a986db059c0bb78b38f84ee0d72b99167 3.15MB / 4.18MB 0.4s
+#10 sha256:199fe782dffabc4068c0303c858ee5863b903d374fb872fc7ecffca5377b67ac 247.50kB / 247.50kB 0.6s done
+#10 sha256:c811100012b8ca1d97b11a640f930d0096c8b8fa10f51a020645f2d741e271ea 0B / 127B 0.6s
+#10 ...
+
+#11 [internal] load build context
+#11 transferring context: 58.07MB 0.6s done
+#11 DONE 0.7s
+
+#10 [builder 1/9] FROM docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+#10 sha256:c811100012b8ca1d97b11a640f930d0096c8b8fa10f51a020645f2d741e271ea 127B / 127B 0.7s done
+#10 sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 0B / 32B 0.8s
+#10 sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 32B / 32B 0.8s done
+#10 sha256:5de55e5ef9c033997441461efe7ba23a986db059c0bb78b38f84ee0d72b99167 4.18MB / 4.18MB 1.6s done
+#10 extracting sha256:5de55e5ef9c033997441461efe7ba23a986db059c0bb78b38f84ee0d72b99167
+#10 extracting sha256:5de55e5ef9c033997441461efe7ba23a986db059c0bb78b38f84ee0d72b99167 0.2s done
+#10 extracting sha256:199fe782dffabc4068c0303c858ee5863b903d374fb872fc7ecffca5377b67ac 0.0s done
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 3.15MB / 57.74MB 3.5s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 6.29MB / 57.74MB 6.1s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 9.44MB / 57.74MB 8.7s
+#10 ...
+
+#8 [studio 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#8 sha256:bda5d7ef971f8ede8ea80002d2ac886ef6807fe32cfe46c38704a7ba0429475d 10.49MB / 43.55MB 10.7s
+#8 sha256:13e45b12880fbbfe3554ecf6b70131ace701d0c2fd3e2fb9abb842ba2494cd40 1.26MB / 1.26MB 3.3s done
+#8 sha256:cd322d0ddd02673e6c24a2158d1f12f6ec7c6fd9c0dc67123244d0f0eb0f8806 443B / 443B 3.4s done
+#8 ...
+
+#10 [builder 1/9] FROM docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 12.58MB / 57.74MB 11.2s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 15.73MB / 57.74MB 13.8s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 18.87MB / 57.74MB 16.5s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 22.02MB / 57.74MB 19.1s
+#10 ...
+
+#8 [studio 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#8 sha256:bda5d7ef971f8ede8ea80002d2ac886ef6807fe32cfe46c38704a7ba0429475d 23.07MB / 43.55MB 20.8s
+#8 ...
+
+#10 [builder 1/9] FROM docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 25.17MB / 57.74MB 21.6s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 28.31MB / 57.74MB 24.2s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 31.46MB / 57.74MB 26.9s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 34.60MB / 57.74MB 29.4s
+#10 ...
+
+#8 [studio 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#8 sha256:bda5d7ef971f8ede8ea80002d2ac886ef6807fe32cfe46c38704a7ba0429475d 34.60MB / 43.55MB 30.9s
+#8 ...
+
+#10 [builder 1/9] FROM docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 37.75MB / 57.74MB 32.0s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 40.89MB / 57.74MB 34.6s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 44.04MB / 57.74MB 37.2s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 47.19MB / 57.74MB 38.9s
+#10 ...
+
+#8 [studio 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#8 sha256:bda5d7ef971f8ede8ea80002d2ac886ef6807fe32cfe46c38704a7ba0429475d 43.55MB / 43.55MB 37.8s done
+#8 extracting sha256:bda5d7ef971f8ede8ea80002d2ac886ef6807fe32cfe46c38704a7ba0429475d 1.7s done
+#8 extracting sha256:13e45b12880fbbfe3554ecf6b70131ace701d0c2fd3e2fb9abb842ba2494cd40 0.1s done
+#8 extracting sha256:cd322d0ddd02673e6c24a2158d1f12f6ec7c6fd9c0dc67123244d0f0eb0f8806 done
+#8 DONE 39.8s
+
+#10 [builder 1/9] FROM docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+#10 ...
+
+#12 [studio 2/6] WORKDIR /build/studio
+#12 DONE 0.2s
+
+#13 [studio 3/6] COPY studio/package.json studio/package-lock.json ./
+#13 DONE 0.0s
+
+#10 [builder 1/9] FROM docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 50.33MB / 57.74MB 40.2s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 53.48MB / 57.74MB 41.7s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 55.57MB / 57.74MB 46.7s
+#10 ...
+
+#14 [studio 4/6] RUN npm ci
+#14 ...
+
+#10 [builder 1/9] FROM docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 56.62MB / 57.74MB 51.8s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 56.62MB / 57.74MB 56.8s
+#10 sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 57.74MB / 57.74MB 57.9s done
+#10 extracting sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 0.1s
+#10 extracting sha256:b7143319540391a90eb612226c9385369f4128384e68542ad952284d2eb02b65 3.4s done
+#10 extracting sha256:c811100012b8ca1d97b11a640f930d0096c8b8fa10f51a020645f2d741e271ea
+#10 extracting sha256:c811100012b8ca1d97b11a640f930d0096c8b8fa10f51a020645f2d741e271ea done
+#10 extracting sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 done
+#10 DONE 61.6s
+
+#15 [builder 2/9] RUN apk add --no-cache git
+#15 5.098 ( 1/12) Installing brotli-libs (1.2.0-r1)
+#15 5.639 ( 2/12) Installing c-ares (1.34.8-r0)
+#15 5.794 ( 3/12) Installing libunistring (1.4.2-r0)
+#15 6.760 ( 4/12) Installing libidn2 (2.3.8-r0)
+#15 6.916 ( 5/12) Installing nghttp2-libs (1.69.0-r0)
+#15 7.019 ( 6/12) Installing libpsl (0.21.5-r3)
+#15 7.097 ( 7/12) Installing zstd-libs (1.5.7-r2)
+#15 7.398 ( 8/12) Installing libcurl (8.21.0-r0)
+#15 7.681 ( 9/12) Installing libexpat (2.8.2-r0)
+#15 7.713 (10/12) Installing pcre2 (10.47-r1)
+#15 ...
+
+#14 [studio 4/6] RUN npm ci
+#14 29.31 
+#14 29.31 added 512 packages, and audited 513 packages in 29s
+#14 29.31 
+#14 29.31 142 packages are looking for funding
+#14 29.31   run `npm fund` for details
+#14 29.31 
+#14 29.31 found 0 vulnerabilities
+#14 29.31 npm notice
+#14 29.31 npm notice New major version of npm available! 10.8.2 -> 12.0.1
+#14 29.31 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.1
+#14 29.31 npm notice To update run: npm install -g npm@12.0.1
+#14 29.31 npm notice
+#14 DONE 30.3s
+
+#15 [builder 2/9] RUN apk add --no-cache git
+#15 7.835 (11/12) Installing git (2.54.0-r0)
+#15 ...
+
+#16 [studio 5/6] COPY studio/ ./
+#16 DONE 0.0s
+
+#17 [studio 6/6] RUN npm run build
+#17 0.234 
+#17 0.234 > studio@0.0.0 build
+#17 0.234 > tsc -b && vite build
+#17 0.234 
+#17 ...
+
+#15 [builder 2/9] RUN apk add --no-cache git
+#15 9.336 (12/12) Installing git-init-template (2.54.0-r0)
+#15 9.351 Executing busybox-1.37.0-r31.trigger
+#15 9.363 OK: 21.5 MiB in 29 packages
+#15 DONE 9.4s
+
+#18 [builder 3/9] WORKDIR /build
+#18 DONE 0.2s
+
+#17 [studio 6/6] RUN npm run build
+#17 ...
+
+#19 [builder 4/9] COPY go.mod go.sum ./
+#19 DONE 0.0s
+
+#20 [builder 5/9] RUN go mod download
+#20 ...
+
+#17 [studio 6/6] RUN npm run build
+#17 4.888 vite v8.1.3 building client environment for production...
+#17 4.902 [2Ktransforming...✓ 2512 modules transformed.
+#17 5.338 rendering chunks...
+#17 5.569 computing gzip size...
+#17 5.588 ../cmd/restitch-studio/dist/index.html                     0.75 kB │ gzip:   0.41 kB
+#17 5.588 ../cmd/restitch-studio/dist/assets/index-CvTM6g9X.css     82.05 kB │ gzip:  13.98 kB
+#17 5.588 ../cmd/restitch-studio/dist/assets/index-DhXlj6xy.js   1,363.27 kB │ gzip: 417.46 kB
+#17 5.588 
+#17 5.588 ✓ built in 696ms
+#17 5.589 [plugin builtin:vite-reporter] 
+#17 5.589 (!) Some chunks are larger than 500 kB after minification. Consider:
+#17 5.589 - Using dynamic import() to code-split the application
+#17 5.589 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+#17 5.589 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+#17 DONE 5.7s
+
+#20 [builder 5/9] RUN go mod download
+#20 DONE 31.2s
+
+#21 [builder 6/9] COPY . .
+#21 DONE 0.2s
+
+#22 [builder 7/9] COPY --from=studio /build/cmd/restitch-studio/dist/ ./cmd/restitch-studio/dist/
+#22 DONE 0.0s
+
+#23 [builder 8/9] RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=dev" -o /restitch ./cmd/restitch
+#23 DONE 15.2s
+
+#24 [builder 9/9] RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=dev" -o /restitch-studio ./cmd/restitch-studio
+#24 DONE 0.5s
+
+#25 [stage-2 2/3] COPY --from=builder /restitch /restitch
+#25 DONE 0.1s
+
+#26 [stage-2 3/3] COPY --from=builder /restitch-studio /restitch-studio
+#26 DONE 0.0s
+
+#27 exporting to image
+#27 exporting layers 0.0s done
+#27 writing image sha256:8abd8c72feb244f2c38f87332a2da422678fdc4fcf1f70d92266f9f580c9afd9 done
+#27 naming to docker.io/library/restitch:dev done
+#27 DONE 0.1s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/co690jktw0uwfzoipu9cmv2zu
+exit_code=0
+PASS M15.gate docker build
+
+RESULT M15: PASS (10 pass, 0 fail, 0 manual, 0 skip)
