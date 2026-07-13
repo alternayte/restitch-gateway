@@ -65,9 +65,10 @@ export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
 export OTEL_SERVICE_NAME="restitch-test"
 h_start_gateway "${config}"
 
-# Make a request to generate a trace
+# Make a request to generate a trace.
+# OTel BatchSpanProcessor has a 5s default schedule delay, so wait 6s.
 curl -s "http://127.0.0.1:${GW_PORT}/echo" > /dev/null 2>&1
-sleep 2
+sleep 6
 
 # Check OTLP sink received trace data
 if [[ -f "${H_TMP}/otlp.log" ]]; then
