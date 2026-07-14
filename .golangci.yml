@@ -5,3 +5,7 @@ linters:
   enable:
     - misspell
     - unconvert
+  exclusions:
+    presets:
+      - std-error-handling
+      - common-false-positives
