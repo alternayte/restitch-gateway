@@ -5,7 +5,3 @@ linters:
   enable:
     - misspell
     - unconvert
-
-exclusions:
-  paths:
-    - studio/
