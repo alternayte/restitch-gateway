@@ -7,8 +7,9 @@ bin/
 *.so
 *.dylib
 
-# Bundled frontend assets
-cmd/restitch-studio/dist/
+# Bundled frontend assets (keep placeholder for go:embed)
+cmd/restitch-studio/dist/*
+!cmd/restitch-studio/dist/index.html
 
 # Test binary
 *.test
