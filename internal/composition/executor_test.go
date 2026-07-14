@@ -27,12 +27,13 @@ func TestExecutor(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 
 			w.Header().Set("Content-Type", "application/json")
-			if r.URL.Path == "/user" {
+			switch r.URL.Path {
+			case "/user":
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"id":   123,
 					"name": "Alice",
 				})
-			} else if r.URL.Path == "/profile" {
+			case "/profile":
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"bio": "Software engineer",
 				})

@@ -33,7 +33,7 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (d Duration) MarshalYAML() (interface{}, error) {
-	return d.Duration.String(), nil
+	return d.String(), nil
 }
 
 // File is the root configuration loaded from restitch.yaml.
