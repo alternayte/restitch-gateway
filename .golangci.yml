@@ -1,13 +1,11 @@
+version: "2"
+
 linters:
+  default: standard
   enable:
-    - govet
-    - errcheck
-    - staticcheck
-    - unused
-    - ineffassign
     - misspell
     - unconvert
 
-run:
-  exclude-dirs:
-    - studio
+exclusions:
+  paths:
+    - studio/
