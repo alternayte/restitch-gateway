@@ -51,3 +51,4 @@ Chronological index of gate verification runs.
 | 2026-07-14 | final | 89890785 | FAIL | 2026-07-14-final-89890785.log |
 | 2026-07-14 | final | 89890785 | PASS | 2026-07-14-final-89890785.log |
 | 2026-07-15 | M20 | 55d269d2 | PASS | 2026-07-15-M20-55d269d2.log |
+| 2026-07-15 | M20 | 21a84b20 | PASS | 2026-07-15-M20-21a84b20.log |
