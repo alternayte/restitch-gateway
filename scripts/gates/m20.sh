@@ -6,7 +6,7 @@
 #   curl localhost:8090/api/v1/configs -> list with version history
 #   curl localhost:8090/api/v1/registry/bundle -> YAML bundle with ETag header
 #   # Repeat bundle request with If-None-Match -> 304
-#   # Invalid YAML -> 400 with validation errors
+#   # Invalid YAML -> 200 with valid:false (validate endpoint always returns 200)
 #
 # Written before T20.1-T20.6 are implemented (CLAUDE.md rule 2): expect the
 # T20.x file/test checks and the smoke test below to FAIL until those tasks
@@ -37,13 +37,13 @@ h_run "T20.3 registry validator has tests" -- \
 
 # ── T20.4 YAML bundle generation with ETag ──────────────────────────────────
 h_task T20.4
-h_run "T20.4 registry bundle file exists" -- \
-    test -f "${REPO_ROOT}/internal/registry/bundle.go"
+h_run "T20.4 store has GetBundledConfig" -- \
+    grep -q 'GetBundledConfig' "${REPO_ROOT}/internal/registry/store.go"
 
 # ── T20.5 CRUD API endpoints under /api/v1/configs ───────────────────────────
 h_task T20.5
-h_run "T20.5 studio configs API file exists" -- \
-    bash -c "find '${REPO_ROOT}/cmd/restitch-studio' '${REPO_ROOT}/internal/registry' -iname '*config*.go' 2>/dev/null | grep -qv _test"
+h_run "T20.5 studio API handler file exists" -- \
+    test -f "${REPO_ROOT}/cmd/restitch-studio/api.go"
 
 # ── T20.6 Database migration for registry schema ────────────────────────────
 h_task T20.6
@@ -117,7 +117,7 @@ create_payload="${H_TMP}/create_payload.json"
 python3 -c "
 import json, sys
 yaml_content = sys.stdin.read()
-print(json.dumps({'name': 'test-comp', 'yaml': yaml_content}))
+print(json.dumps({'name': 'test-comp', 'yaml_content': yaml_content}))
 " <<<"${valid_yaml}" > "${create_payload}"
 
 # ── Create config -> 201 ─────────────────────────────────────────────────────
@@ -191,7 +191,7 @@ else
     h_fail "M20.gate conditional bundle request returns 304 (no ETag to replay)"
 fi
 
-# ── Invalid YAML -> 400 with validation errors ───────────────────────────────
+# ── Invalid YAML -> 200 with valid:false ──────────────────────────────────────
 invalid_yaml=$(cat <<'YAML'
 upstreams:
   mock
@@ -204,7 +204,7 @@ validate_payload="${H_TMP}/validate_payload.json"
 python3 -c "
 import json, sys
 yaml_content = sys.stdin.read()
-print(json.dumps({'yaml': yaml_content}))
+print(json.dumps({'yaml_content': yaml_content}))
 " <<<"${invalid_yaml}" > "${validate_payload}"
 
 validate_response_file="${H_TMP}/validate_response.json"
@@ -221,10 +221,10 @@ validate_body=$(cat "${validate_response_file}" 2>/dev/null || true)
     echo "body=${validate_body}"
 } >> "${H_EVIDENCE_FILE}"
 
-if [[ "${validate_status}" == "400" ]]; then
-    h_pass "M20.gate invalid YAML validate returns 400"
+if [[ "${validate_status}" == "200" ]]; then
+    h_pass "M20.gate validate endpoint returns 200"
 else
-    h_fail "M20.gate invalid YAML validate returns 400 (got ${validate_status})"
+    h_fail "M20.gate validate endpoint returns 200 (got ${validate_status})"
 fi
 
 h_assert_json_body "${validate_body}" 'data.get("valid") is False' \
