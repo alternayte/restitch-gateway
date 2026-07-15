@@ -132,6 +132,63 @@ func TestPoller_Trigger_ImmediatePoll(t *testing.T) {
 	}
 }
 
+func TestPoller_Trigger_BypassesBackoff(t *testing.T) {
+	var reqCount atomic.Int32
+	failFirst := atomic.Bool{}
+	failFirst.Store(true)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := reqCount.Add(1)
+		if n <= 2 && failFirst.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("ETag", "e1")
+		json.NewEncoder(w).Encode(map[string]any{
+			"yaml_content": "x: y\n", "etag": "e1",
+			"composition_count": 0, "composition_names": []string{},
+		})
+	}))
+	defer srv.Close()
+
+	client := NewRegistryClient(srv.URL)
+	p := NewPoller(client, 10*time.Second, func([]byte) (string, error) { return "", nil }, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	go func() {
+		// After ~100ms the first poll has failed and the poller is asleep in
+		// its ~8-12s backoff window (attempt 0). Trigger should wake it
+		// immediately instead of waiting out the backoff timer.
+		time.Sleep(100 * time.Millisecond)
+		p.Trigger()
+
+		// The triggered poll (request #2) still fails (n<=2 && failFirst),
+		// pushing the poller into a longer (~16-24s) backoff window. Trigger
+		// again to prove it bypasses that grown backoff too.
+		time.Sleep(100 * time.Millisecond)
+		failFirst.Store(false)
+		p.Trigger()
+	}()
+
+	p.Run(ctx)
+
+	// Without Trigger, the poller would still be asleep in its first backoff
+	// window at the 2s test deadline (base backoff is ~10s), so we'd see
+	// exactly 1 request. Each Trigger call above bypasses an active backoff
+	// sleep and forces an immediate poll, so we expect 3 requests total:
+	// fail (backoff #1) -> fail via trigger (backoff #2) -> success via trigger.
+	if reqCount.Load() < 3 {
+		t.Errorf("expected >=3 requests (trigger should bypass backoff), got %d", reqCount.Load())
+	}
+
+	status := p.Status()
+	if status.ConsecutiveErrors != 0 {
+		t.Errorf("consecutive_errors = %d, want 0 after recovery", status.ConsecutiveErrors)
+	}
+}
+
 func TestPoller_ContextCancel_CleansUp(t *testing.T) {
 	srv := httptest.NewServer(bundleHandler("x: y\n", "e1", 0))
 	defer srv.Close()
