@@ -200,3 +200,11 @@ Latest row per task ID wins. Never edit or delete existing rows.
 | 2026-07-14 | final.smoke | final | PASS | 89890785 | evidence/2026-07-14-final-89890785.log#final.smoke | auto (h_finish) |
 | 2026-07-14 | final.ci | final | PASS | 89890785 | evidence/2026-07-14-final-89890785.log#final.ci | auto (h_finish) |
 | 2026-07-14 | final | final | PASS | 89890785 | evidence/2026-07-14-final-89890785.log | all 15 checks pass — CI fix (hashFiles, golangci-lint v2, dist placeholder) |
+| 2026-07-15 | T20.1 | M20 | PASS | 55d269d2 | evidence/2026-07-15-M20-55d269d2.log#T20.1 | auto (h_finish) |
+| 2026-07-15 | T20.2 | M20 | PASS | 55d269d2 | evidence/2026-07-15-M20-55d269d2.log#T20.2 | auto (h_finish) |
+| 2026-07-15 | T20.3 | M20 | PASS | 55d269d2 | evidence/2026-07-15-M20-55d269d2.log#T20.3 | auto (h_finish) |
+| 2026-07-15 | T20.4 | M20 | PASS | 55d269d2 | evidence/2026-07-15-M20-55d269d2.log#T20.4 | auto (h_finish) |
+| 2026-07-15 | T20.5 | M20 | PASS | 55d269d2 | evidence/2026-07-15-M20-55d269d2.log#T20.5 | auto (h_finish) |
+| 2026-07-15 | T20.6 | M20 | PASS | 55d269d2 | evidence/2026-07-15-M20-55d269d2.log#T20.6 | auto (h_finish) |
+| 2026-07-15 | M20.unit | M20 | PASS | 55d269d2 | evidence/2026-07-15-M20-55d269d2.log#M20.unit | auto (h_finish) |
+| 2026-07-15 | M20.gate | M20 | PASS | 55d269d2 | evidence/2026-07-15-M20-55d269d2.log#M20.gate | auto (h_finish) |

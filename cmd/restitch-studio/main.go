@@ -13,6 +13,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/restitch/restitch-gateway/internal/registry"
 )
 
 //go:embed all:dist
@@ -22,6 +24,8 @@ func main() {
 	port := flag.Int("port", 3080, "studio server port")
 	gatewayAdminURL := flag.String("gateway-admin-url", "http://localhost:9090", "gateway admin API URL")
 	adminKey := flag.String("admin-key", "", "admin API key (X-Admin-Key header)")
+	dbPath := flag.String("db-path", "./studio.db", "SQLite database path")
+	noMigrate := flag.Bool("no-migrate", false, "skip auto-migration on startup")
 	flag.Parse()
 
 	if v := os.Getenv("STUDIO_PORT"); v != "" {
@@ -33,8 +37,29 @@ func main() {
 	if v := os.Getenv("STUDIO_ADMIN_KEY"); v != "" {
 		*adminKey = v
 	}
+	if v := os.Getenv("STUDIO_DB_PATH"); v != "" {
+		*dbPath = v
+	}
+	if os.Getenv("STUDIO_NO_MIGRATE") == "true" {
+		*noMigrate = true
+	}
 
-	mux := buildMux(*gatewayAdminURL, *adminKey)
+	db, err := openDB(*dbPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	if !*noMigrate {
+		if err := registry.RunMigrations(db); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	store := registry.NewStore(db)
+	registryAPI := NewRegistryAPI(store)
+
+	mux := buildMux(*gatewayAdminURL, *adminKey, registryAPI)
 
 	addr := fmt.Sprintf(":%d", *port)
 	slog.Info("restitch-studio starting",
@@ -53,7 +78,7 @@ func main() {
 	}
 }
 
-func buildMux(gatewayAdminURL, adminKey string) *http.ServeMux {
+func buildMux(gatewayAdminURL, adminKey string, registryAPI *RegistryAPI) *http.ServeMux {
 	target, err := url.Parse(gatewayAdminURL)
 	if err != nil {
 		log.Fatalf("invalid gateway admin URL: %v", err)
@@ -77,6 +102,21 @@ func buildMux(gatewayAdminURL, adminKey string) *http.ServeMux {
 
 	mux := http.NewServeMux()
 
+	// V1 routes (Studio-native) — registered before proxy catch-all.
+	if registryAPI != nil {
+		mux.HandleFunc("POST /api/v1/configs/validate", registryAPI.handleValidateConfig)
+		mux.HandleFunc("POST /api/v1/configs", registryAPI.handleCreateConfig)
+		mux.HandleFunc("GET /api/v1/configs", registryAPI.handleListConfigs)
+		mux.HandleFunc("GET /api/v1/configs/{id}", registryAPI.handleGetConfig)
+		mux.HandleFunc("PUT /api/v1/configs/{id}", registryAPI.handleUpdateConfigContent)
+		mux.HandleFunc("PATCH /api/v1/configs/{id}", registryAPI.handleUpdateConfigMetadata)
+		mux.HandleFunc("DELETE /api/v1/configs/{id}", registryAPI.handleDeleteConfig)
+		mux.HandleFunc("GET /api/v1/configs/{id}/versions", registryAPI.handleListVersions)
+		mux.HandleFunc("POST /api/v1/configs/{id}/versions/{version}/activate", registryAPI.handleActivateVersion)
+		mux.HandleFunc("GET /api/v1/registry/bundle", registryAPI.handleGetBundle)
+	}
+
+	// Proxy routes (gateway admin pass-through).
 	mux.Handle("/api/", proxy)
 	mux.Handle("/metrics", proxy)
 
