@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/restitch/restitch-gateway/internal/reqlog"
 )
@@ -345,6 +346,60 @@ func TestServer_Compositions_NilDeps(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/upstreams", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestRegistryStatusEndpoint(t *testing.T) {
+	now := time.Now()
+	deps := testDeps()
+	deps.RegistryStatus = func() any {
+		return map[string]any{
+			"mode":                  "registry",
+			"registry_url":          "http://studio:8090",
+			"poll_interval_seconds": 10,
+			"last_poll":             now.Format(time.RFC3339),
+			"last_success":          now.Format(time.RFC3339),
+			"etag":                  "abc123",
+			"composition_count":     5,
+			"error":                 nil,
+			"error_type":            nil,
+			"consecutive_errors":    0,
+		}
+	}
+	srv := New(Config{Port: 0}, deps)
+
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/registry/status", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var status map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if status["mode"] != "registry" {
+		t.Errorf("mode = %v, want registry", status["mode"])
+	}
+	if status["etag"] != "abc123" {
+		t.Errorf("etag = %v, want abc123", status["etag"])
+	}
+	if status["composition_count"] != float64(5) {
+		t.Errorf("composition_count = %v, want 5", status["composition_count"])
+	}
+}
+
+func TestRegistryStatusEndpoint_NotRegistered(t *testing.T) {
+	deps := testDeps()
+	deps.RegistryStatus = nil
+	srv := New(Config{Port: 0}, deps)
+
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/registry/status", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rec.Code)
 	}
 }
 

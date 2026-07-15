@@ -70,17 +70,18 @@ type UpstreamHealthInfo struct {
 
 // Deps holds dependencies injected into the admin server.
 type Deps struct {
-	Version      string
-	ConfigPath   string
-	ConfigHash   func() string
-	Compositions func() []CompositionInfo
-	Upstreams    func(ctx context.Context) []UpstreamInfo
-	Requests     *RingBuffer
-	Stats        *Stats
-	Metrics      http.Handler
-	Validate     func(yamlBytes []byte) []string
-	Reload       func() (string, error)
-	Storage      Storage
+	Version        string
+	ConfigPath     string
+	ConfigHash     func() string
+	Compositions   func() []CompositionInfo
+	Upstreams      func(ctx context.Context) []UpstreamInfo
+	Requests       *RingBuffer
+	Stats          *Stats
+	Metrics        http.Handler
+	Validate       func(yamlBytes []byte) []string
+	Reload         func() (string, error)
+	Storage        Storage
+	RegistryStatus func() any // nil in file mode; returns registry poll status JSON
 }
 
 // Server is the admin API server.
@@ -118,6 +119,9 @@ func New(cfg Config, deps Deps) *Server {
 	mux.HandleFunc("GET /admin/api/stats", s.requireKey(s.handleStats))
 	mux.HandleFunc("POST /admin/api/validate", s.requireKey(s.rateLimited(mutationLimiter, s.handleValidate)))
 	mux.HandleFunc("POST /admin/api/reload", s.requireKey(s.rateLimited(mutationLimiter, s.handleReload)))
+	if deps.RegistryStatus != nil {
+		mux.HandleFunc("GET /admin/api/registry/status", s.requireKey(s.handleRegistryStatus))
+	}
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
@@ -393,6 +397,10 @@ func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
 		"ok":          true,
 		"config_hash": hash,
 	})
+}
+
+func (s *Server) handleRegistryStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.deps.RegistryStatus())
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
