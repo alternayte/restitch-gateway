@@ -30,7 +30,8 @@ NEW FILES:
   internal/registry/validator.go                    — Validate() using gateway parser
   internal/registry/validator_test.go               — validator unit tests
   internal/registry/migrations/20260715000000_registry_schema.sql — Goose migration
-  cmd/restitch-studio/db.go                         — openDB + runMigrations
+  internal/registry/db.go                           — embed migrations + RunMigrations()
+  cmd/restitch-studio/db.go                         — openDB (calls registry.RunMigrations)
   cmd/restitch-studio/api.go                        — RegistryAPI HTTP handlers
   cmd/restitch-studio/api_test.go                   — handler integration tests
 
@@ -189,7 +190,8 @@ git commit -m "feat(M20): add registry domain types and migration schema (T20.1,
 
 **Interfaces:**
 - Consumes: types from Task 1 (`Config`, `ConfigVersion`, `ConfigWithContent`, `BundledConfig`, all input types, `PageInfo`); `database/sql`; `oklog/ulid/v2`; `crypto/sha256`; `composition.Config` / `composition.Upstream` / `composition.Composition` (for bundle YAML merge)
-- Produces: `Store` struct and methods consumed by Tasks 4 and 5:
+- Produces: `Store` struct, `RunMigrations`, and methods consumed by Tasks 4 and 5:
+  - `func RunMigrations(db *sql.DB) error` (from `internal/registry/db.go`)
   - `func NewStore(db *sql.DB) *Store`
   - `func (s *Store) CreateConfig(ctx context.Context, input CreateConfigInput) (*ConfigWithContent, error)`
   - `func (s *Store) GetConfig(ctx context.Context, id string) (*ConfigWithContent, error)`
@@ -226,11 +228,7 @@ func testStore(t *testing.T) *Store {
     }
     t.Cleanup(func() { db.Close() })
 
-    goose.SetBaseFS(embedMigrations)
-    if err := goose.SetDialect("sqlite3"); err != nil {
-        t.Fatal(err)
-    }
-    if err := goose.Up(db, "migrations"); err != nil {
+    if err := RunMigrations(db); err != nil {
         t.Fatal(err)
     }
     return NewStore(db)
@@ -253,7 +251,35 @@ Write `internal/registry/store.go` with all CRUD methods per the design spec §4
 - `DeleteConfig` relies on CASCADE for version cleanup
 - `GetBundledConfig` queries all configs joined with active versions, parses each YAML into `composition.Config`, merges upstreams/compositions maps (error on name collision), marshals back to YAML, computes ETag from SHA-256 of sorted `id:version` pairs
 - Tags stored as JSON text in SQLite, marshaled/unmarshaled with `encoding/json`
-- Embed migrations: `//go:embed migrations/*.sql` on a package-level `var embedMigrations embed.FS`
+
+Also create `internal/registry/db.go` to embed migrations and export `RunMigrations`:
+```go
+package registry
+
+import (
+    "database/sql"
+    "embed"
+    "fmt"
+
+    "github.com/pressly/goose/v3"
+)
+
+//go:embed migrations/*.sql
+var embedMigrations embed.FS
+
+func RunMigrations(db *sql.DB) error {
+    goose.SetBaseFS(embedMigrations)
+    if err := goose.SetDialect("sqlite3"); err != nil {
+        return fmt.Errorf("set dialect: %w", err)
+    }
+    if err := goose.Up(db, "migrations"); err != nil {
+        return fmt.Errorf("run migrations: %w", err)
+    }
+    return nil
+}
+```
+
+Note: `//go:embed` paths must be relative to the file's package directory — `..` is not allowed. That is why the embed lives in `internal/registry/` (next to `migrations/`), NOT in `cmd/restitch-studio/`.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -380,48 +406,30 @@ git commit -m "feat(M20): implement config validation using gateway parser (T20.
 
 - [ ] **Step 1: Write `cmd/restitch-studio/db.go`**
 
-Create database initialization:
+Create database initialization. Note: the migration embed lives in `internal/registry/db.go` (Task 2) because Go's `//go:embed` forbids `..` in paths. This file just opens SQLite and delegates migration to `registry.RunMigrations`.
+
 ```go
 package main
 
 import (
     "database/sql"
-    "embed"
     "fmt"
 
-    "github.com/pressly/goose/v3"
     _ "modernc.org/sqlite"
 )
-
-//go:embed ../../internal/registry/migrations/*.sql
-var registryMigrations embed.FS
 
 func openDB(path string) (*sql.DB, error) {
     db, err := sql.Open("sqlite", path)
     if err != nil {
         return nil, fmt.Errorf("open database: %w", err)
     }
-    // SQLite: single writer, WAL mode for concurrent reads
     if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
         db.Close()
         return nil, fmt.Errorf("set WAL mode: %w", err)
     }
     return db, nil
 }
-
-func runMigrations(db *sql.DB) error {
-    goose.SetBaseFS(registryMigrations)
-    if err := goose.SetDialect("sqlite3"); err != nil {
-        return fmt.Errorf("set dialect: %w", err)
-    }
-    if err := goose.Up(db, "internal/registry/migrations"); err != nil {
-        return fmt.Errorf("run migrations: %w", err)
-    }
-    return nil
-}
 ```
-
-Note: The embed path `../../internal/registry/migrations/*.sql` is relative to the source file. The goose directory path `"internal/registry/migrations"` must match the FS structure inside the embedded filesystem. Verify the embed path resolves correctly by checking the directory structure from `cmd/restitch-studio/` — two levels up reaches the repo root, then into `internal/registry/migrations/`.
 
 - [ ] **Step 2: Write `cmd/restitch-studio/api.go`**
 
@@ -504,7 +512,7 @@ if err != nil {
 defer db.Close()
 
 if !*noMigrate {
-    if err := runMigrations(db); err != nil {
+    if err := registry.RunMigrations(db); err != nil {
         log.Fatal(err)
     }
 }
@@ -583,7 +591,7 @@ func testMux(t *testing.T) *http.ServeMux {
     }
     t.Cleanup(func() { db.Close() })
 
-    if err := runMigrations(db); err != nil {
+    if err := registry.RunMigrations(db); err != nil {
         t.Fatal(err)
     }
     store := registry.NewStore(db)
