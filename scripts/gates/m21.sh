@@ -56,7 +56,7 @@ h_task M21.gate
 
 h_start_mockupstream
 
-h_start_studio
+h_start_studio -db-path "$H_TMP/studio.db"
 
 sleep 1
 
@@ -84,6 +84,7 @@ h_run "config created in registry" -- test -n "$CREATE_RESP"
 # Start gateway in registry mode
 h_build
 GW_PID_FILE="$H_TMP/gw_reg.pid"
+RESTITCH_ADMIN_PORT="$ADMIN_PORT" \
 "${REPO_ROOT}/bin/restitch" run \
   -registry-url "http://localhost:${STUDIO_PORT}" \
   -poll-interval 2s \
@@ -96,13 +97,14 @@ echo "$gw_reg_pid" > "$GW_PID_FILE"
 h_wait_for_port "$GW_PORT" "gw_reg" 10
 
 # Verify gateway serves the registry composition
-h_assert_status "http://localhost:${GW_PORT}/regtest" 200
+h_assert_status "http://localhost:${GW_PORT}/regtest" 200 "gateway serves registry composition"
 
 # Verify admin registry status endpoint
-h_assert_status "http://localhost:${ADMIN_PORT}/admin/api/registry/status" 200
+h_assert_status "http://localhost:${ADMIN_PORT}/admin/api/registry/status" 200 "registry status endpoint returns 200"
+REG_STATUS=$(curl -sf "http://localhost:${ADMIN_PORT}/admin/api/registry/status" 2>/dev/null) || true
+h_evidence "registry status: ${REG_STATUS}"
 h_run "status shows registry mode" -- \
-  curl -sf "http://localhost:${ADMIN_PORT}/admin/api/registry/status" \
-  | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['mode']=='registry', f'mode={d[\"mode\"]}'"
+  python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['mode']=='registry', f'mode={d[\"mode\"]}'" "$REG_STATUS"
 
 # Verify SIGHUP triggers immediate poll
 kill -HUP "$(cat "$GW_PID_FILE")" 2>/dev/null || true
