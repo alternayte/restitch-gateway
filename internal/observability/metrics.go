@@ -24,6 +24,10 @@ type Metrics struct {
 	CacheHitsTotal         *prometheus.CounterVec
 	CacheMissesTotal       *prometheus.CounterVec
 	CoalescedTotal         *prometheus.CounterVec
+
+	RegistryPollsTotal   *prometheus.CounterVec
+	RegistryPollDuration prometheus.Histogram
+	RegistryLastSuccess  prometheus.Gauge
 }
 
 // NewMetrics creates a new Metrics instance with a private registry.
@@ -88,6 +92,27 @@ func NewMetrics() *Metrics {
 			Help: "Coalesced (deduplicated) step requests",
 		}, []string{"composition", "step"}),
 	}
+}
+
+// RegisterRegistryMetrics registers the registry polling metrics on the
+// Metrics instance's registry. It is separate from NewMetrics so that
+// callers which don't use the registry hot-reload poller (e.g. tests) don't
+// pay for metrics they never populate.
+func (m *Metrics) RegisterRegistryMetrics() {
+	f := promauto.With(m.registry)
+	m.RegistryPollsTotal = f.NewCounterVec(prometheus.CounterOpts{
+		Name: "restitch_registry_polls_total",
+		Help: "Total registry poll attempts.",
+	}, []string{"result"})
+	m.RegistryPollDuration = f.NewHistogram(prometheus.HistogramOpts{
+		Name:    "restitch_registry_poll_duration_seconds",
+		Help:    "Duration of registry poll cycles including reload.",
+		Buckets: prometheus.DefBuckets,
+	})
+	m.RegistryLastSuccess = f.NewGauge(prometheus.GaugeOpts{
+		Name: "restitch_registry_last_success_timestamp",
+		Help: "Unix timestamp of last successful registry poll.",
+	})
 }
 
 // Handler returns an HTTP handler that serves the /metrics endpoint.
