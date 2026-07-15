@@ -9,11 +9,14 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/admin"
 	"github.com/restitch/restitch-gateway/internal/composition"
 	"github.com/restitch/restitch-gateway/internal/gwconfig"
+	"github.com/restitch/restitch-gateway/internal/hotreload"
 	"github.com/restitch/restitch-gateway/internal/inbound"
 	"github.com/restitch/restitch-gateway/internal/observability"
 	"github.com/restitch/restitch-gateway/internal/ratelimit"
@@ -30,14 +33,73 @@ func runCmd(args []string) int {
 	certFile := flags.String("cert", "", "Path to TLS certificate file")
 	keyFile := flags.String("key", "", "Path to TLS private key file")
 	configFile := flags.String("config", "restitch.yaml", "path to composition config file")
+	registryURL := flags.String("registry-url", "", "Registry URL for polling mode")
+	registryKey := flags.String("registry-key", "", "Admin API key for registry auth")
+	pollInterval := flags.Duration("poll-interval", 10*time.Second, "Registry poll interval")
 	_ = flags.Parse(args)
 
-	// Load and parse gateway config (server/admin blocks + compositions)
-	expanded, raw, readErr := gwconfig.ReadAndExpand(*configFile)
-	noConfigFile := errors.Is(readErr, iofs.ErrNotExist)
-	if readErr != nil && !noConfigFile {
-		fmt.Fprintf(os.Stderr, "failed to load config file: %v\n", readErr)
+	if *registryURL == "" {
+		if v := os.Getenv("RESTITCH_REGISTRY_URL"); v != "" {
+			*registryURL = v
+		}
+	}
+	if *registryKey == "" {
+		if v := os.Getenv("RESTITCH_REGISTRY_KEY"); v != "" {
+			*registryKey = v
+		}
+	}
+	if v := os.Getenv("RESTITCH_POLL_INTERVAL"); v != "" && !isFlagSet(flags, "poll-interval") {
+		if d, err := time.ParseDuration(v); err == nil {
+			*pollInterval = d
+		}
+	}
+
+	registryMode := *registryURL != ""
+	if registryMode && isFlagSet(flags, "config") {
+		slog.Error("--config and --registry-url are mutually exclusive")
 		return 1
+	}
+
+	// configPath is a display value for logs and the admin API: the config
+	// file path in file mode, or the registry URL in registry mode.
+	configPath := *configFile
+	if registryMode {
+		configPath = *registryURL
+	}
+
+	// Load and parse gateway config (server/admin blocks + compositions).
+	// In registry mode, the initial fetch is blocking: any failure here is fatal.
+	var expanded, raw []byte
+	var noConfigFile bool
+	var regClient *hotreload.RegistryClient
+
+	if registryMode {
+		var clientOpts []hotreload.ClientOption
+		if *registryKey != "" {
+			clientOpts = append(clientOpts, hotreload.WithAdminKey(*registryKey))
+		}
+		regClient = hotreload.NewRegistryClient(*registryURL, clientOpts...)
+
+		result, err := regClient.Fetch(context.Background(), "")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to fetch initial config from registry: %v\n", err)
+			return 1
+		}
+		raw = result.YAML
+		expandedStr, err := gwconfig.ExpandEnvStrict(string(raw))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to expand env vars in registry config: %v\n", err)
+			return 1
+		}
+		expanded = []byte(expandedStr)
+	} else {
+		var readErr error
+		expanded, raw, readErr = gwconfig.ReadAndExpand(*configFile)
+		noConfigFile = errors.Is(readErr, iofs.ErrNotExist)
+		if readErr != nil && !noConfigFile {
+			fmt.Fprintf(os.Stderr, "failed to load config file: %v\n", readErr)
+			return 1
+		}
 	}
 
 	// Parse server/admin config from YAML (or use defaults if no file)
@@ -122,7 +184,7 @@ func runCmd(args []string) int {
 		}
 
 		slog.Info("loaded composition config",
-			"file", *configFile,
+			"source", configPath,
 			"upstreams", len(compiled.Config.Upstreams),
 			"compositions", len(compiled.Config.Compositions))
 
@@ -259,15 +321,19 @@ func runCmd(args []string) int {
 		wrapped := applyMiddleware(swapper, middlewares...)
 		srv.SetHandler(wrapped)
 
-		// Reload function shared between admin API, SIGHUP, and fsnotify
-		doReload := func() (string, error) {
-			newExpanded, newRaw, err := gwconfig.ReadAndExpand(*configFile)
+		// reloadFromBytes compiles raw YAML and hot-swaps the pipeline. It is
+		// shared between file-mode reload (SIGHUP/fsnotify/admin API) and
+		// registry-mode reload (poller/SIGHUP/admin API).
+		reloadFromBytes := func(rawYAML []byte) (string, error) {
+			expandedStr, err := gwconfig.ExpandEnvStrict(string(rawYAML))
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("env expansion: %w", err)
 			}
-			newGwcfg, err := gwconfig.LoadBytes(newExpanded, newRaw)
+			newExpanded := []byte(expandedStr)
+
+			newGwcfg, err := gwconfig.LoadBytes(newExpanded, rawYAML)
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("load config: %w", err)
 			}
 			newHash := newGwcfg.Hash()
 
@@ -316,13 +382,83 @@ func runCmd(args []string) int {
 			return newHash, nil
 		}
 
-		// Start reload watchers (SIGHUP + fsnotify)
-		rl := newReloader(*configFile, doReload)
-		rl.watchSignals()
-		rl.watchFile()
+		// doReload is the file-mode reload entry point: read the file, then
+		// share the compile/swap logic with registry mode via reloadFromBytes.
+		doReload := func() (string, error) {
+			raw, err := os.ReadFile(*configFile)
+			if err != nil {
+				return "", fmt.Errorf("read config: %w", err)
+			}
+			return reloadFromBytes(raw)
+		}
 
 		// Build an upstream health checker for the admin API
 		healthChecker := upstream.NewChecker(compiled.Upstreams, 10*time.Second)
+
+		// Mode-specific reload wiring. adminReloadFn and registryStatusFn are
+		// captured by admin.Deps below; admin.New copies Deps by value, so
+		// these must be finalized before it is constructed.
+		var adminReloadFn func() (string, error)
+		var registryStatusFn func() any
+
+		bgCtx, bgCancel := context.WithCancel(context.Background())
+		defer bgCancel()
+
+		if registryMode {
+			// Register registry metrics
+			metrics.RegisterRegistryMetrics()
+
+			poller := hotreload.NewPoller(regClient, *pollInterval, reloadFromBytes, metrics)
+
+			registryStatusFn = func() any {
+				s := poller.Status()
+				return map[string]any{
+					"mode":                  "registry",
+					"registry_url":          *registryURL,
+					"poll_interval_seconds": pollInterval.Seconds(),
+					"last_poll":             s.LastPollTime,
+					"last_success":          s.LastSuccessTime,
+					"etag":                  s.LastETag,
+					"composition_count":     s.CompositionCount,
+					"error":                 nilIfEmpty(s.LastError),
+					"error_type":            nilIfEmpty(s.ErrorType),
+					"consecutive_errors":    s.ConsecutiveErrors,
+				}
+			}
+
+			adminReloadFn = func() (string, error) {
+				poller.Trigger()
+				return swapper.Current().Hash, nil
+			}
+
+			go func() {
+				if err := poller.Run(bgCtx); err != nil && !errors.Is(err, context.Canceled) {
+					slog.Error("registry poller stopped unexpectedly", "error", err)
+				}
+			}()
+			go func() {
+				sigCh := make(chan os.Signal, 1)
+				signal.Notify(sigCh, syscall.SIGHUP)
+				defer signal.Stop(sigCh)
+				for {
+					select {
+					case <-bgCtx.Done():
+						return
+					case <-sigCh:
+						slog.Info("SIGHUP received, triggering registry poll")
+						poller.Trigger()
+					}
+				}
+			}()
+
+			slog.Info("registry polling mode enabled",
+				"url", *registryURL, "poll_interval", pollInterval.String())
+		} else {
+			rl := newReloader(*configFile, doReload)
+			rl.watchSignals()
+			rl.watchFile()
+			adminReloadFn = rl.reload
+		}
 
 		// Admin server
 		adminSrv := admin.New(admin.Config{
@@ -333,7 +469,7 @@ func runCmd(args []string) int {
 		}, admin.Deps{
 			Metrics:    metrics.Handler(),
 			Version:    version,
-			ConfigPath: *configFile,
+			ConfigPath: configPath,
 			ConfigHash: func() string { return swapper.Current().Hash },
 			Compositions: func() []admin.CompositionInfo {
 				return compositionsFromPipeline(swapper.Current())
@@ -351,7 +487,8 @@ func runCmd(args []string) int {
 				}
 				return nil
 			},
-			Reload: rl.reload,
+			Reload:         adminReloadFn,
+			RegistryStatus: registryStatusFn,
 		})
 		if err := adminSrv.Start(); err != nil {
 			slog.Error("admin server failed to start", "error", err)
@@ -419,6 +556,13 @@ func isFlagSet(fs *flag.FlagSet, name string) bool {
 		}
 	})
 	return found
+}
+
+func nilIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func applyMiddleware(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
