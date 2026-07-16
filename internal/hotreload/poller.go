@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	"github.com/restitch/restitch-gateway/internal/observability"
 )
 
@@ -27,6 +28,7 @@ type Poller struct {
 	triggerCh chan struct{}
 	status    atomic.Pointer[PollStatus]
 	metrics   *observability.Metrics
+	bo        *backoff.ExponentialBackOff
 }
 
 func NewPoller(
@@ -43,6 +45,12 @@ func NewPoller(
 		metrics:   metrics,
 	}
 	p.status.Store(&PollStatus{})
+
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = interval
+	bo.MaxInterval = 5 * time.Minute
+	p.bo = bo
+
 	return p
 }
 
@@ -74,7 +82,7 @@ func (p *Poller) Run(ctx context.Context) error {
 				"error", pollErr, "type", errType,
 				"consecutive", consecutiveErrors)
 
-			wait := backoffDuration(consecutiveErrors-1, p.interval, 5*time.Minute)
+			wait := p.bo.NextBackOff()
 			if !p.sleepOrTrigger(ctx, wait) {
 				return ctx.Err()
 			}
@@ -85,6 +93,7 @@ func (p *Poller) Run(ctx context.Context) error {
 		s.ConsecutiveErrors = 0
 		s.LastError = ""
 		s.ErrorType = ""
+		p.bo.Reset()
 
 		if result.NotModified {
 			s.LastSuccessTime = now
