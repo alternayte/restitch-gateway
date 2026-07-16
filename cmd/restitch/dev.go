@@ -40,7 +40,7 @@ func devCmd(args []string) int {
 		return 1
 	}
 
-	noColor := os.Getenv("NO_COLOR") != ""
+	_, noColor := os.LookupEnv("NO_COLOR")
 	banner := func(msg string) {
 		if noColor {
 			fmt.Println(msg)
