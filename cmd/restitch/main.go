@@ -24,9 +24,11 @@ func main() {
 		versionCmd()
 	case "import":
 		os.Exit(importCmd(os.Args[2:]))
+	case "dev":
+		os.Exit(devCmd(os.Args[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
-		fmt.Fprintf(os.Stderr, "usage: restitch [run|check|version|import] [flags]\n")
+		fmt.Fprintf(os.Stderr, "usage: restitch [run|check|version|import|dev] [flags]\n")
 		os.Exit(2)
 	}
 }
