@@ -249,3 +249,4 @@ Latest row per task ID wins. Never edit or delete existing rows.
 | 2026-07-16 | T22.4 | M22 | PASS | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#T22.4 | auto (h_finish) |
 | 2026-07-16 | M22.unit | M22 | PASS | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#M22.unit | auto (h_finish) |
 | 2026-07-16 | M22.gate | M22 | PENDING | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#M22.gate | auto (h_finish) |
+| 2026-07-17 | M22.gate | M22 | MANUAL-VERIFIED | 0e7c0150 | evidence/2026-07-16-M22-a0c9bd35.log#M22.gate | User confirmed colored output + Ctrl+C shutdown 2026-07-17 |
