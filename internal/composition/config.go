@@ -31,13 +31,24 @@ type Config struct {
 // Upstream represents a named backend service that steps can call.
 // Auth configuration is optional - if omitted, no authentication is applied.
 type Upstream struct {
-	URL              string         `yaml:"url"`
-	Auth             *auth.Config   `yaml:"auth"`
-	Timeout          time.Duration  `yaml:"timeout"`
-	HealthPath       string         `yaml:"health_path"`
-	MaxResponseBytes int64          `yaml:"max_response_bytes"`
-	Retry            *RetryConfig   `yaml:"retry"`
-	CircuitBreaker   *BreakerConfig `yaml:"circuit_breaker"`
+	URL              string           `yaml:"url"`
+	Auth             *auth.Config     `yaml:"auth"`
+	Timeout          time.Duration    `yaml:"timeout"`
+	HealthPath       string           `yaml:"health_path"`
+	MaxResponseBytes int64            `yaml:"max_response_bytes"`
+	Transport        *TransportConfig `yaml:"transport"`
+	Retry            *RetryConfig     `yaml:"retry"`
+	CircuitBreaker   *BreakerConfig   `yaml:"circuit_breaker"`
+}
+
+// TransportConfig configures the HTTP transport for an upstream. All fields are
+// optional; zero values fall through to the defaults in upstream.BuildTransport.
+type TransportConfig struct {
+	DialTimeout           time.Duration `yaml:"dial_timeout"`
+	TLSHandshakeTimeout   time.Duration `yaml:"tls_handshake_timeout"`
+	ResponseHeaderTimeout time.Duration `yaml:"response_header_timeout"`
+	MaxIdleConnsPerHost   int           `yaml:"max_idle_conns_per_host"`
+	InsecureSkipVerify    bool          `yaml:"insecure_skip_verify"`
 }
 
 // RetryConfig configures retry behavior for an upstream or step.

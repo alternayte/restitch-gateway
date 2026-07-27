@@ -95,6 +95,22 @@ type CompileOptions struct {
 	SkipAuthInit bool // skip OAuth2 initial token fetch (for check/validate)
 }
 
+// toUpstreamTransport converts the config-layer transport block into the
+// upstream package's TransportConfig. A nil block yields the zero value, which
+// upstream.BuildTransport fills in with its defaults.
+func toUpstreamTransport(tc *TransportConfig) upstream.TransportConfig {
+	if tc == nil {
+		return upstream.TransportConfig{}
+	}
+	return upstream.TransportConfig{
+		DialTimeout:           tc.DialTimeout,
+		TLSHandshakeTimeout:   tc.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: tc.ResponseHeaderTimeout,
+		MaxIdleConnsPerHost:   tc.MaxIdleConnsPerHost,
+		InsecureSkipVerify:    tc.InsecureSkipVerify,
+	}
+}
+
 // CompileConfig takes a parsed config and compiles all expressions and auth strategies.
 func CompileConfig(ctx context.Context, cfg *Config, opts ...CompileOptions) (*CompiledConfig, error) {
 	var opt CompileOptions
@@ -147,7 +163,7 @@ func CompileConfig(ctx context.Context, cfg *Config, opts ...CompileOptions) (*C
 			Timeout:          up.Timeout,
 			MaxResponseBytes: up.MaxResponseBytes,
 			HealthPath:       up.HealthPath,
-			Transport:        upstream.TransportConfig{},
+			Transport:        toUpstreamTransport(up.Transport),
 			Auth:             strategy,
 			Retry:            retryCfg,
 			Breaker:          breakerCfg,
