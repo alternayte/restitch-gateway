@@ -81,19 +81,28 @@ The log contains completed assertions for exactly two tasks:
 
 Both failed because the milestone was not yet implemented at `6e233404`.
 
-**Action:** commit the log, add one `INDEX.md` row, and append **two**
-retroactive rows to `LEDGER.md` — `T22.1 FAIL` and `T22.2 FAIL`. No rows for
-`T22.3`, `T22.4`, `M22.unit`, or `M22.gate`: those assertions never executed,
-and inventing rows for them would be fabricating evidence.
+**Action:** commit the log, add one `INDEX.md` row, and append retroactive rows
+to `LEDGER.md` for `T22.1` and `T22.2` only. No rows for `T22.3`, `T22.4`,
+`M22.unit`, or `M22.gate`: those assertions never executed, and inventing rows
+for them would be fabricating evidence.
 
-The rows land at the end of the ledger, after the `a0c9bd35` PASS rows. This is
-out of chronological order but preserves append-only, and latest-row-per-task
-still resolves both tasks to PASS. Notes column marks them retroactive.
+`scripts/check-ledger.sh:139` resolves "last row per task wins" by **file
+order**, not by date — it overwrites `LEDGER_STATUS[task]` as it reads
+sequentially. Appending the FAIL rows alone would therefore flip T22.1 and T22.2
+to FAIL and trip the `STALE-FAIL` check. The ledger header already prescribes
+the remedy: *"A failure is recorded as FAIL and later superseded by a PASS
+row."* Four rows are appended, in order:
 
 ```
-| 2026-07-16 | T22.1 | M22 | FAIL | 6e233404 | evidence/2026-07-16-M22-6e233404.log#T22.1 | retroactive: run interrupted before h_finish; superseded by a0c9bd35 PASS above |
-| 2026-07-16 | T22.2 | M22 | FAIL | 6e233404 | evidence/2026-07-16-M22-6e233404.log#T22.2 | retroactive: run interrupted before h_finish; superseded by a0c9bd35 PASS above |
+| 2026-07-16 | T22.1 | M22 | FAIL | 6e233404 | evidence/2026-07-16-M22-6e233404.log#T22.1 | retroactive: run interrupted before h_finish wrote rows |
+| 2026-07-16 | T22.2 | M22 | FAIL | 6e233404 | evidence/2026-07-16-M22-6e233404.log#T22.2 | retroactive: run interrupted before h_finish wrote rows |
+| 2026-07-16 | T22.1 | M22 | PASS | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#T22.1 | supersedes the retroactive 6e233404 FAIL above |
+| 2026-07-16 | T22.2 | M22 | PASS | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#T22.2 | supersedes the retroactive 6e233404 FAIL above |
 ```
+
+The two PASS rows restate evidence already recorded earlier in the ledger and
+already present in the `a0c9bd35` log. They are not new claims. Append-only is
+preserved throughout; nothing is reordered or deleted.
 
 ### T23.0 — Gate script (first task, requires approval)
 
