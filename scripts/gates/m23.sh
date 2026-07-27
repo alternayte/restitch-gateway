@@ -86,10 +86,14 @@ h_run "parser translates the transport block" -- \
 h_run "parser no longer hardcodes empty transport" -- \
     bash -c '! grep -qE "Transport:[[:space:]]+upstream\.TransportConfig\{\}" internal/composition/parser.go'
 h_run "transport_test.go exists" -- test -f internal/composition/transport_test.go
-# `go test -run PATTERN` exits 0 when the pattern matches nothing, so assert
-# that named tests actually ran and passed rather than trusting the exit code.
+# Two holes to close here:
+#   * `go test -run PATTERN` exits 0 when PATTERN matches nothing, so the exit
+#     code alone would pass vacuously with no tests written.
+#   * grepping only for a PASS line would pass even when a sibling
+#     TestTransport* case FAILs.
+# Require BOTH: at least one named test passed AND go test itself exited 0.
 h_run "transport parser tests pass" -- \
-    bash -c "go test -race -count=1 -run 'TestTransport' -v ./internal/composition/ 2>&1 | grep -cE '^--- PASS: TestTransport' | grep -qvE '^0$'"
+    bash -c "out=\$(go test -race -count=1 -run 'TestTransport' -v ./internal/composition/... 2>&1); code=\$?; echo \"\$out\"; echo \"\$out\" | grep -q '^--- PASS: TestTransport' && [ \"\$code\" -eq 0 ]"
 
 # ── Unit tests ───────────────────────────────────────────────────────
 
@@ -149,8 +153,25 @@ m23_write_config() {
     } > "${out}"
 }
 
+# Non-fatal port wait. h_wait_for_port calls h_finish (which exits) on timeout;
+# because m23_run_arm below runs inside a $(...) capture, that exit would kill
+# only the subshell — appending a stray ledger row mid-run and feeding a failure
+# message into `read` as if it were metrics. Return non-zero instead so the
+# caller can fail with the real reason.
+m23_wait_port() {
+    local port="$1" deadline=$((SECONDS + ${2:-15}))
+    while ! python3 -c "import socket; s=socket.socket(); s.settimeout(0.5); s.connect(('127.0.0.1', ${port})); s.close()" 2>/dev/null; do
+        if [[ ${SECONDS} -ge ${deadline} ]]; then
+            return 1
+        fi
+        sleep 0.2
+    done
+    return 0
+}
+
 # Run one arm of the A/B: start a gateway on the given config, reset the
-# mockupstream counters, run k6, and echo "<p95_ms> <error_rate> <conns>".
+# mockupstream counters, run k6, and echo "<p95_ms> <error_rate> <conns> <reqs>".
+# Returns non-zero (with a diagnostic on stdout) if the arm could not run.
 m23_run_arm() {
     local label="$1" config="$2"
     local port
@@ -163,9 +184,22 @@ m23_run_arm() {
         > "${H_TMP}/gw_${label}.log" 2>&1 &
     local gw_pid=$!
     H_PIDS+=("${gw_pid}")
-    h_wait_for_port "${port}" "gw_${label}" 15
 
-    curl -sf -X POST "http://127.0.0.1:${MOCK_PORT}/__stats/reset" > /dev/null 2>&1
+    if ! m23_wait_port "${port}" 15; then
+        echo "gateway for arm '${label}' did not listen on ${port} within 15s"
+        kill "${gw_pid}" 2>/dev/null || true
+        return 1
+    fi
+
+    # A silently-failed reset would carry the previous arm's connections into
+    # this one, so treat it as fatal to the arm rather than swallowing it.
+    if ! curl -sf -X POST "http://127.0.0.1:${MOCK_PORT}/__stats/reset" \
+            > "${H_TMP}/reset_${label}.json" 2>/dev/null; then
+        echo "POST /__stats/reset failed before arm '${label}'"
+        kill "${gw_pid}" 2>/dev/null || true
+        return 1
+    fi
+    h_evidence "$ curl -X POST /__stats/reset  (arm ${label}) -> $(cat "${H_TMP}/reset_${label}.json")"
 
     GW_URL="http://127.0.0.1:${port}" k6 run \
         --summary-export="${H_TMP}/k6_${label}.json" \
@@ -193,11 +227,26 @@ PY
 m23_write_config 2 "${H_TMP}/fanout_baseline.yaml"
 m23_write_config 100 "${H_TMP}/fanout_tuned.yaml"
 
+# Each arm is captured, so a failure inside it must be surfaced here with the
+# gateway log attached — otherwise `read` would parse the diagnostic text as
+# metrics and the real cause would show up as a Python ValueError.
+m23_arm_or_die() {
+    local label="$1" config="$2" out=""
+    if ! out="$(m23_run_arm "${label}" "${config}")"; then
+        h_evidence "arm '${label}' failed: ${out}"
+        h_evidence "--- tail of ${H_TMP}/gw_${label}.log ---"
+        h_evidence "$(tail -20 "${H_TMP}/gw_${label}.log" 2>/dev/null || echo '(no log)')"
+        h_fail "k6 ${label} arm could not run: ${out}"
+        h_finish
+    fi
+    echo "${out}"
+}
+
 h_log "Running k6 baseline arm (max_idle_conns_per_host: 2)..."
-read -r BASE_P95 BASE_ERR BASE_CONNS BASE_REQS <<< "$(m23_run_arm baseline "${H_TMP}/fanout_baseline.yaml")"
+read -r BASE_P95 BASE_ERR BASE_CONNS BASE_REQS <<< "$(m23_arm_or_die baseline "${H_TMP}/fanout_baseline.yaml")"
 
 h_log "Running k6 tuned arm (max_idle_conns_per_host: 100)..."
-read -r TUNED_P95 TUNED_ERR TUNED_CONNS TUNED_REQS <<< "$(m23_run_arm tuned "${H_TMP}/fanout_tuned.yaml")"
+read -r TUNED_P95 TUNED_ERR TUNED_CONNS TUNED_REQS <<< "$(m23_arm_or_die tuned "${H_TMP}/fanout_tuned.yaml")"
 
 h_evidence "baseline  max_idle=2    p95=${BASE_P95}ms  error_rate=${BASE_ERR}  conns_accepted=${BASE_CONNS}  http_reqs=${BASE_REQS}"
 h_evidence "tuned     max_idle=100  p95=${TUNED_P95}ms error_rate=${TUNED_ERR} conns_accepted=${TUNED_CONNS} http_reqs=${TUNED_REQS}"
