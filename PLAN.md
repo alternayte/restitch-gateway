@@ -31,6 +31,9 @@ implemented and verified against the codebase.
 | M17 — Rate Limiting & Validation | T17.1–T17.5 | DONE |
 | M18 — OpenTelemetry Tracing | T18.1–T18.5 | DONE |
 | M19 — CI & Test Hardening | T19.1–T19.5 | DONE |
+| M20 — Config Registry & Centralized Management | T20.1–T20.6 | DONE |
+| M21 — Gateway Registry Polling | T21.1–T21.5 | DONE |
+| M22 — Dev Mode Orchestrator | T22.1–T22.5 | DONE |
 | M23 — Upstream HTTP Client Optimization | T23.1–T23.3 | DONE |
 
 Known drift from plan (see Addendum A1): Pipeline not moved to
