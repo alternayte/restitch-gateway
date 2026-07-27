@@ -124,7 +124,7 @@ func probeUpstream(ctx context.Context, up *Upstream) HealthStatus {
 			Error:     err.Error(),
 		}
 	}
-	defer resp.Body.Close()
+	defer DrainAndClose(resp.Body)
 
 	status := "healthy"
 	var errMsg string

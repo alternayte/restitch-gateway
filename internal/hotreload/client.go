@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/restitch/restitch-gateway/internal/upstream"
 )
 
 type FetchResult struct {
@@ -58,7 +60,7 @@ func (c *RegistryClient) Fetch(ctx context.Context, lastETag string) (*FetchResu
 	if err != nil {
 		return nil, fmt.Errorf("fetch bundle: %w", err)
 	}
-	defer resp.Body.Close()
+	defer upstream.DrainAndClose(resp.Body)
 
 	if resp.StatusCode == http.StatusNotModified {
 		return &FetchResult{

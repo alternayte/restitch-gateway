@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
+	"github.com/restitch/restitch-gateway/internal/upstream"
 )
 
 const (
@@ -76,7 +77,7 @@ func WaitForHealth(ctx context.Context, url string, timeout time.Duration) error
 		if err != nil {
 			return struct{}{}, err
 		}
-		defer resp.Body.Close()
+		defer upstream.DrainAndClose(resp.Body)
 		if resp.StatusCode != http.StatusOK {
 			return struct{}{}, fmt.Errorf("health check returned %d", resp.StatusCode)
 		}
