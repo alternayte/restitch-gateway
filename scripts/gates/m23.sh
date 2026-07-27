@@ -120,17 +120,18 @@ h_evidence "$ curl /__stats (probe)"
 h_evidence "$(cat "${H_TMP}/stats_probe.json")"
 h_pass "mockupstream /__stats endpoint available"
 
-# Generate a five-upstream fan-out config at a given max_idle_conns_per_host.
-# All five point at the same mockupstream process; upstream.Build gives each its
-# own *http.Transport, so there are five independent connection pools.
+# Generate a five-upstream fan-out config at a given max_idle_conns_per_host,
+# pointed at a given mockupstream port. All five point at the same mockupstream
+# process; upstream.Build gives each its own *http.Transport, so there are five
+# independent connection pools.
 m23_write_config() {
-    local max_idle="$1" out="$2"
+    local max_idle="$1" mock_port="$2" out="$3"
     {
         echo "upstreams:"
         local i
         for i in 1 2 3 4 5; do
             echo "  up${i}:"
-            echo "    url: \"http://127.0.0.1:${MOCK_PORT}\""
+            echo "    url: \"http://127.0.0.1:${mock_port}\""
             echo "    timeout: 10s"
             echo "    transport:"
             echo "      max_idle_conns_per_host: ${max_idle}"
@@ -169,70 +170,111 @@ m23_wait_port() {
     return 0
 }
 
-# Run one arm of the A/B: start a gateway on the given config, reset the
-# mockupstream counters, run k6, and echo "<p95_ms> <error_rate> <conns> <reqs>".
+# Fetch /__stats with retries. Under the baseline arm's connection churn a
+# single curl can lose the race for a loopback ephemeral port; the previous
+# version swallowed that and emitted conns_accepted=-1, which is a fabricated
+# measurement. Fail the arm instead of inventing a number.
+m23_fetch_stats() {
+    local mock_port="$1" attempt
+    for attempt in 1 2 3; do
+        if curl -sf --max-time 10 "http://127.0.0.1:${mock_port}/__stats" 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+# Run one arm of the A/B and echo "<p95_ms> <error_rate> <conns> <reqs>".
 # Returns non-zero (with a diagnostic on stdout) if the arm could not run.
+#
+# Each arm gets its OWN mockupstream and gateway on their own ports. Sharing one
+# mockupstream made the arms interfere: the baseline arm's churn exhausted
+# loopback ephemeral ports, so the tuned arm that followed measured ~9.8% errors
+# and half the throughput it achieves in isolation (0% errors, 132k requests).
+# That is contamination, not a property of the code under test.
 m23_run_arm() {
-    local label="$1" config="$2"
-    local port
-    port="$(h_free_port)"
+    local label="$1" max_idle="$2"
+    local mock_port gw_port config
+    mock_port="$(h_free_port)"
+    gw_port="$(h_free_port)"
+    config="${H_TMP}/fanout_${label}.yaml"
+
+    "${REPO_ROOT}/bin/mockupstream" -port "${mock_port}" \
+        > "${H_TMP}/mock_${label}.log" 2>&1 &
+    local mock_pid=$!
+    H_PIDS+=("${mock_pid}")
+    if ! m23_wait_port "${mock_port}" 15; then
+        echo "mockupstream for arm '${label}' did not listen on ${mock_port} within 15s"
+        kill "${mock_pid}" 2>/dev/null || true
+        return 1
+    fi
+
+    m23_write_config "${max_idle}" "${mock_port}" "${config}"
 
     "${REPO_ROOT}/bin/restitch" run \
         -config "${config}" \
-        -port "${port}" \
+        -port "${gw_port}" \
         -log-format json \
         > "${H_TMP}/gw_${label}.log" 2>&1 &
     local gw_pid=$!
     H_PIDS+=("${gw_pid}")
 
-    if ! m23_wait_port "${port}" 15; then
-        echo "gateway for arm '${label}' did not listen on ${port} within 15s"
-        kill "${gw_pid}" 2>/dev/null || true
+    if ! m23_wait_port "${gw_port}" 15; then
+        echo "gateway for arm '${label}' did not listen on ${gw_port} within 15s"
+        kill "${gw_pid}" "${mock_pid}" 2>/dev/null || true
         return 1
     fi
 
-    # A silently-failed reset would carry the previous arm's connections into
-    # this one, so treat it as fatal to the arm rather than swallowing it.
-    if ! curl -sf -X POST "http://127.0.0.1:${MOCK_PORT}/__stats/reset" \
+    # This mockupstream is fresh, so its counters start at zero; the reset only
+    # discards the connections our own readiness probes opened.
+    if ! curl -sf --max-time 10 -X POST "http://127.0.0.1:${mock_port}/__stats/reset" \
             > "${H_TMP}/reset_${label}.json" 2>/dev/null; then
         echo "POST /__stats/reset failed before arm '${label}'"
-        kill "${gw_pid}" 2>/dev/null || true
+        kill "${gw_pid}" "${mock_pid}" 2>/dev/null || true
         return 1
     fi
     h_evidence "$ curl -X POST /__stats/reset  (arm ${label}) -> $(cat "${H_TMP}/reset_${label}.json")"
 
-    GW_URL="http://127.0.0.1:${port}" k6 run \
+    GW_URL="http://127.0.0.1:${gw_port}" k6 run \
         --summary-export="${H_TMP}/k6_${label}.json" \
         "${REPO_ROOT}/tests/loadtest/m23_fanout.js" \
         >> "${H_TMP}/k6_${label}.log" 2>&1 || true
 
     local stats
-    stats="$(curl -sf "http://127.0.0.1:${MOCK_PORT}/__stats" 2>/dev/null || echo '{}')"
+    if ! stats="$(m23_fetch_stats "${mock_port}")"; then
+        echo "GET /__stats failed after arm '${label}' (3 attempts) — refusing to report a placeholder count"
+        kill "${gw_pid}" "${mock_pid}" 2>/dev/null || true
+        return 1
+    fi
+    h_evidence "$ curl /__stats  (arm ${label}) -> ${stats}"
 
-    kill "${gw_pid}" 2>/dev/null || true
+    kill "${gw_pid}" "${mock_pid}" 2>/dev/null || true
     wait "${gw_pid}" 2>/dev/null || true
+    wait "${mock_pid}" 2>/dev/null || true
 
     python3 - "${H_TMP}/k6_${label}.json" "${stats}" <<'PY'
 import json, sys
 with open(sys.argv[1]) as fh:
     m = json.load(fh)["metrics"]
 stats = json.loads(sys.argv[2] or "{}")
+if "conns_accepted" not in stats:
+    sys.exit("stats payload missing conns_accepted: %r" % (stats,))
 p95 = m["http_req_duration"]["p(95)"]          # milliseconds
 err = m["http_req_failed"]["value"]            # rate, 0.0-1.0
 reqs = m["http_reqs"]["count"]
-print(f'{p95:.3f} {err:.6f} {stats.get("conns_accepted", -1)} {reqs}')
+print(f'{p95:.3f} {err:.6f} {stats["conns_accepted"]} {reqs}')
 PY
 }
-
-m23_write_config 2 "${H_TMP}/fanout_baseline.yaml"
-m23_write_config 100 "${H_TMP}/fanout_tuned.yaml"
 
 # Each arm is captured, so a failure inside it must be surfaced here with the
 # gateway log attached — otherwise `read` would parse the diagnostic text as
 # metrics and the real cause would show up as a Python ValueError.
+M23_COOLDOWN_SECS="${M23_COOLDOWN_SECS:-15}"
+
 m23_arm_or_die() {
-    local label="$1" config="$2" out=""
-    if ! out="$(m23_run_arm "${label}" "${config}")"; then
+    local label="$1" max_idle="$2" out=""
+    if ! out="$(m23_run_arm "${label}" "${max_idle}")"; then
         h_evidence "arm '${label}' failed: ${out}"
         h_evidence "--- tail of ${H_TMP}/gw_${label}.log ---"
         h_evidence "$(tail -20 "${H_TMP}/gw_${label}.log" 2>/dev/null || echo '(no log)')"
@@ -243,10 +285,16 @@ m23_arm_or_die() {
 }
 
 h_log "Running k6 baseline arm (max_idle_conns_per_host: 2)..."
-read -r BASE_P95 BASE_ERR BASE_CONNS BASE_REQS <<< "$(m23_arm_or_die baseline "${H_TMP}/fanout_baseline.yaml")"
+read -r BASE_P95 BASE_ERR BASE_CONNS BASE_REQS <<< "$(m23_arm_or_die baseline 2)"
+
+# The baseline arm leaves tens of thousands of loopback sockets in TIME_WAIT.
+# Without this pause the tuned arm competes for ephemeral ports and reports
+# errors that belong to the harness, not to the gateway.
+h_log "Cooling down ${M23_COOLDOWN_SECS}s so loopback TIME_WAIT sockets drain..."
+sleep "${M23_COOLDOWN_SECS}"
 
 h_log "Running k6 tuned arm (max_idle_conns_per_host: 100)..."
-read -r TUNED_P95 TUNED_ERR TUNED_CONNS TUNED_REQS <<< "$(m23_arm_or_die tuned "${H_TMP}/fanout_tuned.yaml")"
+read -r TUNED_P95 TUNED_ERR TUNED_CONNS TUNED_REQS <<< "$(m23_arm_or_die tuned 100)"
 
 h_evidence "baseline  max_idle=2    p95=${BASE_P95}ms  error_rate=${BASE_ERR}  conns_accepted=${BASE_CONNS}  http_reqs=${BASE_REQS}"
 h_evidence "tuned     max_idle=100  p95=${TUNED_P95}ms error_rate=${TUNED_ERR} conns_accepted=${TUNED_CONNS} http_reqs=${TUNED_REQS}"
