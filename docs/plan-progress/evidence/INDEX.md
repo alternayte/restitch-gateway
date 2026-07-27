@@ -60,3 +60,4 @@ Chronological index of gate verification runs.
 | 2026-07-27 | M23 | f155cd30 | FAIL | 2026-07-27-M23-f155cd30.log |
 | 2026-07-27 | M23 | 8c790a4c | FAIL | 2026-07-27-M23-8c790a4c.log |
 | 2026-07-27 | M23 | cce97951 | PASS | 2026-07-27-M23-cce97951.log |
+| 2026-07-27 | M23 | 251ec993 | PASS | 2026-07-27-M23-251ec993.log |
