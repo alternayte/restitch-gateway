@@ -19,7 +19,7 @@
 - After every task: run its Accept command, paste the **real output** into the commit message, and append one `LEDGER.md` row.
 - Commit prefixes: `feat(M24):`, `test:`, `docs:`, `chore:`. The gate script commit **must** start with `gate:` and requires explicit user approval first.
 - PLAN.md's M24 section has no `Accept:` lines (verified — the milestone is a bare task table, PLAN.md:2325-2345). Accept commands below are derived from the approved spec and encoded in `scripts/gates/m24.sh`. This matches the M23 precedent.
-- **Ledger IDs for M24 are exactly:** `T24.1`, `T24.2`, `T24.3`, `T24.4`, `M24.unit`, `M24.gate`. `h_finish` writes one row per `h_task` name, so **no `h_task` may use any other ID.** T24.0/T24.3a/T24.3b in this plan are execution-order subdivisions only and must never appear as `h_task` names.
+- **Ledger IDs for M24 are exactly these six:** `T24.1`, `T24.2`, `T24.3`, `T24.4`, `M24.unit`, `M24.gate`. `h_finish` writes one row per `h_task` **call**, so **no `h_task` may use any other ID.** `M24.gate` is deliberately called twice (preflight and closing roll-up), producing 7 rows across those 6 IDs; `check-ledger.sh` takes the latest row per ID. T24.0/T24.3a/T24.3b in this plan are execution-order subdivisions only and must never appear as `h_task` names.
 - `PROMETHEUS_VERSION` has one source of truth: `deploy/.env.example`. Both `deploy/docker-compose.yml` and `scripts/gates/m24.sh` read it from there. Never hardcode a second copy; never fall back to `latest`.
 - Docker is **hard-required** by the gate. There is no skip path — a missing daemon is a `h_fail`, not a `h_skip`.
 
@@ -133,7 +133,11 @@ Expected: M16, M17, M18, M19, M20, M21, M22, M23 — contiguous, all DONE.
 
 Run: `scripts/check-ledger.sh; echo "EXIT=$?"`
 
-Expected: `COVERAGE: 100/100 green` and `EXIT=0`.
+Expected: `COVERAGE: 100/100 green` and `EXIT=1`.
+
+**`EXIT=1` is correct here, not a failure.** `check-ledger.sh` exits non-zero because of 9 **pre-existing** UNKNOWN-IDs — `M20.unit`, `M21.unit`, `M22.unit`, `M23.unit`, and `final.{tests,build,static,ci,smoke}` — which are gate pseudo-IDs rather than PLAN.md tasks. This was surfaced to the user and accepted during M23. What matters is `COVERAGE: 100/100 green` and that the UNKNOWN-IDS list contains **only** those 9. If a *new* ID appears, or coverage drops below 100, stop.
+
+Do not pipe this command to `tail`/`head` when reading the exit code — `$?` would report the pager's status, not `check-ledger.sh`'s.
 
 - [ ] **Step 6: Commit**
 
@@ -521,6 +525,19 @@ h_task M24.unit
 
 h_run "promtool test rules (all suites)" -- \
     m24_promtool test rules /p/rules/recording_test.yml /p/rules/alerts_test.yml
+
+# ── M24.gate roll-up ─────────────────────────────────────────────────────────
+# h_finish writes one ledger row per h_task name, and the preflight block above
+# also used the M24.gate ID. Without this closing roll-up the M24.gate row would
+# record the PREFLIGHT result only — a PASS even when T24.1-T24.4 failed, i.e. a
+# false PASS sitting in the ledger next to a FAIL RESULT line. Re-opening the
+# task here makes its row reflect the whole run. (M23's gate did the same.)
+h_task M24.gate
+if [[ ${H_FAIL_COUNT} -eq 0 ]]; then
+    h_pass "M24 gate: all phases passed"
+else
+    h_fail "M24 gate: ${H_FAIL_COUNT} assertion(s) failed across the run"
+fi
 
 h_finish
 ```
@@ -1707,13 +1724,19 @@ Expected: a file dated today, ending in `RESULT M24: PASS (…)`.
 
 Run: `grep "| M24 |" docs/plan-progress/LEDGER.md | tail -8`
 
-Expected: rows for exactly `T24.1`, `T24.2`, `T24.3`, `T24.4`, `M24.unit`, `M24.gate` — all `PASS`. Any other task ID means an `h_task` name violates the Global Constraints; fix the gate (a `gate:` commit, with user approval) rather than editing the ledger.
+Expected: **7 rows across 6 unique IDs**, all `PASS` — `M24.gate` (preflight), `T24.1`, `T24.2`, `T24.3`, `T24.4`, `M24.unit`, `M24.gate` (roll-up).
+
+The two `M24.gate` rows are intentional: the ID is opened at preflight and re-opened for the closing roll-up so its final row reflects the whole run rather than just the preflight checks. `check-ledger.sh` takes the latest row per ID, so this resolves correctly. M23's gate had the same shape.
+
+Any ID *other* than those six means an `h_task` name violates the Global Constraints; fix the gate (a `gate:` commit, with user approval) rather than editing the ledger.
 
 - [ ] **Step 4: Run the ledger check**
 
 Run: `scripts/check-ledger.sh; echo "EXIT=$?"`
 
-Expected: `EXIT=0`. `M24.unit` will be listed under UNKNOWN-IDS alongside `M20.unit`–`M23.unit` — that is expected and not a regression, because `M24.unit` is a gate pseudo-ID rather than a PLAN.md task.
+Expected: `COVERAGE: 100/100 green` and `EXIT=1`, with the UNKNOWN-IDS list now containing **10** entries — the 9 pre-existing ones plus `M24.unit`.
+
+`EXIT=1` is the accepted steady state on this branch (see Task 0 Step 5): those IDs are gate pseudo-IDs, not PLAN.md tasks. Per CLAUDE.md rule 7 the requirement is that the check lists only such non-task IDs, which it does. Stop only if coverage drops below 100 or an ID appears that is neither pre-existing nor `M24.unit`.
 
 - [ ] **Step 5: Mark M24 DONE in the PLAN.md status table**
 
