@@ -250,3 +250,7 @@ Latest row per task ID wins. Never edit or delete existing rows.
 | 2026-07-16 | M22.unit | M22 | PASS | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#M22.unit | auto (h_finish) |
 | 2026-07-16 | M22.gate | M22 | PENDING | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#M22.gate | auto (h_finish) |
 | 2026-07-17 | M22.gate | M22 | MANUAL-VERIFIED | 0e7c0150 | evidence/2026-07-16-M22-a0c9bd35.log#M22.gate | User confirmed colored output + Ctrl+C shutdown 2026-07-17 |
+| 2026-07-16 | T22.1 | M22 | FAIL | 6e233404 | evidence/2026-07-16-M22-6e233404.log#T22.1 | retroactive: run interrupted before h_finish wrote rows |
+| 2026-07-16 | T22.2 | M22 | FAIL | 6e233404 | evidence/2026-07-16-M22-6e233404.log#T22.2 | retroactive: run interrupted before h_finish wrote rows |
+| 2026-07-16 | T22.1 | M22 | PASS | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#T22.1 | supersedes the retroactive 6e233404 FAIL above |
+| 2026-07-16 | T22.2 | M22 | PASS | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#T22.2 | supersedes the retroactive 6e233404 FAIL above |

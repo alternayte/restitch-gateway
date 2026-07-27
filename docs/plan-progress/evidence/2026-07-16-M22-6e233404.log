@@ -1,0 +1,45 @@
+=== GATE M22 (commit 6e233404, 2026-07-16) ===
+
+
+##[T22.1]
+$ test -f internal/devmode/writer.go
+
+exit_code=1
+FAIL writer.go exists
+$ test -f internal/devmode/writer_test.go
+
+exit_code=1
+FAIL writer_test.go exists
+$ grep -q type PrefixWriter struct internal/devmode/writer.go
+grep: internal/devmode/writer.go: No such file or directory
+exit_code=2
+FAIL PrefixWriter defined
+$ grep -q func WaitForHealth internal/devmode/writer.go
+grep: internal/devmode/writer.go: No such file or directory
+exit_code=2
+FAIL WaitForHealth defined
+$ grep -q NO_COLOR internal/devmode/writer.go
+grep: internal/devmode/writer.go: No such file or directory
+exit_code=2
+FAIL NO_COLOR support
+
+##[T22.2]
+$ test -f internal/devmode/manager.go
+
+exit_code=1
+FAIL manager.go exists
+$ test -f internal/devmode/manager_test.go
+
+exit_code=1
+FAIL manager_test.go exists
+$ grep -q type ProcessConfig struct internal/devmode/manager.go
+grep: internal/devmode/manager.go: No such file or directory
+exit_code=2
+FAIL ProcessConfig defined
+$ grep -q type ProcessManager struct internal/devmode/manager.go
+grep: internal/devmode/manager.go: No such file or directory
+exit_code=2
+FAIL ProcessManager defined
+$ grep -q cenkalti/backoff internal/devmode/manager.go
+grep: internal/devmode/manager.go: No such file or directory
+exit_code=2
