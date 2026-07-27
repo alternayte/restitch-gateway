@@ -86,6 +86,14 @@ h_run "parser translates the transport block" -- \
 h_run "parser no longer hardcodes empty transport" -- \
     bash -c '! grep -qE "Transport:[[:space:]]+upstream\.TransportConfig\{\}" internal/composition/parser.go'
 h_run "transport_test.go exists" -- test -f internal/composition/transport_test.go
+# m23.pool — the loop-closer the design spec called for. Every other T23.3 check
+# is a grep or a unit test that calls toUpstreamTransport/BuildTransport
+# directly, so all of them still pass if the parser is made to discard
+# up.Transport again (proven by mutation in final review). This one goes through
+# the real ParseConfig -> CompileConfig path and asserts the value lands on the
+# compiled upstream's live *http.Transport.
+h_run "m23.pool YAML transport reaches the live http.Transport" -- \
+    bash -c "out=\$(go test -race -count=1 -run 'TestTransportEndToEndThroughCompileConfig' -v ./internal/composition/... 2>&1); code=\$?; echo \"\$out\"; echo \"\$out\" | grep -q '^--- PASS: TestTransportEndToEndThroughCompileConfig' && [ \"\$code\" -eq 0 ]"
 # Two holes to close here:
 #   * `go test -run PATTERN` exits 0 when PATTERN matches nothing, so the exit
 #     code alone would pass vacuously with no tests written.
@@ -299,9 +307,23 @@ read -r TUNED_P95 TUNED_ERR TUNED_CONNS TUNED_REQS <<< "$(m23_arm_or_die tuned 1
 h_evidence "baseline  max_idle=2    p95=${BASE_P95}ms  error_rate=${BASE_ERR}  conns_accepted=${BASE_CONNS}  http_reqs=${BASE_REQS}"
 h_evidence "tuned     max_idle=100  p95=${TUNED_P95}ms error_rate=${TUNED_ERR} conns_accepted=${TUNED_CONNS} http_reqs=${TUNED_REQS}"
 
-h_run "tuned run accepted fewer upstream connections than baseline" -- \
-    python3 -c "import sys; b=int(sys.argv[1]); t=int(sys.argv[2]); assert b>0 and t>0, f'no connections recorded: baseline={b} tuned={t}'; assert t<b, f'tuned={t} not < baseline={b}'" \
+# A bare `t < b` is not enough. If the transport: block were silently ignored
+# again, BOTH arms would run at BuildTransport's default of 100 and this would
+# compare two runs of the same configuration — observed run-to-run spread for an
+# identical tuned config is 248 vs 251, so a strict inequality would pass about
+# half the time. Require a magnitude gap instead. Measured ratio is 16212:251,
+# roughly 64x, so a 10x floor has ample headroom while failing closed on a
+# regression.
+h_run "tuned run accepted >=10x fewer upstream connections than baseline" -- \
+    python3 -c "import sys; b=int(sys.argv[1]); t=int(sys.argv[2]); assert b>0 and t>0, f'no connections recorded: baseline={b} tuned={t}'; assert b >= 10*t, f'baseline={b} is not >= 10x tuned={t} (ratio {b/t:.1f}x) — pooling not in effect'" \
     "${BASE_CONNS}" "${TUNED_CONNS}"
+
+# Connections per upstream request is the load-independent form of the same
+# claim: the arms are not iso-load (the baseline saturates), so record the rate
+# alongside the absolute counts.
+h_run "tuned connection reuse ratio beats baseline by >=10x" -- \
+    python3 -c "import sys; bc,br,tc,tr=(int(x) for x in sys.argv[1:5]); b=bc/max(br,1); t=tc/max(tr,1); assert b >= 10*t, f'baseline {b:.4f} conns/req not >= 10x tuned {t:.6f} conns/req'" \
+    "${BASE_CONNS}" "${BASE_REQS}" "${TUNED_CONNS}" "${TUNED_REQS}"
 
 h_run "tuned P95 < 50ms" -- \
     python3 -c "import sys; p=float(sys.argv[1]); assert p<50.0, f'p95={p}ms'" "${TUNED_P95}"
