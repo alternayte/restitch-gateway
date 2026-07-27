@@ -28,6 +28,13 @@ type Upstream struct {
 	MaxResponseBytes int64
 	Timeout          time.Duration
 	HealthPath       string
+	// BaseTransport is the innermost *http.Transport built by BuildTransport,
+	// exposed for introspection and testing. Client.Transport wraps it in a
+	// metrics -> retry -> breaker -> auth -> transport RoundTripper chain that
+	// cannot be unwrapped from outside this package, so this field is the only
+	// way callers (including tests) can observe the settings that were
+	// actually applied to the base transport.
+	BaseTransport *http.Transport
 }
 
 // BuildTransport returns a hardened *http.Transport with sensible defaults.
@@ -47,6 +54,11 @@ func BuildTransport(tc TransportConfig) *http.Transport {
 		maxIdleConnsPerHost = 100
 	}
 
+	responseHeaderTimeout := tc.ResponseHeaderTimeout
+	if responseHeaderTimeout == 0 {
+		responseHeaderTimeout = 10 * time.Second
+	}
+
 	return &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -58,7 +70,7 @@ func BuildTransport(tc TransportConfig) *http.Transport {
 		MaxIdleConnsPerHost:   maxIdleConnsPerHost,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   tlsHandshakeTimeout,
-		ResponseHeaderTimeout: tc.ResponseHeaderTimeout,
+		ResponseHeaderTimeout: responseHeaderTimeout,
 		TLSClientConfig: &tls.Config{
 			MinVersion:         tls.VersionTLS12,
 			InsecureSkipVerify: tc.InsecureSkipVerify,
@@ -110,5 +122,6 @@ func Build(cfg BuildConfig) *Upstream {
 		MaxResponseBytes: cfg.MaxResponseBytes,
 		Timeout:          cfg.Timeout,
 		HealthPath:       cfg.HealthPath,
+		BaseTransport:    transport,
 	}
 }

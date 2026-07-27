@@ -2,6 +2,7 @@ package upstream
 
 import (
 	"testing"
+	"time"
 )
 
 func TestBuildTransport_Defaults(t *testing.T) {
@@ -40,5 +41,24 @@ func TestBuildTransport_CustomValues(t *testing.T) {
 
 	if !tr.TLSClientConfig.InsecureSkipVerify {
 		t.Error("expected InsecureSkipVerify = true")
+	}
+}
+
+// docs/configuration.md documents response_header_timeout as defaulting to
+// "10s". Before this default existed, a zero-value TransportConfig produced
+// an *http.Transport with NO response-header timeout at all.
+func TestBuildTransport_ResponseHeaderTimeoutDefault(t *testing.T) {
+	tr := BuildTransport(TransportConfig{})
+
+	if tr.ResponseHeaderTimeout != 10*time.Second {
+		t.Errorf("ResponseHeaderTimeout = %v, want 10s default", tr.ResponseHeaderTimeout)
+	}
+}
+
+func TestBuildTransport_ResponseHeaderTimeoutOverride(t *testing.T) {
+	tr := BuildTransport(TransportConfig{ResponseHeaderTimeout: 2 * time.Second})
+
+	if tr.ResponseHeaderTimeout != 2*time.Second {
+		t.Errorf("ResponseHeaderTimeout = %v, want 2s override", tr.ResponseHeaderTimeout)
 	}
 }
