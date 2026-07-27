@@ -36,6 +36,28 @@ h_run "findStudioBinary function" -- grep -q 'func findStudioBinary' cmd/restitc
 h_run "dev case in main.go" -- grep -q '"dev"' cmd/restitch/main.go
 h_run "usage updated" -- grep -q 'dev' cmd/restitch/main.go
 
+# ── T22.5: child-process arg passthrough ────────────────────────────
+h_task T22.5
+h_run "--gateway-args flag defined" -- grep -q '"gateway-args"' cmd/restitch/dev.go
+h_run "--studio-args flag defined" -- grep -q '"studio-args"' cmd/restitch/dev.go
+# The unit tests below exercise pure functions, so they cannot prove runDev
+# actually calls them. These two greps are the wiring proof.
+h_run "buildGatewayArgs wired into ProcessConfig" -- \
+  grep -q 'Args:.*buildGatewayArgs(' cmd/restitch/dev.go
+h_run "buildStudioArgs wired into ProcessConfig" -- \
+  grep -q 'Args:.*buildStudioArgs(' cmd/restitch/dev.go
+# Behavioural proof, not presence: these tests assert the FULL arg slice
+# including order, so a builder that prepends instead of appends fails here.
+# The -v output is checked for both PASS lines because `go test -run` with a
+# pattern matching nothing exits 0 — the vacuity hole M23 hit.
+h_run "arg-builder tests pass (non-vacuously)" -- bash -c '
+  out="$(go test -count=1 -v -run "TestBuildGatewayArgs|TestBuildStudioArgs" ./cmd/restitch/ 2>&1)"
+  echo "$out"
+  echo "$out" | grep -q -- "--- PASS: TestBuildGatewayArgs" || exit 1
+  echo "$out" | grep -q -- "--- PASS: TestBuildStudioArgs" || exit 1
+  ! echo "$out" | grep -q -- "--- FAIL"
+'
+
 # ── Unit tests ──────────────────────────────────────────────────────
 h_task M22.unit
 h_run "go vet" -- go vet ./...
