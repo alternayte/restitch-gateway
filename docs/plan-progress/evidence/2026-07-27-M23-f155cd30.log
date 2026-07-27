@@ -1,0 +1,160 @@
+=== GATE M23 (commit f155cd30, 2026-07-27) ===
+
+
+##[M23.gate]
+$ k6 version
+k6 v2.1.0 (commit/devel, go1.26.4, darwin/arm64)
+PASS k6 available (hard requirement)
+
+##[T23.1]
+$ grep -q func BuildTransport internal/upstream/client.go
+
+exit_code=0
+PASS BuildTransport defined
+$ grep -q maxIdleConnsPerHost = 100 internal/upstream/client.go
+
+exit_code=0
+PASS MaxIdleConnsPerHost defaults to 100
+$ grep -q MinVersion:         tls.VersionTLS12 internal/upstream/client.go
+
+exit_code=0
+PASS TLS 1.2 minimum enforced
+$ go test -race -count=1 -run TestBuildTransport ./internal/upstream/...
+ok  	github.com/restitch/restitch-gateway/internal/upstream	1.464s
+exit_code=0
+PASS transport defaults covered by tests
+
+##[T23.2]
+$ grep -q func DrainAndClose internal/upstream/drain.go
+
+exit_code=0
+PASS DrainAndClose defined
+$ grep -q DrainAndClose(resp.Body) internal/composition/step.go
+
+exit_code=0
+PASS composition step drains
+$ grep -q DrainAndClose(resp.Body) internal/upstream/health.go
+
+exit_code=1
+FAIL health check drains
+$ grep -q DrainAndClose(resp.Body) internal/hotreload/client.go
+
+exit_code=1
+FAIL hotreload client drains
+$ grep -q DrainAndClose(resp.Body) internal/devmode/writer.go
+
+exit_code=1
+FAIL devmode writer drains
+$ grep -rn 'defer resp.Body.Close()' internal/upstream internal/hotreload internal/devmode internal/composition
+/Users/nathananderson-tennant/Development/restitch/internal/upstream/health.go:127:	defer resp.Body.Close()
+internal/hotreload/client.go:61:	defer resp.Body.Close()
+internal/devmode/writer.go:79:		defer resp.Body.Close()
+count=3
+FAIL no bare resp.Body.Close() on upstream response paths (got 3 matches)
+
+##[T23.3]
+$ grep -q type TransportConfig struct internal/composition/config.go
+
+exit_code=0
+PASS TransportConfig type in config.go
+$ grep -q Transport .*\`yaml:"transport"\` internal/composition/config.go
+
+exit_code=0
+PASS Upstream.Transport field bound to yaml
+$ grep -q yaml:"max_idle_conns_per_host" internal/composition/config.go
+
+exit_code=0
+PASS max_idle_conns_per_host yaml tag
+$ grep -q yaml:"insecure_skip_verify" internal/composition/config.go
+
+exit_code=0
+PASS insecure_skip_verify yaml tag
+$ grep -q toUpstreamTransport(up.Transport) internal/composition/parser.go
+
+exit_code=0
+PASS parser translates the transport block
+$ bash -c ! grep -qE "Transport:[[:space:]]+upstream\.TransportConfig\{\}" internal/composition/parser.go
+
+exit_code=0
+PASS parser no longer hardcodes empty transport
+$ test -f internal/composition/transport_test.go
+
+exit_code=0
+PASS transport_test.go exists
+$ bash -c go test -race -count=1 -run 'TestTransport' -v ./internal/composition/ 2>&1 | grep -cE '^--- PASS: TestTransport' | grep -qvE '^0$'
+
+exit_code=0
+PASS transport parser tests pass
+
+##[M23.unit]
+$ go vet ./internal/upstream/...
+
+exit_code=0
+PASS go vet upstream
+$ go vet ./internal/composition/...
+
+exit_code=0
+PASS go vet composition
+$ go test -race -count=1 ./internal/upstream/...
+ok  	github.com/restitch/restitch-gateway/internal/upstream	1.402s
+exit_code=0
+PASS go test upstream
+$ go test -race -count=1 ./internal/composition/...
+ok  	github.com/restitch/restitch-gateway/internal/composition	1.588s
+exit_code=0
+PASS go test composition
+$ go test -race -count=1 ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	2.448s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	1.824s
+ok  	github.com/restitch/restitch-gateway/internal/admin	2.840s
+ok  	github.com/restitch/restitch-gateway/internal/auth	4.935s
+ok  	github.com/restitch/restitch-gateway/internal/composition	3.334s
+ok  	github.com/restitch/restitch-gateway/internal/devmode	6.295s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	3.549s
+ok  	github.com/restitch/restitch-gateway/internal/hotreload	7.808s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	2.850s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	2.479s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	2.380s
+ok  	github.com/restitch/restitch-gateway/internal/registry	2.560s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	2.419s
+ok  	github.com/restitch/restitch-gateway/internal/server	1.604s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	2.453s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	2.191s
+exit_code=0
+PASS go test full suite
+
+##[M23.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-119-gf155cd30" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 57010...
+$ curl /__stats (probe)
+{"conns_accepted":2,"requests":0}
+PASS mockupstream /__stats endpoint available
+# Running k6 baseline arm (max_idle_conns_per_host: 2)...
+# Running k6 tuned arm (max_idle_conns_per_host: 100)...
+baseline  max_idle=2    p95=409.813ms  error_rate=0.294649  conns_accepted=-1  http_reqs=8858
+tuned     max_idle=100  p95=13.967ms error_rate=0.094400 conns_accepted=220 http_reqs=63464
+$ python3 -c import sys; b=int(sys.argv[1]); t=int(sys.argv[2]); assert b>0 and t>0, f'no connections recorded: baseline={b} tuned={t}'; assert t<b, f'tuned={t} not < baseline={b}' -1 220
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+AssertionError: no connections recorded: baseline=-1 tuned=220
+exit_code=1
+FAIL tuned run accepted fewer upstream connections than baseline
+$ python3 -c import sys; p=float(sys.argv[1]); assert p<50.0, f'p95={p}ms' 13.967
+
+exit_code=0
+PASS tuned P95 < 50ms
+$ python3 -c import sys; e=float(sys.argv[1]); assert e<0.01, f'error_rate={e}' 0.094400
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+AssertionError: error_rate=0.0944
+exit_code=1
+FAIL tuned error rate < 1%
+$ python3 -c import sys; n=int(sys.argv[1]); assert n>1000, f'http_reqs={n}' 63464
+
+exit_code=0
+PASS tuned run actually generated load
+
+RESULT M23: FAIL (23 pass, 6 fail, 0 manual, 0 skip)

@@ -254,3 +254,9 @@ Latest row per task ID wins. Never edit or delete existing rows.
 | 2026-07-16 | T22.2 | M22 | FAIL | 6e233404 | evidence/2026-07-16-M22-6e233404.log#T22.2 | retroactive: run interrupted before h_finish wrote rows |
 | 2026-07-16 | T22.1 | M22 | PASS | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#T22.1 | supersedes the retroactive 6e233404 FAIL above |
 | 2026-07-16 | T22.2 | M22 | PASS | a0c9bd35 | evidence/2026-07-16-M22-a0c9bd35.log#T22.2 | supersedes the retroactive 6e233404 FAIL above |
+| 2026-07-27 | M23.gate | M23 | PASS | f155cd30 | evidence/2026-07-27-M23-f155cd30.log#M23.gate | auto (h_finish) |
+| 2026-07-27 | T23.1 | M23 | PASS | f155cd30 | evidence/2026-07-27-M23-f155cd30.log#T23.1 | auto (h_finish) |
+| 2026-07-27 | T23.2 | M23 | FAIL | f155cd30 | evidence/2026-07-27-M23-f155cd30.log#T23.2 | auto (h_finish) |
+| 2026-07-27 | T23.3 | M23 | PASS | f155cd30 | evidence/2026-07-27-M23-f155cd30.log#T23.3 | auto (h_finish) |
+| 2026-07-27 | M23.unit | M23 | PASS | f155cd30 | evidence/2026-07-27-M23-f155cd30.log#M23.unit | auto (h_finish) |
+| 2026-07-27 | M23.gate | M23 | FAIL | f155cd30 | evidence/2026-07-27-M23-f155cd30.log#M23.gate | auto (h_finish) |

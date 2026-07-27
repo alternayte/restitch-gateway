@@ -57,3 +57,4 @@ Chronological index of gate verification runs.
 | 2026-07-15 | M21 | eaa1419c | PASS | 2026-07-15-M21-eaa1419c.log |
 | 2026-07-16 | M22 | 6e233404 | FAIL | 2026-07-16-M22-6e233404.log |
 | 2026-07-16 | M22 | a0c9bd35 | PASS | 2026-07-16-M22-a0c9bd35.log |
+| 2026-07-27 | M23 | f155cd30 | FAIL | 2026-07-27-M23-f155cd30.log |
