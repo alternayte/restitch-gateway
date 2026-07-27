@@ -297,10 +297,17 @@ h_run "max_idle_conns_per_host yaml tag" -- \
     grep -q 'yaml:"max_idle_conns_per_host"' internal/composition/config.go
 h_run "insecure_skip_verify yaml tag" -- \
     grep -q 'yaml:"insecure_skip_verify"' internal/composition/config.go
+h_run "parser translates the transport block" -- \
+    grep -q 'toUpstreamTransport(up.Transport)' internal/composition/parser.go
+# Whitespace-tolerant: gofmt may realign the struct literal, so match on the
+# shape rather than on an exact run of spaces.
 h_run "parser no longer hardcodes empty transport" -- \
-    bash -c '! grep -q "Transport:        upstream.TransportConfig{}," internal/composition/parser.go'
+    bash -c '! grep -qE "Transport:[[:space:]]+upstream\.TransportConfig\{\}" internal/composition/parser.go'
+h_run "transport_test.go exists" -- test -f internal/composition/transport_test.go
+# `go test -run PATTERN` exits 0 when the pattern matches nothing, so assert
+# that named tests actually ran and passed rather than trusting the exit code.
 h_run "transport parser tests pass" -- \
-    go test -race -count=1 -run 'TestTransport' ./internal/composition/...
+    bash -c "go test -race -count=1 -run 'TestTransport' -v ./internal/composition/ 2>&1 | grep -cE '^--- PASS: TestTransport' | grep -qvE '^0$'"
 
 # ── Unit tests ───────────────────────────────────────────────────────
 
