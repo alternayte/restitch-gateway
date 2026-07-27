@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -26,6 +27,8 @@ func devCmd(args []string) int {
 	configFile := flags.String("config", "restitch.yaml", "path to composition config file")
 	logFormat := flags.String("log-format", "text", "log format: json or text")
 	studioBin := flags.String("studio-bin", "", "path to restitch-studio binary (auto-discovered if empty)")
+	gatewayArgs := flags.String("gateway-args", "", "extra flags passed through to the gateway process (whitespace-separated)")
+	studioArgs := flags.String("studio-args", "", "extra flags passed through to the studio process (whitespace-separated)")
 	_ = flags.Parse(args)
 
 	studioBinary, err := findStudioBinary(*studioBin)
@@ -69,21 +72,13 @@ func devCmd(args []string) int {
 	gwManager := devmode.NewProcessManager(devmode.ProcessConfig{
 		Name:       "gateway",
 		Executable: gatewayBinary,
-		Args: []string{
-			"run",
-			"--config=" + *configFile,
-			"--log-format=" + *logFormat,
-			fmt.Sprintf("--port=%d", devGatewayPort),
-		},
+		Args:       buildGatewayArgs(*configFile, *logFormat, *gatewayArgs, devGatewayPort),
 	}, gwOut, gwErr)
 
 	stManager := devmode.NewProcessManager(devmode.ProcessConfig{
 		Name:       "studio",
 		Executable: studioBinary,
-		Args: []string{
-			fmt.Sprintf("--port=%d", devStudioPort),
-			fmt.Sprintf("--gateway-admin-url=http://localhost:%d", devAdminPort),
-		},
+		Args:       buildStudioArgs(*studioArgs, devStudioPort, devAdminPort),
 	}, stOut, stErr)
 
 	var wg sync.WaitGroup
@@ -130,6 +125,36 @@ func devCmd(args []string) int {
 	}
 
 	return 0
+}
+
+// buildGatewayArgs constructs the argument list for the gateway child
+// process. Extra is a whitespace-separated string of additional flags
+// (e.g. from --gateway-args) that is appended after the fixed arguments,
+// so a duplicate flag in extra overrides the fixed one (flag package
+// semantics: last occurrence wins).
+func buildGatewayArgs(configFile, logFormat, extra string, port int) []string {
+	args := []string{
+		"run",
+		"--config=" + configFile,
+		"--log-format=" + logFormat,
+		fmt.Sprintf("--port=%d", port),
+	}
+	args = append(args, strings.Fields(extra)...)
+	return args
+}
+
+// buildStudioArgs constructs the argument list for the studio child
+// process. Extra is a whitespace-separated string of additional flags
+// (e.g. from --studio-args) that is appended after the fixed arguments,
+// so a duplicate flag in extra overrides the fixed one (flag package
+// semantics: last occurrence wins).
+func buildStudioArgs(extra string, studioPort, adminPort int) []string {
+	args := []string{
+		fmt.Sprintf("--port=%d", studioPort),
+		fmt.Sprintf("--gateway-admin-url=http://localhost:%d", adminPort),
+	}
+	args = append(args, strings.Fields(extra)...)
+	return args
 }
 
 func findStudioBinary(override string) (string, error) {
