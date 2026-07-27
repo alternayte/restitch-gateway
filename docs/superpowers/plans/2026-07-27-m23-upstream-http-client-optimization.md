@@ -1063,19 +1063,18 @@ with user approval and a `gate:` commit, per CLAUDE.md.
 Run: `go test -race -count=1 -run 'TestBuildTransport' ./internal/upstream/... -v 2>&1 | tail -20`
 Expected: PASS. Existing coverage lives at `internal/upstream/client_test.go:14-42`.
 
-- [ ] **Step 3: Commit the ledger row**
+- [ ] **Step 3: Do NOT hand-write a ledger row**
 
-There is no code change, so this commit carries only the ledger row. Append the
-row (Task 6 covers the format), then:
+`h_finish` auto-appends one row per tracked task (`T23.1`, `T23.2`, `T23.3`,
+`M23.unit`, `M23.gate`) when the gate runs in Task 6, with the correct evidence
+path and anchor. A hand-written `T23.1` row here would duplicate that row and
+would have no evidence file to point at, since no gate has run yet.
 
-```bash
-git add docs/plan-progress/LEDGER.md
-git commit -m "docs: record T23.1 — pool and TLS defaults verified
+This task produces **no commit**. Its deliverable is confirmation that the
+gate's `T23.1` assertions will pass; the ledger row comes from Task 6.
 
-MaxIdleConnsPerHost defaults to 100 and TLS 1.2 minimum is enforced in
-upstream.BuildTransport, landed by M16 hardening ahead of M23. No code
-change required; recording the evidence."
-```
+Record the two command outputs from Steps 1 and 2 in the task report so the
+verification is on record.
 
 ---
 
