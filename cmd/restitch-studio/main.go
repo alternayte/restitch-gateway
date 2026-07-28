@@ -176,6 +176,15 @@ func spaFileServer(fsys http.FileSystem) http.Handler {
 
 		f, err := fsys.Open(path)
 		if err != nil {
+			// Never fall back for hashed build artifacts. Serving index.html
+			// for a missing /assets/*.js returns HTML with a 200, so the
+			// browser fails to parse a module and renders a blank page with no
+			// 404 to diagnose from — which is exactly what a build that skipped
+			// the frontend step produces.
+			if strings.HasPrefix(path, "/assets/") {
+				http.NotFound(w, r)
+				return
+			}
 			r.URL.Path = "/"
 			fileServer.ServeHTTP(w, r)
 			return
