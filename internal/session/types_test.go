@@ -95,3 +95,25 @@ func TestValidationErrorNamesFields(t *testing.T) {
 		t.Errorf("got %d field errors, want 2: %+v", len(ve.Errors), ve.Errors)
 	}
 }
+
+func TestValidateAcceptsExactlyMaxPins(t *testing.T) {
+	pins := make([]string, 50)
+	for i := range pins {
+		pins[i] = string(rune('a'+i%26)) + string(rune('0'+i/26))
+	}
+	p := Preferences{PinnedCompositions: pins, DefaultTimeRange: "1h"}
+	if err := p.Validate(); err != nil {
+		t.Errorf("Validate() with exactly 50 pins returned %v, want nil", err)
+	}
+}
+
+func TestValidateAcceptsExactlyMaxNameLength(t *testing.T) {
+	name := make([]byte, 128)
+	for i := range name {
+		name[i] = 'x'
+	}
+	p := Preferences{PinnedCompositions: []string{string(name)}, DefaultTimeRange: "1h"}
+	if err := p.Validate(); err != nil {
+		t.Errorf("Validate() with exactly 128-char name returned %v, want nil", err)
+	}
+}
