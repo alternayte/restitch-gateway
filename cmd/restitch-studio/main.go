@@ -152,7 +152,7 @@ func buildMux(d muxDeps) *http.ServeMux {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var spaHandler http.Handler = spaFileServer(http.FS(sub))
+	spaHandler := spaFileServer(http.FS(sub))
 	// Document requests mint; static assets do not, which avoids creating
 	// several sessions for one cold page load.
 	if d.sessionStore != nil {

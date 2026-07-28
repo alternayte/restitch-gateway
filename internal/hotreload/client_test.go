@@ -23,7 +23,7 @@ func TestRegistryClient_Fetch_Success(t *testing.T) {
 			t.Errorf("unexpected If-None-Match on first request: %s", r.Header.Get("If-None-Match"))
 		}
 		w.Header().Set("ETag", "abc123")
-		json.NewEncoder(w).Encode(bundle)
+		_ = json.NewEncoder(w).Encode(bundle)
 	}))
 	defer srv.Close()
 
@@ -93,7 +93,7 @@ func TestRegistryClient_Fetch_AdminKey(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotKey = r.Header.Get("X-Admin-Key")
 		w.Header().Set("ETag", "x")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"yaml_content": "", "etag": "x", "composition_count": 0, "composition_names": []string{},
 		})
 	}))

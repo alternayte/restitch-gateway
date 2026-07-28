@@ -1,10 +1,24 @@
 name: CI
 
 on:
+  # Scoped deliberately. An unrestricted `push:` fires alongside
+  # `pull_request:` for every branch that has an open PR, running the whole
+  # suite twice on the same commit. Pushes now cover only the branches that
+  # have no PR to run them — the trunk, release branches and tags — and
+  # everything else is covered by the pull_request trigger.
   push:
+    branches: [main, 'release/**']
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
+
+# A second push to a branch supersedes the first; cancel the in-flight run
+# rather than paying for a result nobody will read. Release branches and tags
+# are excluded so a run that gates a shipping artifact always completes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/heads/release/') && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   go:

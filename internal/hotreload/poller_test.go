@@ -18,7 +18,7 @@ func bundleHandler(yaml, etag string, count int) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("ETag", etag)
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"yaml_content":      yaml,
 			"etag":              etag,
 			"composition_count": count,
@@ -42,7 +42,7 @@ func TestPoller_HappyPath(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	p.Run(ctx)
+	_ = p.Run(ctx) // returns ctx.Err() by design; the assertions below are the check
 
 	if reloadCalls.Load() < 1 {
 		t.Error("expected at least one reload call")
@@ -71,7 +71,7 @@ func TestPoller_NotModified_NoReload(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
-	p.Run(ctx)
+	_ = p.Run(ctx) // returns ctx.Err() by design; the assertions below are the check
 
 	if reloadCalls.Load() != 1 {
 		t.Errorf("expected exactly 1 reload (initial), got %d", reloadCalls.Load())
@@ -91,7 +91,7 @@ func TestPoller_FetchError_Backoff(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	p.Run(ctx)
+	_ = p.Run(ctx) // returns ctx.Err() by design; the assertions below are the check
 
 	status := p.Status()
 	if status.ErrorType != "fetch" {
@@ -107,7 +107,7 @@ func TestPoller_Trigger_ImmediatePoll(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqCount.Add(1)
 		w.Header().Set("ETag", "e1")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"yaml_content": "x: y\n", "etag": "e1",
 			"composition_count": 0, "composition_names": []string{},
 		})
@@ -125,7 +125,7 @@ func TestPoller_Trigger_ImmediatePoll(t *testing.T) {
 		p.Trigger()
 	}()
 
-	p.Run(ctx)
+	_ = p.Run(ctx) // returns ctx.Err() by design; the assertions below are the check
 
 	if reqCount.Load() < 2 {
 		t.Errorf("expected >=2 requests (initial + triggered), got %d", reqCount.Load())
@@ -144,7 +144,7 @@ func TestPoller_Trigger_BypassesBackoff(t *testing.T) {
 			return
 		}
 		w.Header().Set("ETag", "e1")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"yaml_content": "x: y\n", "etag": "e1",
 			"composition_count": 0, "composition_names": []string{},
 		})
@@ -172,7 +172,7 @@ func TestPoller_Trigger_BypassesBackoff(t *testing.T) {
 		p.Trigger()
 	}()
 
-	p.Run(ctx)
+	_ = p.Run(ctx) // returns ctx.Err() by design; the assertions below are the check
 
 	// Without Trigger, the poller would still be asleep in its first backoff
 	// window at the 2s test deadline (base backoff is ~10s), so we'd see
@@ -200,7 +200,7 @@ func TestPoller_ContextCancel_CleansUp(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		p.Run(ctx)
+		_ = p.Run(ctx) // returns ctx.Err() by design; the assertions below are the check
 		close(done)
 	}()
 

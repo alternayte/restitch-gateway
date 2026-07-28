@@ -32,7 +32,9 @@ func TestPrefixWriter_SingleLine(t *testing.T) {
 func TestPrefixWriter_MultiLine(t *testing.T) {
 	var buf bytes.Buffer
 	pw := NewPrefixWriter(&buf, "M", ColorMagenta)
-	pw.Write([]byte("line1\nline2\nline3"))
+	if _, err := pw.Write([]byte("line1\nline2\nline3")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
 	lines := strings.Split(buf.String(), "\n")
 	// 3 prefixed lines + trailing empty
 	if len(lines) != 4 {
@@ -59,7 +61,8 @@ func TestPrefixWriter_ConcurrentWrites(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < lines; j++ {
-				pw.Write([]byte("test line"))
+				// t.Fatal is not safe from a goroutine; a bytes.Buffer write cannot fail.
+				_, _ = pw.Write([]byte("test line"))
 			}
 		}()
 	}
@@ -74,7 +77,9 @@ func TestPrefixWriter_NoColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	var buf bytes.Buffer
 	pw := NewPrefixWriter(&buf, "X", ColorCyan)
-	pw.Write([]byte("plain"))
+	if _, err := pw.Write([]byte("plain")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
 	got := buf.String()
 	if strings.Contains(got, "\033") {
 		t.Errorf("ANSI codes present with NO_COLOR: %q", got)
