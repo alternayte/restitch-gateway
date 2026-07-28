@@ -85,6 +85,18 @@ export function studio() {
 // guess how k6 spells its per-scenario sub-metric keys.
 export function handleSummary(data) {
   const m = data.metrics;
+  // pick() has TWO jobs, not one. Its fallback only fires when the
+  // sub-metric key is entirely absent (e.g. STUDIO_URL unset, so the
+  // threshold that materialises it was never registered). It does NOT
+  // detect a scenario that ran but sampled nothing: thresholds materialise
+  // http_req_duration{...} and http_req_failed{...} with a value of 0
+  // regardless of sample count, so a zero-iteration run reads as
+  // p95_ms: 0 and error_rate: 0 — indistinguishable from "everything was
+  // instant and nothing failed". reqCountFailingValue() closes that gap by
+  // checking the corresponding reqs count and forcing the FAILING value
+  // (-1 / 1) whenever it is 0, so p95_ms and error_rate are guaranteed to
+  // be genuine measurements whenever they are not the documented failing
+  // sentinel.
   const pick = (name, field, fallback) => {
     const metric = m[name];
     if (!metric || !metric.values || metric.values[field] === undefined) {
@@ -92,18 +104,43 @@ export function handleSummary(data) {
     }
     return metric.values[field];
   };
+  const reqCountFailingValue = (reqsName, name, field, fallback, failing) => {
+    const reqs = pick(reqsName, 'count', 0);
+    if (reqs === 0) {
+      return failing;
+    }
+    return pick(name, field, fallback);
+  };
 
   const out = {
     compositions: {
-      p95_ms: pick('http_req_duration{scenario:compositions}', 'p(95)', -1),
-      error_rate: pick('http_req_failed{scenario:compositions}', 'rate', 1),
+      p95_ms: reqCountFailingValue(
+        'http_reqs{scenario:compositions}',
+        'http_req_duration{scenario:compositions}',
+        'p(95)',
+        -1,
+        -1
+      ),
+      error_rate: reqCountFailingValue(
+        'http_reqs{scenario:compositions}',
+        'http_req_failed{scenario:compositions}',
+        'rate',
+        1,
+        1
+      ),
       reqs: pick('http_reqs{scenario:compositions}', 'count', 0),
     },
   };
 
   if (STUDIO_URL) {
     out.studio = {
-      p95_ms: pick('http_req_duration{scenario:studio_api}', 'p(95)', -1),
+      p95_ms: reqCountFailingValue(
+        'http_reqs{scenario:studio_api}',
+        'http_req_duration{scenario:studio_api}',
+        'p(95)',
+        -1,
+        -1
+      ),
       reqs: pick('http_reqs{scenario:studio_api}', 'count', 0),
     };
   }
