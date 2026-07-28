@@ -95,13 +95,34 @@ export interface StepAggregate {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path)
+  const res = await fetch(path, { credentials: "same-origin" })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json()
 }
 
 async function post<T>(path: string, body: string): Promise<T> {
   const res = await fetch(path, { method: "POST", body, headers: { "Content-Type": "text/plain" } })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json()
+}
+
+export interface PreferencesPayload {
+  pinned_compositions: string[]
+  sidebar_collapsed: boolean
+  default_time_range: string
+}
+
+export interface PreferencesResponse extends PreferencesPayload {
+  initialized: boolean
+}
+
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json()
 }
@@ -121,4 +142,7 @@ export const api = {
     get<StepAggregate[]>(`/api/stats/steps?composition=${composition}&range=${range}`),
   request: (id: string) =>
     get<RequestRecord>(`/api/requests/${id}`),
+  getPreferences: () => get<PreferencesResponse>("/api/v1/preferences"),
+  putPreferences: (p: PreferencesPayload) =>
+    put<PreferencesResponse>("/api/v1/preferences", p),
 }
