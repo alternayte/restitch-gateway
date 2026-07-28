@@ -35,6 +35,16 @@ implemented and verified against the codebase.
 | M21 — Gateway Registry Polling | T21.1–T21.5 | DONE |
 | M22 — Dev Mode Orchestrator | T22.1–T22.5 | DONE |
 | M23 — Upstream HTTP Client Optimization | T23.1–T23.3 | DONE |
+| M24 — Production Monitoring & Load Testing | T24.1–T24.4 | DONE |
+
+**M24 caveat — the CI load-test job is not yet runnable.** The `loadtest` job
+in `.github/workflows/ci.yml` carries `P95_MS: "REPLACE_IN_STEP_6"`, a literal
+placeholder. k6 will reject that as a threshold, so the job **fails if
+triggered today**. It is gated to `release/*` branches, tags, and
+`workflow_dispatch`, so it does not affect ordinary pushes or PRs. The value
+must be derived from a measured run on a real GitHub runner via
+`ceil(observed_p95 * 2 / 50) * 50`. Everything the M24 gate can verify locally
+passes (27 pass, 0 fail); this one step needs CI infrastructure.
 
 Known drift from plan (see Addendum A1): Pipeline not moved to
 `internal/server/` (A1.7), extra admin endpoints and deps not in

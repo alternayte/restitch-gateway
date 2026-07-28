@@ -286,3 +286,10 @@ Latest row per task ID wins. Never edit or delete existing rows.
 | 2026-07-27 | M22.unit | M22 | PASS | 318f2cf7 | evidence/2026-07-27-M22-318f2cf7.log#M22.unit | auto (h_finish) |
 | 2026-07-27 | M22.gate | M22 | PENDING | 318f2cf7 | evidence/2026-07-27-M22-318f2cf7.log#M22.gate | auto (h_finish) |
 | 2026-07-28 | M22.gate | M22 | MANUAL-VERIFIED | 318f2cf7 | evidence/2026-07-27-M22-318f2cf7.log#M22.gate | User confirmed live `restitch dev` smoke (colored output + Ctrl+C shutdown) on 2026-07-28, superseding the PENDING row from the 318f2cf7 gate re-run |
+| 2026-07-28 | M24.gate | M24 | PASS | 2d60605b | evidence/2026-07-28-M24-2d60605b.log#M24.gate | auto (h_finish) |
+| 2026-07-28 | T24.1 | M24 | PASS | 2d60605b | evidence/2026-07-28-M24-2d60605b.log#T24.1 | auto (h_finish) |
+| 2026-07-28 | T24.2 | M24 | PASS | 2d60605b | evidence/2026-07-28-M24-2d60605b.log#T24.2 | auto (h_finish) |
+| 2026-07-28 | T24.3 | M24 | PASS | 2d60605b | evidence/2026-07-28-M24-2d60605b.log#T24.3 | auto (h_finish) |
+| 2026-07-28 | T24.4 | M24 | PASS | 2d60605b | evidence/2026-07-28-M24-2d60605b.log#T24.4 | auto (h_finish) |
+| 2026-07-28 | M24.unit | M24 | PASS | 2d60605b | evidence/2026-07-28-M24-2d60605b.log#M24.unit | auto (h_finish) |
+| 2026-07-28 | M24.gate | M24 | PASS | 2d60605b | evidence/2026-07-28-M24-2d60605b.log#M24.gate | auto (h_finish) |
