@@ -1,0 +1,70 @@
+# Auth example — demonstrates all four upstream auth strategies
+# plus inbound API key authentication.
+#
+# Set these env vars before running:
+#   export GATEWAY_KEY=my-gateway-key
+#   export HEADER_TOKEN=secret-token
+#   export BASIC_USER=admin
+#   export BASIC_PASS=password
+
+server:
+  auth:
+    api_keys: ["${GATEWAY_KEY}"]
+
+upstreams:
+  header-auth:
+    url: "http://localhost:8081"
+    auth:
+      header:
+        name: "X-API-Key"
+        value: "${HEADER_TOKEN}"
+
+  basic-auth:
+    url: "http://localhost:8081"
+    auth:
+      basic:
+        username: "${BASIC_USER}"
+        password: "${BASIC_PASS}"
+
+  passthrough-auth:
+    url: "http://localhost:8081"
+    auth:
+      passthrough: {}
+
+  no-auth:
+    url: "http://localhost:8081"
+
+compositions:
+  header-demo:
+    path: "/api/header-demo"
+    method: GET
+    steps:
+      - name: data
+        upstream: header-auth
+        path: "/echo"
+    response:
+      body:
+        headers_sent: "{{ steps.data.body.headers }}"
+
+  passthrough-demo:
+    path: "/api/passthrough-demo"
+    method: GET
+    steps:
+      - name: data
+        upstream: passthrough-auth
+        path: "/echo"
+    response:
+      body:
+        forwarded: "{{ steps.data.body.headers }}"
+
+  public-health:
+    path: "/api/public-health"
+    method: GET
+    public: true
+    steps:
+      - name: h
+        upstream: no-auth
+        path: "/health"
+    response:
+      body:
+        upstream: "{{ steps.h.body }}"

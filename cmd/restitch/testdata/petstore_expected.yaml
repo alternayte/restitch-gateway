@@ -1,0 +1,40 @@
+compositions:
+    create-pet:
+        path: /pets
+        method: POST
+        steps:
+            - name: main
+              upstream: pets
+              path: /pets
+              method: POST
+        response:
+            status: 200
+            body:
+                result: '{{ steps.main.body }}'
+    get-pet:
+        path: /pets/{petId}
+        method: GET
+        steps:
+            - name: main
+              upstream: pets
+              path: /pets/{{ req.params.petId }}
+              method: GET
+        response:
+            status: 200
+            body:
+                result: '{{ steps.main.body }}'
+    list-pets:
+        path: /pets
+        method: GET
+        steps:
+            - name: main
+              upstream: pets
+              path: /pets
+              method: GET
+        response:
+            status: 200
+            body:
+                result: '{{ steps.main.body }}'
+upstreams:
+    pets:
+        url: https://petstore.example.com

@@ -4,6 +4,57 @@ This document is the single source of truth for taking Restitch from its current
 state (v1.0 MVP, audited 2026-07-08) to the complete, feature-finished product:
 a production-grade REST API composition gateway plus the Restitch Studio web UI.
 
+## 0.1 Completion Status (audited 2026-07-09)
+
+All milestones M1–M19 (excluding deferred WASM M16) have been
+implemented and verified against the codebase.
+
+| Milestone | Tasks | Status |
+|-----------|-------|--------|
+| M1 — Foundation, tooling, hygiene | T1.1–T1.6 | DONE |
+| M2 — Expression/template engine rewrite | T2.1–T2.4 | DONE |
+| M3 — Executor semantics, partial-response | T3.1–T3.4 | DONE |
+| M4 — Router replacement, path parameters | T4.1–T4.3 | DONE |
+| M5 — Upstream clients, auth, config | T5.1–T5.6 | DONE |
+| M6 — Resilience: retry, breaker, coalesce | T6.1–T6.3 | DONE |
+| M7 — Per-step response caching | T7.1 | DONE |
+| M8 — Observability: metrics, admin server | T8.1–T8.3 | DONE |
+| M9 — Inbound authentication | T9.1 | DONE |
+| M10 — Hot reload + pipeline swap | T10.1 | DONE |
+| M11 — CLI subcommands | T11.1–T11.3 | DONE |
+| M12 — Studio backend | T12.1 | DONE |
+| M13 — Studio frontend | T13.1–T13.8 | DONE |
+| M14 — E2E test harness, hardening | T14.1–T14.3 | DONE |
+| M15 — Docs, examples, packaging | T15.1–T15.4 | DONE |
+| M16 — WASM plugins | — | DEFERRED |
+| M16 — Production Hardening (addendum) | T16.1–T16.10 | DONE |
+| M17 — Rate Limiting & Validation | T17.1–T17.5 | DONE |
+| M18 — OpenTelemetry Tracing | T18.1–T18.5 | DONE |
+| M19 — CI & Test Hardening | T19.1–T19.5 | DONE |
+| M20 — Config Registry & Centralized Management | T20.1–T20.6 | DONE |
+| M21 — Gateway Registry Polling | T21.1–T21.5 | DONE |
+| M22 — Dev Mode Orchestrator | T22.1–T22.5 | DONE |
+| M23 — Upstream HTTP Client Optimization | T23.1–T23.3 | DONE |
+| M24 — Production Monitoring & Load Testing | T24.1–T24.4 | DONE |
+| M25 — Browser Session & User Preferences | T25.1–T25.4 | DONE |
+
+**M24 caveat — the CI load-test job is not yet runnable.** The `loadtest` job
+in `.github/workflows/ci.yml` carries `P95_MS: "REPLACE_IN_STEP_6"`, a literal
+placeholder. k6 will reject that as a threshold, so the job **fails if
+triggered today**. It is gated to `release/*` branches, tags, and
+`workflow_dispatch`, so it does not affect ordinary pushes or PRs. The value
+must be derived from a measured run on a real GitHub runner via
+`ceil(observed_p95 * 2 / 50) * 50`. Everything the M24 gate can verify locally
+passes (27 pass, 0 fail); this one step needs CI infrastructure.
+
+Known drift from plan (see Addendum A1): Pipeline not moved to
+`internal/server/` (A1.7), extra admin endpoints and deps not in
+original schema (A1.1–A1.6). These are documentation-only items.
+
+All critical production gaps (A2.1–A2.4) and important production
+gaps (A3.1, A3.2, A3.4, A3.6, A3.8, A3.9) fixed in M16. CI gaps
+(A1.9 e2e job, A1.10 continue-on-error) fixed in M19.
+
 ## 0. How to use this plan (read this first, executor)
 
 - You see ONLY this file and the code. Everything you need is inline. Do not
@@ -337,6 +388,9 @@ Failure semantics (fixes D1):
 |-----------|--------|------|
 | No matching route | 404 | `{"error":"not found"}` |
 | Method mismatch | 405 + `Allow` | ServeMux default |
+| Rate limit exceeded | 429 + `Retry-After: 1` | `{"error":"rate limit exceeded"}` |
+| Request body too large | 413 | `{"error":"request body too large"}` |
+| Request body fails JSON Schema | 400 | `{"error":"request validation failed","details":[...]}` |
 | Inbound auth missing/invalid | 401 + `WWW-Authenticate` | `{"error":"unauthorized"}` |
 | Passthrough upstream, client sent no `Authorization` | 401 + `WWW-Authenticate: Bearer` | `{"error":"authorization header required"}` |
 | Required step failed (network, 5xx after retries, breaker open, auth failure) | 502 | `{"error":"upstream error","step":"<name>"}` |
@@ -351,19 +405,23 @@ Full detail goes to logs only.
 
 Go: `github.com/prometheus/client_golang`, `github.com/sony/gobreaker/v2`,
 `github.com/fsnotify/fsnotify`, `github.com/golang-jwt/jwt/v5`,
-`github.com/MicahParks/keyfunc/v3`, `github.com/getkin/kin-openapi`.
+`github.com/MicahParks/keyfunc/v3`, `github.com/getkin/kin-openapi`,
+`modernc.org/sqlite`, `golang.org/x/time/rate`,
+`github.com/santhosh-tekuri/jsonschema/v6`,
+`go.opentelemetry.io/otel`, `go.opentelemetry.io/otel/sdk`,
+`go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp`.
 Already present: `expr-lang/expr`, `google/uuid`, `oklog/ulid/v2`,
 `golang.org/x/sync`, `golang.org/x/oauth2`, `gopkg.in/yaml.v3`.
 
 Studio (npm): `react`, `react-dom`, `react-router-dom`, `tailwindcss` (v4),
 `@tailwindcss/vite`, shadcn/ui (CLI-managed), `@xyflow/react`, `js-yaml`,
-`@uiw/react-codemirror`, `@codemirror/lang-yaml`, `lucide-react`, dev:
-`vite`, `typescript`, `@vitejs/plugin-react`, `vitest`,
+`@uiw/react-codemirror`, `@codemirror/lang-yaml`, `lucide-react`,
+`recharts`, dev: `vite`, `typescript`, `@vitejs/plugin-react`, `vitest`,
 `@testing-library/react`, `jsdom`.
 
 ---
 
-# Milestone M1 — Foundation, tooling, hygiene
+# Milestone M1 — Foundation, tooling, hygiene [DONE]
 
 Goal: a clean, lintable, CI-guarded baseline; kill dead code and the wiring
 bugs that don't require redesign. No behavior redesign here.
@@ -471,7 +529,7 @@ go run ./cmd/restitch -config restitch.yaml -log-format=json 2>&1 | head -3
 
 ---
 
-# Milestone M2 — Expression/template engine rewrite
+# Milestone M2 — Expression/template engine rewrite [DONE]
 
 Goal: one evaluation core, everything compiled at startup, nil-safe, escaped.
 Fixes D1 (template half), D3, D4, D13, D19. This milestone touches only
@@ -646,7 +704,7 @@ curl -s 'localhost:8080/t?id=1%2F..%2Fadmin' | python3 -m json.tool
 
 ---
 
-# Milestone M3 — Executor semantics and the partial-response contract
+# Milestone M3 — Executor semantics and the partial-response contract [DONE]
 
 Goal: fix D1/D2 end-to-end; make degradation observable and correct.
 Touches `internal/composition/{dag,executor,handler,errors}.go`.
@@ -751,7 +809,7 @@ curl -si localhost:8080/p
 
 ---
 
-# Milestone M4 — Router replacement and path parameters
+# Milestone M4 — Router replacement and path parameters [DONE]
 
 Goal: delete the hand-rolled router (D10); routes use `http.ServeMux` Go 1.22
 patterns; compositions get `{param}` path parameters.
@@ -859,7 +917,7 @@ curl -sI localhost:8080/api/users/42 | head -1                # HEAD → 200
 
 ---
 
-# Milestone M5 — Upstream clients, auth ownership, config hygiene
+# Milestone M5 — Upstream clients, auth ownership, config hygiene [DONE]
 
 Goal: one client per upstream built at startup; `Authorization` scoped to
 passthrough only; OAuth2 refresh bounded; strict env expansion. Fixes D5, D6,
@@ -1064,7 +1122,7 @@ curl -s -H 'Authorization: Bearer SECRET' localhost:8080/e | grep -c SECRET   # 
 
 ---
 
-# Milestone M6 — Resilience: retries, circuit breaker, coalescing
+# Milestone M6 — Resilience: retries, circuit breaker, coalescing [DONE]
 
 All three are RoundTripper/step-level layers in `internal/upstream`, inserted
 by `upstream.Build` per K5, active only when configured.
@@ -1181,7 +1239,7 @@ for i in $(seq 1 6); do curl -s -o /dev/null -w '%{http_code} ' localhost:8080/f
 
 ---
 
-# Milestone M7 — Per-step response caching
+# Milestone M7 — Per-step response caching [DONE]
 
 ### T7.1 TTL cache
 - `internal/upstream/cache.go`:
@@ -1218,7 +1276,7 @@ go test ./internal/upstream/ ./internal/gwconfig/ -count=1
 
 ---
 
-# Milestone M8 — Observability: metrics, access log, admin server
+# Milestone M8 — Observability: metrics, access log, admin server [DONE]
 
 ### T8.1 Prometheus metrics
 - `go get github.com/prometheus/client_golang`.
@@ -1336,7 +1394,7 @@ curl -si localhost:8080/health/upstreams | head -1              # 404 (moved)
 
 ---
 
-# Milestone M9 — Inbound authentication
+# Milestone M9 — Inbound authentication [DONE]
 
 Gateway-level auth for composition routes (K10). `/health`, `/ready` stay
 public; admin has its own key (M8).
@@ -1385,7 +1443,7 @@ go test ./... -count=1 -race
 
 ---
 
-# Milestone M10 — Hot reload + pipeline swap
+# Milestone M10 — Hot reload + pipeline swap [DONE]
 
 Validate-then-swap per K8. A bad config NEVER takes down the running gateway.
 
@@ -1456,7 +1514,7 @@ git checkout -- /tmp/m4.yaml 2>/dev/null || <restore file>; kill %2 # restore + 
 
 ---
 
-# Milestone M11 — CLI subcommands
+# Milestone M11 — CLI subcommands [DONE]
 
 Shape: `restitch [run|check|version|import] ...`. Bare `restitch -config x`
 (no subcommand) must keep working == `run` (K18 compatibility).
@@ -1529,7 +1587,7 @@ go build -o bin/restitch ./cmd/restitch
 
 ---
 
-# Milestone M12 — Studio backend: `restitch-studio` binary
+# Milestone M12 — Studio backend: `restitch-studio` binary [DONE]
 
 ### T12.1 The studio server
 - `cmd/restitch-studio/main.go`:
@@ -1577,7 +1635,7 @@ curl -s localhost:3080/ | grep -i studio                   # placeholder page
 
 ---
 
-# Milestone M13 — Studio frontend (React + Tailwind v4 + shadcn/ui)
+# Milestone M13 — Studio frontend (React + Tailwind v4 + shadcn/ui) [DONE]
 
 All work under `studio/`. Node ≥ 20 assumed. The Studio talks ONLY to
 same-origin `/api/*` (the M12 proxy) — no CORS handling in the app.
@@ -1766,7 +1824,7 @@ curl -s localhost:8080/p >/dev/null   # generate traffic
 
 ---
 
-# Milestone M14 — End-to-end test harness and hardening
+# Milestone M14 — End-to-end test harness and hardening [DONE]
 
 Two complementary harnesses (patterns: Tyk `StartTest`, KrakenD
 `tests/integration.go`, Cosmo `testenv`).
@@ -1861,7 +1919,7 @@ make e2e
 
 ---
 
-# Milestone M15 — Docs, examples, packaging
+# Milestone M15 — Docs, examples, packaging [DONE]
 
 ### T15.1 README rewrite (D3 final closure)
 - Rewrite `README.md` top-to-bottom against the ACTUAL engine:
@@ -1976,7 +2034,370 @@ Expected end state: every command above passes exactly as described. If any
 deviates, the corresponding milestone's gate has regressed — fix before
 declaring completion.
 
+---
 
+# Addendum: Production Readiness Audit (2026-07-09)
 
+Conducted after completing M1–M15 + Studio Observability upgrade. Findings
+organized into: plan-vs-codebase drift, critical production gaps, competitive
+feature gaps, and proposed new milestones.
 
+## A1. Plan-vs-Codebase Drift
+
+Items implemented but not reflected in PLAN.md sections 2.2, 2.3, or 3.3.
+These are documentation-only fixes to keep the plan as single source of truth.
+
+| # | Drift | Where to fix |
+|---|-------|-------------|
+| A1.1 | `admin.storage` config (`type`, `url`, `auth_token`, `retention`) exists in code but not in §2.3 config schema | Add to §2.3 under `admin:` |
+| A1.2 | `modernc.org/sqlite` dep added (SQLite storage backend) — not in §3.3 approved deps | Add to §3.3 Go deps |
+| A1.3 | `recharts` npm dep added (dashboard charts) — not in §3.3 approved deps | Add to §3.3 npm deps |
+| A1.4 | Three admin API endpoints added (`/stats/timeseries`, `/stats/steps`, `/requests/{id}`) — not in T8.3 | Add to T8.3 endpoint table |
+| A1.5 | `internal/reqlog` package not in §2.2 target package map | Add to §2.2 |
+| A1.6 | Studio Metrics tab, 7 chart components, 3 waterfall components, 1 filter component — not in T13.3–T13.5 | Add to M13 or create M13b |
+| A1.7 | `Pipeline` remains in `cmd/restitch/pipeline.go` — T14.1 says move to `internal/server/` | Update T14.1 or move the file |
+| A1.8 | E2E-10 (admin integration) replaced by ResponseSizeCap — undocumented substitution | Document in T14.1 |
+| A1.9 | CI has no `e2e` job (T14.2 calls for one) | Add to CI or update T14.2 |
+| A1.10 | CI studio test uses `continue-on-error: true` — test failures silently ignored | Remove `continue-on-error` |
+
+## A2. Critical Production Gaps
+
+Issues that must be fixed before any production deployment.
+
+### A2.1 Admin server missing HTTP timeouts
+
+`internal/admin/server.go` creates `http.Server` without `ReadTimeout`,
+`WriteTimeout`, `ReadHeaderTimeout`, or `IdleTimeout`. Vulnerable to
+slowloris attacks and connection exhaustion. The data-plane server sets
+these correctly (30s/30s/120s).
+
+**Fix:** Add to `New()`:
+```go
+s.httpServer = &http.Server{
+    Addr:              fmt.Sprintf(":%d", cfg.Port),
+    Handler:           corsMiddleware(mux),
+    ReadTimeout:       30 * time.Second,
+    WriteTimeout:      30 * time.Second,
+    ReadHeaderTimeout: 10 * time.Second,
+    IdleTimeout:       120 * time.Second,
+}
+```
+
+### A2.2 Main gateway missing ReadHeaderTimeout
+
+`internal/server/server.go` sets ReadTimeout and WriteTimeout but not
+`ReadHeaderTimeout`. Without it, a client can hold connections indefinitely
+by sending headers slowly. Known Go security concern (gosec G112).
+
+**Fix:** Add `ReadHeaderTimeout: 10 * time.Second` to both httpServer and
+httpsServer in `internal/server/server.go`.
+
+### A2.3 Admin CORS allows all origins
+
+`Access-Control-Allow-Origin: *` on the admin API means any website can
+call `POST /admin/api/reload` via a browser. The API key in `X-Admin-Key`
+is explicitly allowed in `Access-Control-Allow-Headers`, so the preflight
+check doesn't protect it.
+
+**Fix:** When `api_key` is set, restrict CORS to the Studio origin only
+(or make CORS origins configurable). When no key is set (dev mode), `*`
+is acceptable.
+
+### A2.4 SQL QueryRequests fetches entire table
+
+`internal/admin/sql_storage.go` `QueryRequests` runs `SELECT data FROM
+request_log ORDER BY timestamp DESC` with no `LIMIT` clause, then filters
+in Go. As the table grows, this is a full table scan loading all data into
+memory.
+
+**Fix:** Push `LIMIT`, `composition`, and `timestamp` filters down to SQL
+WHERE clauses. Filter `status` and `duration` in Go only (they're in the
+JSON blob).
+
+## A3. Important Production Gaps
+
+Should fix before v1 — operational risks under load or during incidents.
+
+| # | Gap | Severity | Fix |
+|---|-----|----------|-----|
+| A3.1 | Shutdown does not flush accumulator — up to 60s of metrics lost on restart | Important | Call `acc.Flush()` + write buckets before `store.Close()` in shutdown path |
+| A3.2 | No upstream URL validation at config time — empty/malformed URLs fail only at request time | Important | Add `url.Parse()` check in `validateAndApplyDefaults()` |
+| A3.3 | `AllowUndefinedVariables()` in expression engine — typos like `steps.usre.body` compile silently, return nil at runtime | Important | Remove the flag (breaking change for existing configs with intentionally undefined vars) or add a strict-mode config option |
+| A3.4 | `handleValidate` uses `r.Body.Read(buf[:])` once — may get partial reads on large bodies, error discarded | Important | Use `io.ReadAll(io.LimitReader(r.Body, 1<<20))` |
+| A3.5 | No rate limiting on admin API — `POST /admin/api/reload` can be hammered causing resource exhaustion | Important | Add simple token-bucket limiter on mutation endpoints |
+| A3.6 | `MultiRecorder.Record` uses `context.Background()` for storage writes — not cancellable during shutdown | Important | Use a context with timeout (e.g. 5s) |
+| A3.7 | Accumulator latency slices unbounded between 60s flushes — 100k req/min = 100k float64s per composition in memory | Important | Cap at e.g. 10k samples with reservoir sampling, or flush more frequently under load |
+| A3.8 | `InsecureSkipVerify` configurable with no warning log | Important | Add `slog.Warn` when TLS verification is disabled for an upstream |
+| A3.9 | No `admin.storage` validation in `gwconfig.Validate()` — invalid storage type/URL passes silently | Important | Add validation for storage config fields |
+| A3.10 | No frontend tests for any chart, waterfall, filter, or page components (0/17 new components tested) | Important | Add at minimum smoke-render tests for key components |
+
+## A4. Competitive Feature Gaps
+
+Features that production API gateways (KrakenD, Tyk, Kong, APISIX) offer
+that Restitch does not. Ordered by user-impact.
+
+Sources: [KrakenD](https://www.krakend.io/), [Tyk](https://tyk.io/),
+[API Gateway Comparison](https://www.moesif.com/blog/technical/api-gateways/How-to-Choose-The-Right-API-Gateway-For-Your-Platform-Comparison-Of-Kong-Tyk-Apigee-And-Alternatives/),
+[Open Source Gateways 2026](https://daily.dev/blog/top-6-open-source-api-gateway-frameworks/),
+[APISIX Comparison](https://api7.ai/learning-center/api-gateway-guide/api-gateway-comparison-apisix-kong-traefik-krakend-tyk)
+
+### Tier 1 — Expected by users (competitive table stakes)
+
+| Feature | KrakenD | Tyk | Kong | Restitch | Priority |
+|---------|---------|-----|------|----------|----------|
+| **Rate limiting** (per-client, per-endpoint) | Token bucket, multi-layer | Built-in, per-key/per-endpoint | Plugin (rate-limiting) | Missing | High |
+| **Request/response payload size limits** | Configurable per-endpoint | Configurable | Plugin | Hard-coded 1MiB, not configurable | High |
+| **Request schema validation** (JSON Schema) | Built-in | Built-in | Plugin | Missing | Medium |
+| **OpenTelemetry / distributed tracing** | Plugin | Built-in | Plugin | Header propagation only, no span generation | Medium |
+| **Response transformation** (field filtering, renaming) | Built-in (flatmap, allow/deny lists) | Built-in | Plugin | Template-only (powerful but no declarative filtering) | Low |
+| **IP allow/deny lists** | Built-in | Built-in | Plugin | Missing | Medium |
+
+### Tier 2 — Differentiators (not expected but valuable)
+
+| Feature | Who has it | Restitch | Notes |
+|---------|-----------|----------|-------|
+| **GraphQL composition** | Tyk (Universal Data Graph), Apollo | N/A | REST-only is Restitch's niche — not a gap |
+| **gRPC support** | Kong, Tyk, APISIX | N/A | REST-only scope |
+| **WebSocket proxying** | Kong, APISIX | N/A | Not in scope |
+| **Plugin/WASM extensibility** | KrakenD, Kong, APISIX | Deferred (M16) | Already noted |
+| **Developer portal** | Tyk, Kong, Apigee | Missing | Enterprise feature — v2+ |
+| **Canary/traffic splitting** | Kong, Tyk | Missing | v2+ |
+| **Request body passthrough** (non-JSON) | Most | Missing | Only JSON POST bodies parsed |
+
+### Tier 3 — Restitch competitive advantages
+
+| Feature | vs. Competition |
+|---------|----------------|
+| **Declarative DAG composition** | Unique — KrakenD aggregates but doesn't support multi-wave DAGs with dependency inference |
+| **Expression-based wiring** | More flexible than KrakenD's flatmap; comparable to Tyk's Universal Data Graph but for REST |
+| **Studio UI with execution overlay** | No competitor offers a built-in DAG visualization with live trace overlay |
+| **Partial responses** | Built-in with `optional` steps — most gateways fail the whole request |
+| **Config-as-code with hot reload** | On par with KrakenD; better than Kong (requires DB) |
+
+## A5. Proposed New Milestones
+
+### M16 — Production Hardening (pre-v1 release) [DONE]
+
+Priority: **Must complete before any production deployment.**
+
+| Task | Description | Files | Status |
+|------|-------------|-------|--------|
+| T16.1 | Add HTTP timeouts to admin server (A2.1) | `internal/admin/server.go` | DONE |
+| T16.2 | Add `ReadHeaderTimeout` to gateway server (A2.2) | `internal/server/server.go` | DONE |
+| T16.3 | Restrict admin CORS when API key is set (A2.3) | `internal/admin/server.go` | DONE |
+| T16.4 | Push SQL filters to QueryRequests query (A2.4) | `internal/admin/sql_storage.go` | DONE |
+| T16.5 | Flush accumulator on shutdown (A3.1) | `cmd/restitch/run.go` | DONE |
+| T16.6 | Validate upstream URLs at config time (A3.2) | `internal/composition/parser.go` | DONE |
+| T16.7 | Fix `handleValidate` body read (A3.4) | `internal/admin/server.go` | DONE |
+| T16.8 | Validate `admin.storage` config (A3.9) | `internal/gwconfig/config.go` | DONE |
+| T16.9 | Warn when `InsecureSkipVerify` is enabled (A3.8) | `internal/upstream/client.go` | DONE |
+| T16.10 | Update PLAN.md for drift items (A1.1–A1.10) | `PLAN.md` | DONE |
+
+Verification: `go build ./... && go vet ./... && go test ./... -count=1`
+green; admin server withstands `slowhttptest` without leaking connections.
+
+### M17 — Rate Limiting & Request Validation [DONE]
+
+Priority: **High — competitive table stakes.**
+
+| Task | Description |
+|------|-------------|
+| T17.1 | Per-composition token-bucket rate limiter with configurable burst, rate, and key extraction (client IP / API key / header). Config under `compositions.*.rate_limit: { requests_per_second: 100, burst: 10, key: "header:X-Client-ID" }`. Use `golang.org/x/time/rate`. |
+| T17.2 | Global gateway rate limiter (admin config). Reject with 429 + `Retry-After` header. |
+| T17.3 | Configurable request body size limit per composition (`max_request_bytes`, default 1MiB). Return 413 when exceeded. |
+| T17.4 | Optional JSON Schema validation for request body (`request_schema` field on composition). Validate before executing steps. Reject with 400 + structured error. |
+| T17.5 | Admin API rate limiter — simple per-IP limit on mutation endpoints (`/reload`, `/validate`). |
+
+### M18 — Observability: OpenTelemetry Tracing [DONE]
+
+Priority: **Medium — important for production debugging at scale.**
+
+| Task | Description |
+|------|-------------|
+| T18.1 | Add `go.opentelemetry.io/otel` SDK. Create/continue server spans at the gateway for each composition request. |
+| T18.2 | Create child spans per step execution. Attach step name, upstream, wave, status as span attributes. |
+| T18.3 | Propagate `traceparent`/`tracestate` to upstream requests (already partially done — formalize). |
+| T18.4 | Configure exporter via env vars (`OTEL_EXPORTER_OTLP_ENDPOINT`, standard OTel env config). |
+| T18.5 | Add trace ID to Studio request records. Show trace ID in the request explorer with a link to external trace viewer. |
+
+### M19 — CI & Test Hardening [DONE]
+
+Priority: **Medium — prevents regressions.**
+
+| Task | Description |
+|------|-------------|
+| T19.1 | Add `e2e` CI job (T14.2 — currently missing). Run binary specs + E2E Go tests. |
+| T19.2 | Remove `continue-on-error: true` from studio CI test step. |
+| T19.3 | Add smoke-render tests for key Studio components (Dashboard, Requests, CompositionDetail). |
+| T19.4 | Add E2E test for admin integration path: data-plane request → ring buffer → admin API response → time-series storage. |
+| T19.5 | Add expression-typo detection: config warning when a `{{ steps.X.body }}` reference doesn't match any step name. |
+
+---
+
+# Future Milestones — Candidates from `experimental/v1.1-v1.2`
+
+The `experimental/v1.1-v1.2` branch (preserved on remote) contains prior
+implementations of features not yet on the main development branch. The code
+below is reference material — not copy-paste-ready — but captures proven
+designs worth adopting. Milestones are numbered M20+ to avoid collisions.
+
+## M20 — Config Registry & Centralized Management
+
+Priority: **High — enables Studio-driven config workflow.**
+
+Replaces file-based config distribution with a database-backed registry.
+Compositions are created/edited/versioned through the Studio API, validated
+by running them through the gateway parser before saving.
+
+| Task | Description |
+|------|-------------|
+| T20.1 | Config registry domain types: `Config`, `ConfigVersion`, `CreateConfigInput`, `UpdateConfigInput`. ULID-based IDs, semantic versioning per config, `active` flag for the live version. |
+| T20.2 | Registry store with CRUD operations: create, list, get, update, delete, activate a version, diff between versions. Store in SQLite (dev) / Postgres (prod) via the existing `db` package. |
+| T20.3 | Validation layer: parse YAML → compile composition → build a handler to verify correctness before persisting. Return structured validation errors on failure. |
+| T20.4 | YAML bundle generation: `GET /api/v1/registry/bundle` returns all active configs as a single YAML document. SHA-256 ETag for change detection. |
+| T20.5 | CRUD API endpoints under `/api/v1/configs`: create, list, get, update, delete, activate, diff. Huma-registered with OpenAPI docs. |
+| T20.6 | Database migration for registry schema (configs table, config_versions table). |
+
+Reference: `experimental/v1.1-v1.2` → `internal/studio/registry/`, `internal/studio/api/configs.go`, `internal/studio/api/configs_polling.go`, `internal/studio/db/migrations/`
+
+### M20 Verification gate
+
+```
+curl -X POST localhost:8090/api/v1/configs -d '{"name":"test","yaml":"..."}' → 201
+curl localhost:8090/api/v1/configs → list with version history
+curl localhost:8090/api/v1/registry/bundle → YAML bundle with ETag header
+# Repeat bundle request with If-None-Match → 304
+# Invalid YAML → 400 with validation errors
+```
+
+---
+
+## M21 — Gateway Registry Polling (extends M10)
+
+Priority: **High — closes the centralized config loop.**
+
+Adds a registry polling mode to the gateway as an alternative to file-watching.
+The gateway periodically fetches the config bundle from Studio's registry
+endpoint, using ETag-based change detection and exponential backoff on errors.
+
+| Task | Description |
+|------|-------------|
+| T21.1 | Registry HTTP client: fetch `GET /api/v1/registry/bundle` with `If-None-Match` ETag support. Return `FetchResult` with YAML bytes, ETag, composition count, and change flag. |
+| T21.2 | Polling engine with exponential backoff (cenkalti/backoff). Classify errors: `ErrorTypeFetch` (network), `ErrorTypeInvalidConfig` (bad YAML), `ErrorTypeReload` (swap failed). Backoff on transient errors, stop on persistent config errors. |
+| T21.3 | Wire registry mode into gateway CLI: `--config-source=registry --registry-url=http://studio:8090`. Mutually exclusive with `--config` file mode. |
+| T21.4 | Status endpoint: expose last poll time, ETag, composition count, error state via the admin API `/admin/api/registry/status`. |
+| T21.5 | SIGHUP triggers immediate poll (skip backoff timer). |
+
+Reference: `experimental/v1.1-v1.2` → `internal/hotreload/poller.go`, `internal/hotreload/registry_client.go`, `internal/hotreload/signals.go`, `cmd/restitch/cmd/gateway.go`
+
+### M21 Verification gate
+
+```
+# Start gateway in registry mode pointing at Studio
+restitch gateway --config-source=registry --registry-url=http://localhost:8090
+# Verify it loads compositions from Studio bundle
+curl localhost:8081/admin/api/registry/status → last_poll, etag, count
+# Update a config in Studio → gateway picks it up within poll interval
+# Kill Studio → gateway retries with backoff, keeps serving last known config
+# Send SIGHUP → immediate poll
+```
+
+---
+
+## M22 — Dev Mode Orchestrator (extends M11)
+
+Priority: **Medium — developer experience.**
+
+`restitch dev` runs gateway + studio together with process management,
+auto-restart on crash, and colored log output for local development.
+
+| Task | Description |
+|------|-------------|
+| T22.1 | `ProcessManager`: spawn and supervise child processes with configurable restart policy using exponential backoff (initial 1s, max 30s). Reset backoff after process is stable for a configurable duration. |
+| T22.2 | `PrefixWriter`: wrap each child's stdout/stderr with a colored prefix (`[gateway]` blue, `[studio]` green) using `fatih/color`. Thread-safe via mutex. |
+| T22.3 | Health-check waiting: `WaitForHealth(url, timeout)` polls a health endpoint before considering a process ready. |
+| T22.4 | `restitch dev` CLI subcommand: fixed ports (gateway 8080, admin 8081, studio 8090), passes `ExtraEnv` to child processes (e.g. OTEL config), graceful shutdown on SIGINT/SIGTERM. |
+| T22.5 | Support `--gateway-args` and `--studio-args` for passing through flags to child processes. |
+
+Reference: `experimental/v1.1-v1.2` → `internal/devmode/manager.go`, `internal/devmode/writer.go`, `cmd/restitch/cmd/dev.go`
+
+### M22 Verification gate
+
+```
+restitch dev
+# Both gateway and studio start, logs are color-prefixed
+# Kill gateway process → auto-restarts within backoff interval
+# Ctrl+C → both processes shut down cleanly
+```
+
+---
+
+## M23 — Upstream HTTP Client Optimization (extends M5)
+
+Priority: **Medium — performance under load.**
+
+| Task | Description |
+|------|-------------|
+| T23.1 | Set `MaxIdleConnsPerHost: 100` on the upstream HTTP transport (Go default is 2, causing 4-5x latency penalty under concurrent fan-out). Enforce TLS 1.2 minimum. |
+| T23.2 | Add `DrainAndClose` helper: drain response body before closing to return connections to the pool instead of destroying them. Use in all upstream response handling paths. |
+| T23.3 | Make `MaxIdleConnsPerHost` configurable per-upstream in composition YAML: `upstreams.*.pool: { max_idle: 100 }`. |
+
+Reference: `experimental/v1.1-v1.2` → `internal/client/client.go`
+
+### M23 Verification gate
+
+```
+# Load test with k6: fan-out composition hitting 5 upstreams
+# Before: observe connection churn in netstat, P95 latency > 200ms
+# After: stable idle connections, P95 latency < 50ms
+```
+
+---
+
+## M24 — Production Monitoring & Load Testing (extends M14, M15)
+
+Priority: **Medium — operational readiness.**
+
+| Task | Description |
+|------|-------------|
+| T24.1 | Prometheus recording rules: pre-compute dashboard queries (composition request rate, P50/P95/P99 latency, error rate by composition). |
+| T24.2 | Prometheus alert rules: P95 latency > threshold (configurable, default 1s), error rate > 5% sustained 5m, config reload failures, gateway down. |
+| T24.3 | k6 load test script: exercise gateway compositions and Studio API at ~1000 RPS (50 VUs). Thresholds: P95 < 1s, error rate < 1%. Run as part of CI on release branches. |
+| T24.4 | Docker Compose production stack: gateway, studio, Prometheus, Jaeger, with `deploy/` directory containing all configs, `.env.example`, and a `docker-compose.yml`. |
+
+Reference: `experimental/v1.1-v1.2` → `deploy/prometheus/`, `test/loadtest.js`, `deploy/docker-compose.yml`
+
+### M24 Verification gate
+
+```
+docker compose -f deploy/docker-compose.yml up -d
+# Prometheus loads rules without error
+# Trigger alert condition → alert fires
+# k6 run test/loadtest.js → all thresholds pass
+```
+
+---
+
+## M25 — Browser Session & User Preferences (extends M12)
+
+Priority: **Low — quality-of-life for Studio users.**
+
+| Task | Description |
+|------|-------------|
+| T25.1 | Browser session middleware: set `restitch_browser_id` cookie (256-bit random, 1-year expiry, `HttpOnly`, `SameSite=Strict`). Store sessions in DB. No login required. |
+| T25.2 | Preferences CRUD API: `GET/PUT /api/v1/preferences` scoped to browser session. Store pinned compositions, sidebar collapsed state, default time range. |
+| T25.3 | Database migration for browser_sessions table. |
+| T25.4 | Wire preferences into Studio frontend: pin button on composition cards, persist sidebar state, restore on reload. |
+
+Reference: `experimental/v1.1-v1.2` → `internal/studio/session/session.go`, `internal/studio/api/preferences.go`
+
+### M25 Verification gate
+
+```
+# Open Studio in browser → cookie is set
+curl -b cookies.txt localhost:8090/api/v1/preferences → empty prefs
+curl -X PUT -b cookies.txt localhost:8090/api/v1/preferences -d '{"pinned":["comp-1"]}' → 200
+# Refresh browser → pinned compositions persist
+# Different browser → independent preferences
+```
 

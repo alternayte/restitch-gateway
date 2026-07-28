@@ -7,10 +7,25 @@ import (
 )
 
 // StepErrorDetail represents a single step failure for the _errors array.
-// Per CONTEXT.md: contains step name + error message (not status codes or timing).
 type StepErrorDetail struct {
 	Step    string `json:"step"`
 	Message string `json:"message"`
+	Status  string `json:"status"` // "failed" or "skipped"
+}
+
+// RequiredStepError is returned by Execute when a required step fails.
+// It carries the step name so the handler can include it in the error response.
+type RequiredStepError struct {
+	Step string
+	Err  error
+}
+
+func (e *RequiredStepError) Error() string {
+	return fmt.Sprintf("required step %q failed: %v", e.Step, e.Err)
+}
+
+func (e *RequiredStepError) Unwrap() error {
+	return e.Err
 }
 
 // stepError is an internal type for collecting errors during execution.
@@ -44,7 +59,9 @@ func SanitizeErrorMessage(err error) string {
 	if errors.Is(err, ErrRuleMatched) {
 		return "error rule matched"
 	}
-	// Don't expose internal details
+	if err != nil && err.Error() == "dependency_failed" {
+		return "dependency_failed"
+	}
 	return "upstream error"
 }
 
@@ -56,9 +73,15 @@ func BuildErrorsArray(stepErrors []stepError) []StepErrorDetail {
 
 	details := make([]StepErrorDetail, len(stepErrors))
 	for i, se := range stepErrors {
+		msg := SanitizeErrorMessage(se.err)
+		status := "failed"
+		if msg == "dependency_failed" {
+			status = "skipped"
+		}
 		details[i] = StepErrorDetail{
 			Step:    se.stepName,
-			Message: SanitizeErrorMessage(se.err),
+			Message: msg,
+			Status:  status,
 		}
 	}
 	return details

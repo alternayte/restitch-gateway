@@ -1,0 +1,15 @@
+{
+  "name": "partial response - optional step failure",
+  "in": {
+    "method": "GET",
+    "path": "/partial",
+    "headers": {}
+  },
+  "out": {
+    "status": 200,
+    "headers": {
+      "X-Restitch-Complete": "false"
+    },
+    "body_contains": ["user-1", "_errors"]
+  }
+}

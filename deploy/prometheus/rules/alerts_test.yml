@@ -1,0 +1,193 @@
+# Unit tests for alerts.yml. recording.yml is loaded too because three of the
+# four alerts are expressed over recorded series — that coupling is exactly
+# what these tests exist to protect.
+rule_files:
+  - recording.yml
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # --- RestitchHighErrorRate: POSITIVE (10% > 5% threshold) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_requests_total{composition="orders",method="GET",status="200"}'
+        values: '0+54x20'
+      - series: 'restitch_requests_total{composition="orders",method="GET",status="500"}'
+        values: '0+6x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchHighErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              composition: orders
+            # promtool compares annotations too: omitting exp_annotations
+            # asserts they are EMPTY, which fails against any alert that has
+            # them. The rendered text is asserted verbatim, so an accidental
+            # edit to a summary/description is caught here.
+            exp_annotations:
+              summary: "5xx rate above 5% for composition orders"
+              description: "Error ratio is 10% over the last 5m."
+
+  # --- RestitchHighErrorRate: NEGATIVE (1% < 5% threshold) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_requests_total{composition="orders",method="GET",status="200"}'
+        values: '0+99x20'
+      - series: 'restitch_requests_total{composition="orders",method="GET",status="500"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchHighErrorRate
+        exp_alerts: []
+
+  # --- RestitchHighErrorRate: TRANSIENT (ratio > 5% for a few minutes, then
+  #     drops back below threshold before the 5m `for:` window elapses) ---
+  # Errors ramp for two ticks then stop; successes keep climbing steadily, so
+  # the ratio decays back under 5% well before eval_time. A `for:` shortened
+  # below ~4m would page on this blip; the real 5m `for:` must stay silent.
+  - interval: 1m
+    input_series:
+      - series: 'restitch_requests_total{composition="blip",method="GET",status="200"}'
+        values: '0+54x20'
+      - series: 'restitch_requests_total{composition="blip",method="GET",status="500"}'
+        values: '0+6x2 12x18'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: RestitchHighErrorRate
+        exp_alerts: []
+
+  # --- RestitchHighP95Latency: POSITIVE (all observations in the +Inf bucket
+  #     above 1s => p95 > 1) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_request_duration_seconds_bucket{composition="slow",le="0.5"}'
+        values: '0+0x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="slow",le="1"}'
+        values: '0+0x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="slow",le="2.5"}'
+        values: '0+60x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="slow",le="+Inf"}'
+        values: '0+60x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchHighP95Latency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              composition: slow
+            # 2.425s is the interpolated p95 for these buckets — verified by
+            # running promtool, not estimated.
+            exp_annotations:
+              summary: "P95 latency above 1s for composition slow"
+              description: "P95 is 2.425s over the last 5m."
+
+  # --- RestitchHighP95Latency: NEGATIVE (everything under 0.5s) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_request_duration_seconds_bucket{composition="fast",le="0.5"}'
+        values: '0+60x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="fast",le="1"}'
+        values: '0+60x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="fast",le="2.5"}'
+        values: '0+60x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="fast",le="+Inf"}'
+        values: '0+60x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchHighP95Latency
+        exp_alerts: []
+
+  # --- RestitchHighP95Latency: TRANSIENT (p95 > 1s for a few minutes, then
+  #     drops back under threshold before the 5m `for:` window elapses) ---
+  # A 2-tick burst lands entirely in the +Inf bucket (>2.5s observations);
+  # once the burst stops, all further observations land in the 0.5s bucket,
+  # so the interpolated p95 decays back under 1s well before eval_time. A
+  # `for:` shortened below ~4m would page on this transient spike; the real
+  # 5m `for:` must stay silent.
+  - interval: 1m
+    input_series:
+      - series: 'restitch_request_duration_seconds_bucket{composition="blip",le="0.5"}'
+        values: '0x2 0+60x18'
+      - series: 'restitch_request_duration_seconds_bucket{composition="blip",le="1"}'
+        values: '0x2 0+60x18'
+      - series: 'restitch_request_duration_seconds_bucket{composition="blip",le="2.5"}'
+        values: '0x2 0+60x18'
+      - series: 'restitch_request_duration_seconds_bucket{composition="blip",le="+Inf"}'
+        values: '0+60x2 180+60x18'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: RestitchHighP95Latency
+        exp_alerts: []
+
+  # --- RestitchConfigReloadFailing: POSITIVE (sustained failures past 10m) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_registry_polls_total{result="error"}'
+        values: '0+6x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchConfigReloadFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              result: error
+            exp_annotations:
+              summary: "Gateway registry polls have been failing for 10m"
+              description: "Failing poll rate is 0.1/s. The gateway keeps serving its last known good config."
+
+  # --- RestitchConfigReloadFailing: NEGATIVE (only successful polls) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_registry_polls_total{result="success"}'
+        values: '0+6x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchConfigReloadFailing
+        exp_alerts: []
+
+  # --- RestitchConfigReloadFailing: TRANSIENT (failures for ~6m, then the
+  #     poller recovers, checked before the 10m `for:` window elapses) ---
+  # This is the case alerts.yml:31-34 documents: a transient fetch failure is
+  # normal self-healing (exponential backoff retry) and must NOT page. The
+  # rate condition decays back toward 0 once polls stop failing, but not
+  # instantly (the [5m] window trails), so eval_time: 8m still reads a
+  # nonzero failing rate. The 10m `for:` catches that this is still within
+  # its window (elapsed true duration since t=0 is only 8m); anything
+  # shorter would already have fired.
+  - interval: 1m
+    input_series:
+      - series: 'restitch_registry_polls_total{result="error"}'
+        values: '0+6x6 36x14'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: RestitchConfigReloadFailing
+        exp_alerts: []
+
+  # --- RestitchGatewayDown: POSITIVE ---
+  - interval: 1m
+    input_series:
+      - series: 'up{job="restitch-gateway",instance="gateway:9090"}'
+        values: '0 0 0 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RestitchGatewayDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: restitch-gateway
+              instance: gateway:9090
+            exp_annotations:
+              summary: "Gateway target gateway:9090 is down"
+              description: "Prometheus has failed to scrape the gateway for 2m."
+
+  # --- RestitchGatewayDown: NEGATIVE ---
+  - interval: 1m
+    input_series:
+      - series: 'up{job="restitch-gateway",instance="gateway:9090"}'
+        values: '1 1 1 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RestitchGatewayDown
+        exp_alerts: []

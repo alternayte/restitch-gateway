@@ -1,10 +1,7 @@
 package auth
 
 import (
-	"fmt"
 	"net/http"
-
-	"github.com/restitch/restitch-gateway/internal/config"
 )
 
 // BasicStrategy implements HTTP Basic Authentication for upstream services.
@@ -20,16 +17,7 @@ type BasicStrategy struct {
 // Both username and password are expanded using environment variables at creation time.
 // Returns an error if referenced environment variables are missing or empty.
 func NewBasicStrategy(cfg *BasicConfig) (*BasicStrategy, error) {
-	// Expand environment variables with validation
-	username, err := config.ExpandEnvWithValidation(cfg.Username)
-	if err != nil {
-		return nil, fmt.Errorf("basic auth username: %w", err)
-	}
-	password, err := config.ExpandEnvWithValidation(cfg.Password)
-	if err != nil {
-		return nil, fmt.Errorf("basic auth password: %w", err)
-	}
-	return &BasicStrategy{username: username, password: password}, nil
+	return &BasicStrategy{username: cfg.Username, password: cfg.Password}, nil
 }
 
 // RoundTripper returns an http.RoundTripper that injects Basic auth header.

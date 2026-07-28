@@ -1,0 +1,24 @@
+upstreams:
+  svc:
+    url: "http://localhost:9999"
+compositions:
+  test:
+    path: /test
+    steps:
+      - name: a
+        upstream: svc
+        path: /a
+      - name: b
+        upstream: svc
+        path: "/b/{{ steps.a.body.id }}"
+      - name: c
+        upstream: svc
+        path: "/c/{{ steps.a.body.id }}"
+      - name: d
+        upstream: svc
+        path: "/d"
+        depends_on: [b, c]
+    response:
+      status: 200
+      body:
+        result: "{{ steps.d.body }}"

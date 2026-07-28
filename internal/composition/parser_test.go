@@ -1,7 +1,10 @@
 package composition
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"os"
 	"strings"
 	"testing"
 )
@@ -36,7 +39,6 @@ compositions:
 		t.Fatalf("ParseConfig failed: %v", err)
 	}
 
-	// Verify upstreams
 	if len(cfg.Upstreams) != 2 {
 		t.Errorf("expected 2 upstreams, got %d", len(cfg.Upstreams))
 	}
@@ -45,7 +47,6 @@ compositions:
 		t.Errorf("user-service URL mismatch")
 	}
 
-	// Verify composition
 	comp, exists := cfg.Compositions["user-with-orders"]
 	if !exists {
 		t.Fatal("composition user-with-orders not found")
@@ -55,7 +56,6 @@ compositions:
 		t.Errorf("expected path /api/user-orders, got %s", comp.Path)
 	}
 
-	// Verify defaults applied
 	if comp.Method != "GET" {
 		t.Errorf("expected default method GET, got %s", comp.Method)
 	}
@@ -64,7 +64,6 @@ compositions:
 		t.Errorf("expected default content_type application/json, got %s", comp.Response.ContentType)
 	}
 
-	// Verify steps
 	if len(comp.Steps) != 2 {
 		t.Fatalf("expected 2 steps, got %d", len(comp.Steps))
 	}
@@ -210,33 +209,30 @@ compositions:
 		t.Error("CompiledConfig should reference original config")
 	}
 
-	// Check compiled composition exists
 	comp, exists := compiled.Compositions["test"]
 	if !exists {
 		t.Fatal("compiled composition test not found")
 	}
 
-	// Check compiled step
 	step, exists := comp.Steps["user"]
 	if !exists {
 		t.Fatal("compiled step user not found")
 	}
 
-	if step.PathExpr == nil {
-		t.Error("step path expression should be compiled")
+	if step.PathPart == nil {
+		t.Error("step path template should be compiled")
 	}
 
-	if step.PathExpr.Raw == "" {
-		t.Error("compiled expression should have raw value")
+	if step.PathPart.Raw == "" {
+		t.Error("compiled template should have raw value")
 	}
 
-	// Check compiled response
 	if comp.Response == nil {
 		t.Fatal("compiled response should exist")
 	}
 
-	if len(comp.Response.BodyExprs) == 0 {
-		t.Error("response body expressions should be compiled")
+	if comp.Response.Body == nil {
+		t.Error("response body should be compiled")
 	}
 }
 
@@ -342,27 +338,27 @@ compositions:
 	}
 
 	comp := compiled.Compositions["test"]
-	if len(comp.Response.BodyExprs) < 3 {
-		t.Errorf("expected at least 3 compiled body expressions, got %d", len(comp.Response.BodyExprs))
+	if comp.Response.Body == nil {
+		t.Fatal("compiled response body should exist")
 	}
 
-	// Check that nested paths are compiled
-	foundUserID := false
-	foundOrders := false
-	for path := range comp.Response.BodyExprs {
-		if strings.Contains(path, "user.id") {
-			foundUserID = true
-		}
-		if strings.Contains(path, "orders") {
-			foundOrders = true
-		}
+	// Verify the body tree has the expected structure
+	if comp.Response.Body.Map == nil {
+		t.Fatal("expected body to be a map node")
 	}
 
-	if !foundUserID {
-		t.Error("expected user.id expression to be compiled")
+	userNode, ok := comp.Response.Body.Map["user"]
+	if !ok || userNode.Map == nil {
+		t.Fatal("expected user to be a map node")
 	}
-	if !foundOrders {
-		t.Error("expected orders expression to be compiled")
+
+	if _, ok := userNode.Map["id"]; !ok {
+		t.Error("expected user.id node")
+	}
+
+	ordersNode, ok := comp.Response.Body.Map["orders"]
+	if !ok || ordersNode.Tmpl == nil {
+		t.Error("expected orders to be a template node")
 	}
 }
 
@@ -443,7 +439,6 @@ compositions:
 }
 
 func TestCompileConfig_AuthHeaderStrategy(t *testing.T) {
-	// Set up test env var
 	t.Setenv("TEST_API_KEY", "test-key-123")
 
 	yaml := `
@@ -477,19 +472,14 @@ compositions:
 		t.Fatalf("CompileConfig failed: %v", err)
 	}
 
-	// Verify upstream has compiled auth strategy
-	upstream, exists := compiled.Upstreams["api"]
+	_, exists := compiled.Upstreams["api"]
 	if !exists {
 		t.Fatal("upstream api not found in compiled config")
 	}
-
-	if upstream.Auth == nil {
-		t.Error("expected auth strategy to be compiled")
-	}
 }
 
-func TestCompileConfig_AuthMissingEnvVar(t *testing.T) {
-	yaml := `
+func TestLoadConfigFile_AuthMissingEnvVar(t *testing.T) {
+	yamlContent := `
 upstreams:
   api:
     url: "http://localhost:8080"
@@ -509,15 +499,13 @@ compositions:
       status: 200
       body: {}
 `
+	dir := t.TempDir()
+	path := dir + "/test.yaml"
+	_ = os.WriteFile(path, []byte(yamlContent), 0644)
 
-	cfg, err := ParseConfig([]byte(yaml))
-	if err != nil {
-		t.Fatalf("ParseConfig failed: %v", err)
-	}
-
-	_, err = CompileConfig(context.Background(), cfg)
+	_, err := LoadConfigFile(path)
 	if err == nil {
-		t.Fatal("expected error for missing env var")
+		t.Fatal("expected error for missing env var at load time")
 	}
 
 	if !strings.Contains(err.Error(), "NONEXISTENT_VAR") {
@@ -593,13 +581,52 @@ compositions:
 		t.Fatalf("CompileConfig failed: %v", err)
 	}
 
-	// Verify upstream has no auth strategy (nil)
-	upstream, exists := compiled.Upstreams["api"]
+	_, exists := compiled.Upstreams["api"]
 	if !exists {
 		t.Fatal("upstream api not found in compiled config")
 	}
+}
 
-	if upstream.Auth != nil {
-		t.Error("expected no auth strategy for upstream without auth config")
+func TestCompileConfig_UnknownStepRefWarning(t *testing.T) {
+	// Capture slog output to verify warnings are logged.
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(oldLogger)
+
+	yaml := `
+upstreams:
+  api:
+    url: "http://localhost:8080"
+
+compositions:
+  test:
+    path: "/test"
+    steps:
+      - name: user
+        upstream: api
+        path: "/users/1"
+    response:
+      status: 200
+      body:
+        data: "{{ steps.usre.body }}"
+`
+
+	cfg, err := ParseConfig([]byte(yaml))
+	if err != nil {
+		t.Fatalf("ParseConfig failed: %v", err)
+	}
+
+	// CompileConfig may return an error (from DAG validation),
+	// but the warning should still be logged before that.
+	_, _ = CompileConfig(context.Background(), cfg)
+
+	logged := buf.String()
+	if !strings.Contains(logged, "template references unknown step") {
+		t.Errorf("expected warning about unknown step reference, got: %s", logged)
+	}
+	if !strings.Contains(logged, "usre") {
+		t.Errorf("expected warning to mention 'usre', got: %s", logged)
 	}
 }

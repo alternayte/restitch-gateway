@@ -1,0 +1,34 @@
+services:
+  mockupstream:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["/mockupstream", "-port", "8081"]
+    ports:
+      - "8081:8081"
+
+  restitch:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["/restitch", "run", "-config", "/etc/restitch/restitch.yaml"]
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    volumes:
+      - ./restitch.yaml:/etc/restitch/restitch.yaml:ro
+    depends_on:
+      - mockupstream
+
+  restitch-studio:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command: ["/restitch-studio"]
+    environment:
+      STUDIO_GATEWAY_ADMIN_URL: "http://restitch:9090"
+      STUDIO_PORT: "3080"
+    ports:
+      - "3080:3080"
+    depends_on:
+      - restitch

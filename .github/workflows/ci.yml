@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  # Scoped deliberately. An unrestricted `push:` fires alongside
+  # `pull_request:` for every branch that has an open PR, running the whole
+  # suite twice on the same commit. Pushes now cover only the branches that
+  # have no PR to run them — the trunk, release branches and tags — and
+  # everything else is covered by the pull_request trigger.
+  push:
+    branches: [main, 'release/**']
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A second push to a branch supersedes the first; cancel the in-flight run
+# rather than paying for a result nobody will read. Release branches and tags
+# are excluded so a run that gates a shipping artifact always completes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/heads/release/') && !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - run: go vet ./...
+
+      - uses: golangci/golangci-lint-action@v9
+
+      - run: go test -race ./...
+
+      - run: go build ./...
+
+      - name: Coverage check
+        run: |
+          go test -coverprofile=coverage.out ./internal/...
+          TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${TOTAL}%"
+          if [ "$(echo "$TOTAL < 70" | bc -l)" = "1" ]; then
+            echo "Coverage ${TOTAL}% is below 70% threshold"
+            exit 1
+          fi
+
+  studio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: studio/package-lock.json
+
+      - run: npm ci
+        working-directory: studio
+
+      - name: Test
+        run: npm run test -- --passWithNoTests
+        working-directory: studio
+
+      - run: npm run build
+        working-directory: studio
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t restitch:ci .
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -tags e2e ./tests/... -count=1 -v
+
+  loadtest:
+    # Release branches and tags only. A hard latency threshold on every push
+    # would flake on shared-runner noise; here it gates the things that ship.
+    # workflow_dispatch allows a manual run on any branch.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/heads/release/') ||
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: grafana/setup-k6-action@v1
+
+      - name: Build binaries
+        run: |
+          go build -o bin/restitch ./cmd/restitch
+          go build -o bin/mockupstream ./cmd/mockupstream
+
+      # Binaries, not compose: this measures gateway throughput, and putting
+      # Docker networking between k6 and the gateway would measure the bridge.
+      - name: Start mockupstream and gateway
+        run: |
+          ./bin/mockupstream -port 18081 &
+          cat > /tmp/ci_load.yaml <<'YAML'
+          upstreams:
+            mock:
+              url: "http://127.0.0.1:18081"
+              timeout: 10s
+              transport:
+                max_idle_conns_per_host: 100
+          compositions:
+            loadtest:
+              path: "/loadtest"
+              method: GET
+              steps:
+                - name: s1
+                  upstream: mock
+                  path: "/users/1"
+              response:
+                body:
+                  name: "{{ steps.s1.body.name }}"
+          YAML
+          ./bin/restitch run -config /tmp/ci_load.yaml -port 18080 -log-format json &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:18080/loadtest >/dev/null && break
+            sleep 1
+          done
+
+      # Reduced profile: a 2-core shared runner cannot honestly sustain the
+      # gate's 1000/s. STUDIO_URL is intentionally unset, so the k6 script
+      # omits its studio scenario entirely.
+      - name: Run k6 load test
+        env:
+          RATE: "200"
+          DURATION: "30s"
+          # Deliberately permissive: this is a MEASURING run, not a gating one.
+          # The real threshold is ceil(observed_p95 * 2 / 50) * 50, which cannot
+          # be derived until a shared runner has actually been measured. The
+          # previous literal "REPLACE_IN_STEP_6" made k6 reject the threshold at
+          # startup, so the job died before producing any p95 to compute from.
+          # Replace with the computed value once a run has reported one.
+          P95_MS: "100000"
+          ERR_RATE: "0.01"
+          GW_URL: "http://127.0.0.1:18080/loadtest"
+          SUMMARY_OUT: "/tmp/m24_ci_summary.json"
+        run: k6 run tests/loadtest/m24_baseline.js
+
+      - name: Show summary
+        if: always()
+        run: cat /tmp/m24_ci_summary.json || echo "no summary produced"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-summary
+          path: /tmp/m24_ci_summary.json

@@ -1,0 +1,148 @@
+export interface Info {
+  version: string
+  uptime_seconds: number
+  config_hash: string
+  config_path: string
+}
+
+export interface StepInfo {
+  name: string
+  upstream: string
+  method: string
+  optional: boolean
+  timeout_ms: number
+  depends_on: string[]
+  inferred_deps: string[]
+}
+
+export interface CompositionInfo {
+  name: string
+  path: string
+  method: string
+  public: boolean
+  steps: StepInfo[]
+  waves: string[][]
+}
+
+export interface UpstreamInfo {
+  name: string
+  url: string
+  auth_type: string
+  timeout_ms: number
+  health: { status: string; latency_ms: number; checked_at: string; error?: string }
+}
+
+export interface StepRecord {
+  name: string
+  status: string
+  wave: number
+  duration_ms: number
+  http_status: number
+  upstream: string
+  url: string
+  start_offset_ms: number
+  body_size: number
+  error?: string
+  cached: boolean
+  retries: number
+}
+
+export interface RequestRecord {
+  id: string
+  time: string
+  composition: string
+  method: string
+  path: string
+  status: number
+  duration_ms: number
+  partial: boolean
+  steps: StepRecord[]
+}
+
+export interface StatsResponse {
+  total_requests: number
+  total_errors: number
+  partial_responses: number
+  per_composition: Record<string, { count: number; errors: number; avg_ms: number; p95_ms: number }>
+}
+
+export interface ValidateResult {
+  valid: boolean
+  errors: string[]
+}
+
+export interface TimeSeriesBucket {
+  timestamp: string
+  composition: string
+  requests: number
+  errors: number
+  partials: number
+  latency_p50: number
+  latency_p95: number
+  latency_p99: number
+  latency_buckets: number[]
+  step_metrics: Record<string, { requests: number; errors: number; avg_ms: number; p95_ms: number }>
+}
+
+export interface StepAggregate {
+  name: string
+  upstream: string
+  requests: number
+  errors: number
+  avg_ms: number
+  p95_ms: number
+  p99_ms: number
+}
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(path, { credentials: "same-origin" })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json()
+}
+
+async function post<T>(path: string, body: string): Promise<T> {
+  const res = await fetch(path, { method: "POST", body, headers: { "Content-Type": "text/plain" } })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json()
+}
+
+export interface PreferencesPayload {
+  pinned_compositions: string[]
+  sidebar_collapsed: boolean
+  default_time_range: string
+}
+
+export interface PreferencesResponse extends PreferencesPayload {
+  initialized: boolean
+}
+
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json()
+}
+
+export const api = {
+  info: () => get<Info>("/api/info"),
+  compositions: () => get<CompositionInfo[]>("/api/compositions"),
+  composition: (name: string) => get<CompositionInfo>(`/api/compositions/${name}`),
+  upstreams: () => get<UpstreamInfo[]>("/api/upstreams"),
+  requests: (limit = 100) => get<RequestRecord[]>(`/api/requests?limit=${limit}`),
+  stats: () => get<StatsResponse>("/api/stats"),
+  validate: (yaml: string) => post<ValidateResult>("/api/validate", yaml),
+  reload: () => post<{ ok: boolean; config_hash?: string; errors?: string[] }>("/api/reload", ""),
+  timeseries: (range: string, resolution: string, composition?: string) =>
+    get<TimeSeriesBucket[]>(`/api/stats/timeseries?range=${range}&resolution=${resolution}${composition ? `&composition=${composition}` : ''}`),
+  stepMetrics: (composition: string, range: string) =>
+    get<StepAggregate[]>(`/api/stats/steps?composition=${composition}&range=${range}`),
+  request: (id: string) =>
+    get<RequestRecord>(`/api/requests/${id}`),
+  getPreferences: () => get<PreferencesResponse>("/api/v1/preferences"),
+  putPreferences: (p: PreferencesPayload) =>
+    put<PreferencesResponse>("/api/v1/preferences", p),
+}
