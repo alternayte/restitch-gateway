@@ -1,0 +1,137 @@
+# Unit tests for alerts.yml. recording.yml is loaded too because three of the
+# four alerts are expressed over recorded series — that coupling is exactly
+# what these tests exist to protect.
+rule_files:
+  - recording.yml
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # --- RestitchHighErrorRate: POSITIVE (10% > 5% threshold) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_requests_total{composition="orders",method="GET",status="200"}'
+        values: '0+54x20'
+      - series: 'restitch_requests_total{composition="orders",method="GET",status="500"}'
+        values: '0+6x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchHighErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              composition: orders
+            # promtool compares annotations too: omitting exp_annotations
+            # asserts they are EMPTY, which fails against any alert that has
+            # them. The rendered text is asserted verbatim, so an accidental
+            # edit to a summary/description is caught here.
+            exp_annotations:
+              summary: "5xx rate above 5% for composition orders"
+              description: "Error ratio is 10% over the last 5m."
+
+  # --- RestitchHighErrorRate: NEGATIVE (1% < 5% threshold) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_requests_total{composition="orders",method="GET",status="200"}'
+        values: '0+99x20'
+      - series: 'restitch_requests_total{composition="orders",method="GET",status="500"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchHighErrorRate
+        exp_alerts: []
+
+  # --- RestitchHighP95Latency: POSITIVE (all observations in the +Inf bucket
+  #     above 1s => p95 > 1) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_request_duration_seconds_bucket{composition="slow",le="0.5"}'
+        values: '0+0x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="slow",le="1"}'
+        values: '0+0x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="slow",le="2.5"}'
+        values: '0+60x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="slow",le="+Inf"}'
+        values: '0+60x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchHighP95Latency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              composition: slow
+            # 2.425s is the interpolated p95 for these buckets — verified by
+            # running promtool, not estimated.
+            exp_annotations:
+              summary: "P95 latency above 1s for composition slow"
+              description: "P95 is 2.425s over the last 5m."
+
+  # --- RestitchHighP95Latency: NEGATIVE (everything under 0.5s) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_request_duration_seconds_bucket{composition="fast",le="0.5"}'
+        values: '0+60x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="fast",le="1"}'
+        values: '0+60x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="fast",le="2.5"}'
+        values: '0+60x20'
+      - series: 'restitch_request_duration_seconds_bucket{composition="fast",le="+Inf"}'
+        values: '0+60x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchHighP95Latency
+        exp_alerts: []
+
+  # --- RestitchConfigReloadFailing: POSITIVE (sustained failures past 10m) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_registry_polls_total{result="error"}'
+        values: '0+6x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchConfigReloadFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              result: error
+            exp_annotations:
+              summary: "Gateway registry polls have been failing for 10m"
+              description: "Failing poll rate is 0.1/s. The gateway keeps serving its last known good config."
+
+  # --- RestitchConfigReloadFailing: NEGATIVE (only successful polls) ---
+  - interval: 1m
+    input_series:
+      - series: 'restitch_registry_polls_total{result="success"}'
+        values: '0+6x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchConfigReloadFailing
+        exp_alerts: []
+
+  # --- RestitchGatewayDown: POSITIVE ---
+  - interval: 1m
+    input_series:
+      - series: 'up{job="restitch-gateway",instance="gateway:9090"}'
+        values: '0 0 0 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RestitchGatewayDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: restitch-gateway
+              instance: gateway:9090
+            exp_annotations:
+              summary: "Gateway target gateway:9090 is down"
+              description: "Prometheus has failed to scrape the gateway for 2m."
+
+  # --- RestitchGatewayDown: NEGATIVE ---
+  - interval: 1m
+    input_series:
+      - series: 'up{job="restitch-gateway",instance="gateway:9090"}'
+        values: '1 1 1 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RestitchGatewayDown
+        exp_alerts: []
