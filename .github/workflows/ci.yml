@@ -132,7 +132,13 @@ jobs:
         env:
           RATE: "200"
           DURATION: "30s"
-          P95_MS: "REPLACE_IN_STEP_6"
+          # Deliberately permissive: this is a MEASURING run, not a gating one.
+          # The real threshold is ceil(observed_p95 * 2 / 50) * 50, which cannot
+          # be derived until a shared runner has actually been measured. The
+          # previous literal "REPLACE_IN_STEP_6" made k6 reject the threshold at
+          # startup, so the job died before producing any p95 to compute from.
+          # Replace with the computed value once a run has reported one.
+          P95_MS: "100000"
           ERR_RATE: "0.01"
           GW_URL: "http://127.0.0.1:18080/loadtest"
           SUMMARY_OUT: "/tmp/m24_ci_summary.json"
