@@ -38,14 +38,22 @@ implemented and verified against the codebase.
 | M24 — Production Monitoring & Load Testing | T24.1–T24.4 | DONE |
 | M25 — Browser Session & User Preferences | T25.1–T25.4 | DONE |
 
-**M24 caveat — the CI load-test job is not yet runnable.** The `loadtest` job
-in `.github/workflows/ci.yml` carries `P95_MS: "REPLACE_IN_STEP_6"`, a literal
-placeholder. k6 will reject that as a threshold, so the job **fails if
-triggered today**. It is gated to `release/*` branches, tags, and
-`workflow_dispatch`, so it does not affect ordinary pushes or PRs. The value
-must be derived from a measured run on a real GitHub runner via
-`ceil(observed_p95 * 2 / 50) * 50`. Everything the M24 gate can verify locally
-passes (27 pass, 0 fail); this one step needs CI infrastructure.
+**M24 close-out — the CI load-test threshold is now measured.** The `loadtest`
+job in `.github/workflows/ci.yml` previously carried the literal placeholder
+`P95_MS: "REPLACE_IN_STEP_6"`, which k6 rejects as a threshold, so the job
+failed if triggered. A `workflow_dispatch` run on a GitHub shared runner
+(2026-07-28) reported p95 **0.730091 ms**, error rate **0**, and **6001**
+requests against an offered 200/s × 30s — the full rate sustained. Applying
+`ceil(observed_p95 * 2 / 50) * 50` gives **`P95_MS: "50"`**, the formula's
+floor bucket.
+
+The ~68× headroom over the measurement is deliberate: the doubling absorbs
+shared-runner noise, and this job exists to catch gross regressions (a
+connection-pool or fan-out collapse of the kind M23 fixed), not to certify
+latency. It is not a production performance claim — the profile is reduced
+(200/s, not the gate's 1000/s) precisely because a 2-core shared runner cannot
+honestly sustain the full rate. The job remains gated to `release/*` branches,
+tags, and `workflow_dispatch`, so ordinary pushes and PRs are unaffected.
 
 Known drift from plan (see Addendum A1): Pipeline not moved to
 `internal/server/` (A1.7), extra admin endpoints and deps not in

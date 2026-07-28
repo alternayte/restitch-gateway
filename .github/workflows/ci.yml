@@ -146,13 +146,18 @@ jobs:
         env:
           RATE: "200"
           DURATION: "30s"
-          # Deliberately permissive: this is a MEASURING run, not a gating one.
-          # The real threshold is ceil(observed_p95 * 2 / 50) * 50, which cannot
-          # be derived until a shared runner has actually been measured. The
-          # previous literal "REPLACE_IN_STEP_6" made k6 reject the threshold at
-          # startup, so the job died before producing any p95 to compute from.
-          # Replace with the computed value once a run has reported one.
-          P95_MS: "100000"
+          # Derived from a real workflow_dispatch run on a GitHub shared runner
+          # (2026-07-28): p95 0.730091ms, error_rate 0, reqs 6001 against an
+          # offered 200/s x 30s, so the gateway sustained the full rate.
+          # ceil(0.730091 * 2 / 50) * 50 = 50, the formula's floor bucket.
+          #
+          # That leaves ~68x headroom over the measurement, which is deliberate:
+          # the doubling absorbs shared-runner noise, and this job exists to
+          # catch gross regressions (a connection-pool or fan-out collapse of
+          # the kind M23 fixed), not to certify latency. It is not a production
+          # performance claim — the profile is reduced precisely because a
+          # 2-core shared runner cannot honestly sustain the gate's 1000/s.
+          P95_MS: "50"
           ERR_RATE: "0.01"
           GW_URL: "http://127.0.0.1:18080/loadtest"
           SUMMARY_OUT: "/tmp/m24_ci_summary.json"
