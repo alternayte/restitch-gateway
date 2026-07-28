@@ -36,6 +36,7 @@ implemented and verified against the codebase.
 | M22 — Dev Mode Orchestrator | T22.1–T22.5 | DONE |
 | M23 — Upstream HTTP Client Optimization | T23.1–T23.3 | DONE |
 | M24 — Production Monitoring & Load Testing | T24.1–T24.4 | DONE |
+| M25 — Browser Session & User Preferences | T25.1–T25.4 | DONE |
 
 **M24 caveat — the CI load-test job is not yet runnable.** The `loadtest` job
 in `.github/workflows/ci.yml` carries `P95_MS: "REPLACE_IN_STEP_6"`, a literal
