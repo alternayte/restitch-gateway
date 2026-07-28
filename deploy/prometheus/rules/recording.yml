@@ -1,0 +1,42 @@
+# T24.1 — pre-computed dashboard queries.
+#
+# Naming follows the Prometheus convention level:metric:operations.
+#
+# Partial responses are recorded SEPARATELY and are deliberately NOT folded
+# into error_ratio5m. A partial response is the gateway's signature degraded
+# state and returns a success status, so a pure 5xx ratio would show a
+# composition as healthy while half its steps fail. Conflating the two would
+# make the T24.2 error-rate alert fire on a condition operators routinely
+# accept.
+groups:
+  - name: restitch_composition
+    interval: 30s
+    rules:
+      - record: composition:restitch_requests:rate5m
+        expr: sum by (composition) (rate(restitch_requests_total[5m]))
+
+      - record: composition:restitch_requests_errors:rate5m
+        expr: sum by (composition) (rate(restitch_requests_total{status=~"5.."}[5m]))
+
+      # No `or vector(0)` fallback, on purpose. A composition that has served
+      # zero 5xx produces no series from the numerator, so the ratio is ABSENT
+      # rather than 0. Absent means nothing to alert on. A zero-fill would
+      # manufacture a series for every composition forever and defeat
+      # absent()-style checks.
+      - record: composition:restitch_requests:error_ratio5m
+        expr: |
+          composition:restitch_requests_errors:rate5m
+            / on (composition)
+          composition:restitch_requests:rate5m
+
+      - record: composition:restitch_partial_responses:rate5m
+        expr: sum by (composition) (rate(restitch_partial_responses_total[5m]))
+
+      - record: composition:restitch_request_duration_seconds:p50
+        expr: histogram_quantile(0.50, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))
+
+      - record: composition:restitch_request_duration_seconds:p95
+        expr: histogram_quantile(0.95, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))
+
+      - record: composition:restitch_request_duration_seconds:p99
+        expr: histogram_quantile(0.99, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))
