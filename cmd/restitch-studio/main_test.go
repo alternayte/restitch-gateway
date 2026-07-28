@@ -19,7 +19,7 @@ func TestProxyRewrite(t *testing.T) {
 	defer admin.Close()
 
 	adminKey := "test-key-123"
-	mux := buildMux(admin.URL, adminKey, nil)
+	mux := buildMux(muxDeps{gatewayAdminURL: admin.URL, adminKey: adminKey})
 
 	req := httptest.NewRequest("GET", "/api/info", nil)
 	rec := httptest.NewRecorder()
@@ -34,7 +34,7 @@ func TestProxyRewrite(t *testing.T) {
 }
 
 func TestSPAFallback(t *testing.T) {
-	mux := buildMux("http://localhost:9999", "", nil)
+	mux := buildMux(muxDeps{gatewayAdminURL: "http://localhost:9999"})
 
 	t.Run("unknown path returns index.html", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/compositions", nil)

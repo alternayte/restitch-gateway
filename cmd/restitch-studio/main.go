@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/registry"
+	"github.com/restitch/restitch-gateway/internal/session"
 )
 
 //go:embed all:dist
@@ -59,7 +60,16 @@ func main() {
 	store := registry.NewStore(db)
 	registryAPI := NewRegistryAPI(store)
 
-	mux := buildMux(*gatewayAdminURL, *adminKey, registryAPI)
+	sessionStore := session.NewStore(db)
+	prefsAPI := NewPreferencesAPI(sessionStore)
+
+	mux := buildMux(muxDeps{
+		gatewayAdminURL: *gatewayAdminURL,
+		adminKey:        *adminKey,
+		registryAPI:     registryAPI,
+		prefsAPI:        prefsAPI,
+		sessionStore:    sessionStore,
+	})
 
 	addr := fmt.Sprintf(":%d", *port)
 	slog.Info("restitch-studio starting",
@@ -78,8 +88,18 @@ func main() {
 	}
 }
 
-func buildMux(gatewayAdminURL, adminKey string, registryAPI *RegistryAPI) *http.ServeMux {
-	target, err := url.Parse(gatewayAdminURL)
+// muxDeps carries everything buildMux needs. It is a struct rather than a
+// positional list because three of the five values are optional in tests.
+type muxDeps struct {
+	gatewayAdminURL string
+	adminKey        string
+	registryAPI     *RegistryAPI
+	prefsAPI        *PreferencesAPI
+	sessionStore    *session.Store
+}
+
+func buildMux(d muxDeps) *http.ServeMux {
+	target, err := url.Parse(d.gatewayAdminURL)
 	if err != nil {
 		log.Fatalf("invalid gateway admin URL: %v", err)
 	}
@@ -95,28 +115,36 @@ func buildMux(gatewayAdminURL, adminKey string, registryAPI *RegistryAPI) *http.
 		if strings.HasPrefix(req.URL.Path, "/api/") {
 			req.URL.Path = "/admin" + req.URL.Path
 		}
-		if adminKey != "" {
-			req.Header.Set("X-Admin-Key", adminKey)
+		if d.adminKey != "" {
+			req.Header.Set("X-Admin-Key", d.adminKey)
 		}
 	}
 
 	mux := http.NewServeMux()
 
 	// V1 routes (Studio-native) — registered before proxy catch-all.
-	if registryAPI != nil {
-		mux.HandleFunc("POST /api/v1/configs/validate", registryAPI.handleValidateConfig)
-		mux.HandleFunc("POST /api/v1/configs", registryAPI.handleCreateConfig)
-		mux.HandleFunc("GET /api/v1/configs", registryAPI.handleListConfigs)
-		mux.HandleFunc("GET /api/v1/configs/{id}", registryAPI.handleGetConfig)
-		mux.HandleFunc("PUT /api/v1/configs/{id}", registryAPI.handleUpdateConfigContent)
-		mux.HandleFunc("PATCH /api/v1/configs/{id}", registryAPI.handleUpdateConfigMetadata)
-		mux.HandleFunc("DELETE /api/v1/configs/{id}", registryAPI.handleDeleteConfig)
-		mux.HandleFunc("GET /api/v1/configs/{id}/versions", registryAPI.handleListVersions)
-		mux.HandleFunc("POST /api/v1/configs/{id}/versions/{version}/activate", registryAPI.handleActivateVersion)
-		mux.HandleFunc("GET /api/v1/registry/bundle", registryAPI.handleGetBundle)
+	if d.registryAPI != nil {
+		mux.HandleFunc("POST /api/v1/configs/validate", d.registryAPI.handleValidateConfig)
+		mux.HandleFunc("POST /api/v1/configs", d.registryAPI.handleCreateConfig)
+		mux.HandleFunc("GET /api/v1/configs", d.registryAPI.handleListConfigs)
+		mux.HandleFunc("GET /api/v1/configs/{id}", d.registryAPI.handleGetConfig)
+		mux.HandleFunc("PUT /api/v1/configs/{id}", d.registryAPI.handleUpdateConfigContent)
+		mux.HandleFunc("PATCH /api/v1/configs/{id}", d.registryAPI.handleUpdateConfigMetadata)
+		mux.HandleFunc("DELETE /api/v1/configs/{id}", d.registryAPI.handleDeleteConfig)
+		mux.HandleFunc("GET /api/v1/configs/{id}/versions", d.registryAPI.handleListVersions)
+		mux.HandleFunc("POST /api/v1/configs/{id}/versions/{version}/activate", d.registryAPI.handleActivateVersion)
+		mux.HandleFunc("GET /api/v1/registry/bundle", d.registryAPI.handleGetBundle)
 	}
 
-	// Proxy routes (gateway admin pass-through).
+	// Preferences routes always mint, so curl and other cookie-less clients work.
+	if d.prefsAPI != nil && d.sessionStore != nil {
+		prefsMW := session.Middleware(d.sessionStore, session.AlwaysMint)
+		mux.Handle("GET /api/v1/preferences", prefsMW(http.HandlerFunc(d.prefsAPI.handleGetPreferences)))
+		mux.Handle("PUT /api/v1/preferences", prefsMW(http.HandlerFunc(d.prefsAPI.handlePutPreferences)))
+	}
+
+	// Proxy routes (gateway admin pass-through). Not session-wrapped — these
+	// are forwarded to another process that has no use for a Studio session.
 	mux.Handle("/api/", proxy)
 	mux.Handle("/metrics", proxy)
 
@@ -124,7 +152,12 @@ func buildMux(gatewayAdminURL, adminKey string, registryAPI *RegistryAPI) *http.
 	if err != nil {
 		log.Fatal(err)
 	}
-	spaHandler := spaFileServer(http.FS(sub))
+	var spaHandler http.Handler = spaFileServer(http.FS(sub))
+	// Document requests mint; static assets do not, which avoids creating
+	// several sessions for one cold page load.
+	if d.sessionStore != nil {
+		spaHandler = session.Middleware(d.sessionStore, session.MintOnDocument)(spaHandler)
+	}
 	mux.Handle("/", spaHandler)
 
 	return mux

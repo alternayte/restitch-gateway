@@ -67,7 +67,7 @@ func testMux(t *testing.T) *http.ServeMux {
 	}
 	store := registry.NewStore(db)
 	api := NewRegistryAPI(store)
-	return buildMux("http://localhost:9999", "", api)
+	return buildMux(muxDeps{gatewayAdminURL: "http://localhost:9999", registryAPI: api})
 }
 
 func doJSON(t *testing.T, mux *http.ServeMux, method, path string, body any) *httptest.ResponseRecorder {
