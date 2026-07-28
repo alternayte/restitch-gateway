@@ -1557,7 +1557,7 @@ Runs **after** Task 4 because the threshold is derived from a measured baseline,
 
 Run: `sed -n '1,10p' .github/workflows/ci.yml`
 
-Expected: `on: push:` / `pull_request: branches: [main]`, and `jobs:` with `go`, `studio`, `docker`.
+Expected: `on: push:` / `pull_request: branches: [main]`, and `jobs:` with `go`, `studio`, `docker`, `e2e`.
 
 - [ ] **Step 2: Add `workflow_dispatch`**
 
@@ -1659,7 +1659,7 @@ Add at the end of `.github/workflows/ci.yml`, at the same indent level as `docke
 
 Run: `python3 -c "import yaml,sys; d=yaml.safe_load(open('.github/workflows/ci.yml')); print('JOBS:', list(d['jobs'])); print('TRIGGERS:', list(d[True] if True in d else d['on']))"`
 
-Expected: `JOBS: ['go', 'studio', 'docker', 'loadtest']` and triggers including `workflow_dispatch`. If PyYAML is unavailable, run `pip install pyyaml` first, or use any YAML linter — do not skip this check.
+Expected: `JOBS: ['go', 'studio', 'docker', 'e2e', 'loadtest']` and triggers including `workflow_dispatch`. If PyYAML is unavailable, run `pip install pyyaml` first, or use any YAML linter — do not skip this check.
 
 - [ ] **Step 5: Commit the job with the placeholder threshold**
 

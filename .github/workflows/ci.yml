@@ -4,6 +4,7 @@ on:
   push:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   go:
@@ -70,3 +71,79 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test -tags e2e ./tests/... -count=1 -v
+
+  loadtest:
+    # Release branches and tags only. A hard latency threshold on every push
+    # would flake on shared-runner noise; here it gates the things that ship.
+    # workflow_dispatch allows a manual run on any branch.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/heads/release/') ||
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: grafana/setup-k6-action@v1
+
+      - name: Build binaries
+        run: |
+          go build -o bin/restitch ./cmd/restitch
+          go build -o bin/mockupstream ./cmd/mockupstream
+
+      # Binaries, not compose: this measures gateway throughput, and putting
+      # Docker networking between k6 and the gateway would measure the bridge.
+      - name: Start mockupstream and gateway
+        run: |
+          ./bin/mockupstream -port 18081 &
+          cat > /tmp/ci_load.yaml <<'YAML'
+          upstreams:
+            mock:
+              url: "http://127.0.0.1:18081"
+              timeout: 10s
+              transport:
+                max_idle_conns_per_host: 100
+          compositions:
+            loadtest:
+              path: "/loadtest"
+              method: GET
+              steps:
+                - name: s1
+                  upstream: mock
+                  path: "/users/1"
+              response:
+                body:
+                  name: "{{ steps.s1.body.name }}"
+          YAML
+          ./bin/restitch run -config /tmp/ci_load.yaml -port 18080 -log-format json &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:18080/loadtest >/dev/null && break
+            sleep 1
+          done
+
+      # Reduced profile: a 2-core shared runner cannot honestly sustain the
+      # gate's 1000/s. STUDIO_URL is intentionally unset, so the k6 script
+      # omits its studio scenario entirely.
+      - name: Run k6 load test
+        env:
+          RATE: "200"
+          DURATION: "30s"
+          P95_MS: "REPLACE_IN_STEP_6"
+          ERR_RATE: "0.01"
+          GW_URL: "http://127.0.0.1:18080/loadtest"
+          SUMMARY_OUT: "/tmp/m24_ci_summary.json"
+        run: k6 run tests/loadtest/m24_baseline.js
+
+      - name: Show summary
+        if: always()
+        run: cat /tmp/m24_ci_summary.json || echo "no summary produced"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-summary
+          path: /tmp/m24_ci_summary.json
