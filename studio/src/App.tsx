@@ -1,8 +1,12 @@
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom"
-import { LayoutDashboard, Activity, GitBranch, Hammer, Settings, Zap, RefreshCw } from "lucide-react"
+import {
+  LayoutDashboard, Activity, GitBranch, Hammer, Settings, Zap, RefreshCw,
+  PanelLeftClose, PanelLeftOpen,
+} from "lucide-react"
 import { Toaster, toast } from "sonner"
 import { useState } from "react"
 import { usePoll } from "./hooks/usePoll"
+import { PreferencesProvider, usePreferences } from "./hooks/usePreferences"
 import { api } from "./lib/api"
 import Dashboard from "./pages/Dashboard"
 import Compositions from "./pages/Compositions"
@@ -20,8 +24,18 @@ const navItems = [
 ]
 
 export default function App() {
+  return (
+    <PreferencesProvider>
+      <Shell />
+    </PreferencesProvider>
+  )
+}
+
+function Shell() {
   const { data: info } = usePoll(() => api.info(), 30000)
   const [reloading, setReloading] = useState(false)
+  const { prefs, setSidebarCollapsed } = usePreferences()
+  const sidebarCollapsed = prefs.sidebarCollapsed
 
   const handleReload = async () => {
     if (!confirm("Reload gateway configuration?")) return
@@ -49,15 +63,21 @@ export default function App() {
         }}
       />
       <div className="flex h-screen">
-        <nav className="w-52 flex flex-col border-r border-hairline bg-canvas">
+        <nav
+          className={`${sidebarCollapsed ? "w-14" : "w-52"} flex flex-col border-r border-hairline bg-canvas transition-[width] duration-150`}
+        >
           <div className="px-4 py-5 border-b border-hairline flex items-center gap-2.5">
-            <Zap size={18} className="text-rs-accent" />
-            <span className="text-[15px] font-semibold tracking-[-0.2px] text-ink">
-              Restitch
-            </span>
-            <span className="text-[11px] font-semibold tracking-[0.6px] uppercase text-ink-subtle ml-auto">
-              Studio
-            </span>
+            <Zap size={18} className="text-rs-accent shrink-0" />
+            {!sidebarCollapsed && (
+              <>
+                <span className="text-[15px] font-semibold tracking-[-0.2px] text-ink">
+                  Restitch
+                </span>
+                <span className="text-[11px] font-semibold tracking-[0.6px] uppercase text-ink-subtle ml-auto">
+                  Studio
+                </span>
+              </>
+            )}
           </div>
 
           <div className="flex-1 px-2 pt-3">
@@ -66,6 +86,7 @@ export default function App() {
                 key={item.to}
                 to={item.to}
                 end={item.to === "/"}
+                title={sidebarCollapsed ? item.label : undefined}
                 className={({ isActive }) =>
                   `flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[13px] font-medium mb-0.5 transition-colors ${
                     isActive
@@ -74,13 +95,26 @@ export default function App() {
                   }`
                 }
               >
-                <item.icon size={16} strokeWidth={1.8} />
-                {item.label}
+                <item.icon size={16} strokeWidth={1.8} className="shrink-0" />
+                {!sidebarCollapsed && item.label}
               </NavLink>
             ))}
           </div>
 
-          {info && (
+          <div className="px-2 pb-2">
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="flex items-center gap-2.5 w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-ink-muted hover:text-ink hover:bg-surface-1 transition-colors"
+            >
+              {sidebarCollapsed
+                ? <PanelLeftOpen size={16} strokeWidth={1.8} className="shrink-0" />
+                : <PanelLeftClose size={16} strokeWidth={1.8} className="shrink-0" />}
+              {!sidebarCollapsed && "Collapse"}
+            </button>
+          </div>
+
+          {info && !sidebarCollapsed && (
             <div className="px-4 py-3 border-t border-hairline-soft">
               <div className="flex items-center justify-between mb-1">
                 <div className="text-[11px] font-semibold tracking-[0.6px] uppercase text-ink-subtle">
