@@ -18,7 +18,9 @@
 - Request body cap: 16 KB (16384 bytes) via `http.MaxBytesReader`
 - The `preferences` DB column is **nullable by design**. `NULL` means "no PUT has ever happened." Never default it to `'{}'` — that erases the distinction the reconcile rule depends on.
 - Commit messages: `feat(M25): <task title>` (or `fix:`/`test:`/`docs:`). Gate script changes use the `gate:` prefix.
-- After every task: append one row to `docs/plan-progress/LEDGER.md` and commit it with the work.
+- **Do NOT hand-write ledger rows.** `h_finish` (`scripts/lib/harness.sh`) auto-appends one row per `h_task` ID with Notes `auto (h_finish)` and a real evidence path. Task 11's gate run writes every M25 row. A hand-written row duplicates the ID and cites an evidence file that does not exist. (Resolves CLAUDE.md rule 4 against the harness — user decision, 2026-07-28; same resolution as M23 and M24.)
+- **Any gate run before Task 11 MUST set `H_NO_EVIDENCE=true`.** Without it, a diagnostic run appends real rows and an evidence file — this happened for real during M23 Task 3.
+- Never edit or delete existing LEDGER.md rows. Append only.
 - **NEVER** edit `scripts/verify.sh`, `scripts/check-ledger.sh`, `scripts/lib/`, or other gate scripts to make a failing check pass.
 
 ## File Structure
@@ -235,7 +237,7 @@ h_finish
 
 - [ ] **Step 2: Verify the script self-fails cleanly before implementation**
 
-Run: `scripts/gates/m25.sh; echo "EXIT=$?"`
+Run: `H_NO_EVIDENCE=true scripts/gates/m25.sh; echo "EXIT=$?"`
 Expected: many `FAIL` lines (nothing is implemented yet) and a non-zero exit. This confirms the gate is not vacuous — a gate that passes before any code is written is worthless.
 
 - [ ] **Step 3: STOP — get user approval**
@@ -299,10 +301,6 @@ Expected: the `CREATE TABLE browser_sessions` DDL prints.
 git add internal/registry/migrations/20260728000000_browser_sessions.sql
 git commit -m "feat(M25): add browser_sessions migration (T25.3)"
 ```
-
-- [ ] **Step 4: Append ledger row**
-
-Add to `docs/plan-progress/LEDGER.md` (append only, never edit existing rows), then amend the commit to include it.
 
 ---
 
@@ -554,8 +552,6 @@ Expected: PASS for all eight tests.
 git add internal/session/types.go internal/session/types_test.go
 git commit -m "feat(M25): preferences type and field validation (T25.1)"
 ```
-
-- [ ] **Step 6: Append ledger row and amend the commit**
 
 ---
 
@@ -843,8 +839,6 @@ Expected: PASS for all store tests.
 git add internal/session/store.go internal/session/store_test.go
 git commit -m "feat(M25): browser session store with initialized tracking (T25.1)"
 ```
-
-- [ ] **Step 6: Append ledger row and amend the commit**
 
 ---
 
@@ -1173,8 +1167,6 @@ Expected: PASS for every test in the package.
 git add internal/session/session.go internal/session/session_test.go
 git commit -m "feat(M25): browser session cookie middleware (T25.1)"
 ```
-
-- [ ] **Step 6: Append ledger row and amend the commit**
 
 ---
 
@@ -1618,8 +1610,6 @@ git add cmd/restitch-studio/preferences.go cmd/restitch-studio/preferences_test.
 git commit -m "feat(M25): preferences CRUD API scoped to browser session (T25.2)"
 ```
 
-- [ ] **Step 9: Append ledger row and amend the commit**
-
 ---
 
 ### Task 7: Frontend API client and `usePreferences` hook (T25.4)
@@ -2007,8 +1997,6 @@ git add studio/src/lib/api.ts studio/src/hooks/usePreferences.tsx studio/src/hoo
 git commit -m "feat(M25): preferences hook with localStorage mirror and reconcile (T25.4)"
 ```
 
-- [ ] **Step 7: Append ledger row and amend the commit**
-
 ---
 
 ### Task 8: Sidebar collapse (T25.4)
@@ -2191,8 +2179,6 @@ git add studio/src/App.tsx
 git commit -m "feat(M25): persisted collapsible sidebar (T25.4)"
 ```
 
-- [ ] **Step 4: Append ledger row and amend the commit**
-
 ---
 
 ### Task 9: Composition pinning (T25.4)
@@ -2373,8 +2359,6 @@ git add studio/src/pages/Compositions.tsx studio/src/pages/Compositions.test.tsx
 git commit -m "feat(M25): pin compositions with pinned-first ordering (T25.4)"
 ```
 
-- [ ] **Step 6: Append ledger row and amend the commit**
-
 ---
 
 ### Task 10: Dashboard default time range (T25.4)
@@ -2432,8 +2416,6 @@ git add studio/src/pages/Dashboard.tsx studio/src/pages/Dashboard.test.tsx
 git commit -m "feat(M25): persist dashboard default time range (T25.4)"
 ```
 
-- [ ] **Step 5: Append ledger row and amend the commit**
-
 ---
 
 ### Task 11: Rebuild embedded assets, run the gate, close the milestone
@@ -2475,9 +2457,15 @@ git add docs/plan-progress/evidence/
 git commit -m "test(M25): gate evidence for browser session & preferences"
 ```
 
-- [ ] **Step 5: Add the `M25.gate` ledger row**
+- [ ] **Step 5: Verify the auto-written ledger rows**
 
-Append one row to `docs/plan-progress/LEDGER.md` using the schema in its header, citing the evidence file path and the commit the gate ran against.
+Nothing to hand-write: `h_finish` already appended `T25.1`–`T25.4`, `M25.unit`, and `M25.gate` during Step 3's run. Verify they landed:
+
+```bash
+grep -c 'M25' docs/plan-progress/LEDGER.md
+tail -8 docs/plan-progress/LEDGER.md
+```
+Expected: six new rows, all with Notes `auto (h_finish)`. `M25.gate` will read `PENDING` because the gate carries a MANUAL item — that is correct and resolves in Step 6.
 
 - [ ] **Step 6: STOP — surface the MANUAL line to the user**
 
