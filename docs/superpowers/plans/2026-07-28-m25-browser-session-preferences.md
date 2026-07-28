@@ -117,9 +117,13 @@ h_run "migration file exists" -- \
   test -f internal/registry/migrations/20260728000000_browser_sessions.sql
 h_run "creates browser_sessions" -- \
   grep -q 'CREATE TABLE browser_sessions' internal/registry/migrations/20260728000000_browser_sessions.sql
+# Positive precondition first: a bare negated grep also passes when the file or
+# the column is absent, which would let a missing migration read as compliant.
 h_run "preferences column is nullable" -- bash -c '
-  ! grep -E "preferences[[:space:]]+TEXT[^,]*NOT NULL" \
-    internal/registry/migrations/20260728000000_browser_sessions.sql
+  f=internal/registry/migrations/20260728000000_browser_sessions.sql
+  test -f "$f" || exit 1
+  grep -qE "^[[:space:]]*preferences[[:space:]]+TEXT" "$f" || exit 1
+  ! grep -qE "^[[:space:]]*preferences[[:space:]]+TEXT[^,]*NOT NULL" "$f"
 '
 h_run "has goose Down" -- \
   grep -q 'DROP TABLE IF EXISTS browser_sessions' internal/registry/migrations/20260728000000_browser_sessions.sql
@@ -171,7 +175,9 @@ h_run "document sets restitch_browser_id" -- \
 h_run "cookie is HttpOnly" -- grep -qi 'set-cookie:.*HttpOnly' "${HDRS}"
 h_run "cookie is SameSite=Strict" -- grep -qi 'set-cookie:.*SameSite=Strict' "${HDRS}"
 h_run "cookie has 1-year Max-Age" -- grep -qi 'set-cookie:.*Max-Age=31536000' "${HDRS}"
+# The Set-Cookie line must exist before its absence-of-Secure means anything.
 h_run "cookie is not Secure over plaintext" -- bash -c "
+  grep -qi 'set-cookie:.*restitch_browser_id' '${HDRS}' || exit 1
   ! grep -i 'set-cookie:.*restitch_browser_id' '${HDRS}' | grep -qi 'Secure'
 "
 
@@ -180,6 +186,11 @@ ASSET_HDRS="${H_TMP}/asset_headers.txt"
 curl -s -D "${ASSET_HDRS}" -H 'Accept: */*' \
   -o /dev/null "${BASE}/favicon.svg" || true
 h_run "static asset does not mint a session" -- bash -c "
+  # Minting must be PROVEN to work on the document request first. Without that,
+  # 'the asset set no cookie' cannot distinguish selective minting from there
+  # being no middleware at all — it would pass against an empty implementation.
+  grep -qi 'set-cookie:.*restitch_browser_id' '${HDRS}' || exit 1
+  head -1 '${ASSET_HDRS}' | grep -qE 'HTTP/[0-9.]+ 200' || exit 1
   ! grep -qi 'set-cookie:.*restitch_browser_id' '${ASSET_HDRS}'
 "
 
