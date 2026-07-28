@@ -16,7 +16,7 @@
 - **NEVER** edit `scripts/verify.sh`, `scripts/check-ledger.sh`, `scripts/lib/`, or any gate script other than `scripts/gates/m24.sh`. `m24.sh` composes only existing harness helpers.
 - **NEVER** edit or delete existing `LEDGER.md` rows. Append only. A FAIL is superseded by a later PASS row, never removed.
 - **NEVER** weaken, skip, or delete a test to make a gate pass.
-- After every task: run its Accept command, paste the **real output** into the commit message, and append one `LEDGER.md` row.
+- After every task: run its Accept command and paste the **real output** into the commit message. Do NOT hand-write `LEDGER.md` rows — `h_finish` writes them automatically during Task 7's real gate run (every existing `T20.x`–`T23.x` row is marked `auto (h_finish)`).
 - Commit prefixes: `feat(M24):`, `test:`, `docs:`, `chore:`. The gate script commit **must** start with `gate:` and requires explicit user approval first.
 - PLAN.md's M24 section has no `Accept:` lines (verified — the milestone is a bare task table, PLAN.md:2325-2345). Accept commands below are derived from the approved spec and encoded in `scripts/gates/m24.sh`. This matches the M23 precedent.
 - **Ledger IDs for M24 are exactly these six:** `T24.1`, `T24.2`, `T24.3`, `T24.4`, `M24.unit`, `M24.gate`. `h_finish` writes one row per `h_task` **call**, so **no `h_task` may use any other ID.** `M24.gate` is deliberately called twice (preflight and closing roll-up), producing 7 rows across those 6 IDs; `check-ledger.sh` takes the latest row per ID. T24.0/T24.3a/T24.3b in this plan are execution-order subdivisions only and must never appear as `h_task` names.
@@ -42,7 +42,7 @@
 **Modify:**
 - `PLAN.md:14-34` — status table: add missing M20/M21/M22 rows (Task 0), then M24 (Task 7).
 - `.github/workflows/ci.yml` — add `workflow_dispatch` trigger and a `loadtest` job (Task 6).
-- `docs/plan-progress/LEDGER.md` — append-only rows after each task.
+- `docs/plan-progress/LEDGER.md` — written by `h_finish` during Task 7's gate run, never by hand.
 
 **Never touched:** `scripts/lib/harness.sh`, `scripts/verify.sh`, `scripts/check-ledger.sh`, all other `scripts/gates/*.sh`, `examples/docker-compose/`, any `.go` file.
 
@@ -760,19 +760,24 @@ Run: `H_NO_EVIDENCE=true scripts/gates/m24.sh 2>&1 | sed -n '/T24.1/,/T24.2/p'`
 
 Expected: four `PASS` lines for T24.1 — `promtool check rules recording.yml`, `promtool test rules recording_test.yml`, and the two non-vacuity count assertions.
 
-- [ ] **Step 6: Append the ledger row**
+- [ ] **Step 6: Ledger row — nothing to do here**
 
-Append to `docs/plan-progress/LEDGER.md` (never edit existing rows):
+**Do not hand-write a ledger row.** Every task row in this project is written
+by `h_finish`, which appends one row per `h_task` call with the note
+`auto (h_finish)` — see any `T20.x`–`T23.x` row in `docs/plan-progress/LEDGER.md`.
+Task 7's real `scripts/verify.sh M24` run writes `T24.1`–`T24.4`, `M24.unit`
+and `M24.gate` automatically, backed by a genuine evidence file.
 
-```markdown
-| 2026-07-27 | T24.1 | M24 | PASS | <short-sha> | evidence/<file>#T24.1 | recording rules + promtool unit tests |
-```
+Hand-writing a row here would duplicate that row, and because the diagnostic
+runs in this plan use `H_NO_EVIDENCE=true` (which suppresses the evidence
+file), the row would cite an evidence path that does not exist — violating the
+project rule that evidence means literal harness-captured output.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add deploy/.env.example deploy/prometheus/rules/recording.yml \
-        deploy/prometheus/rules/recording_test.yml docs/plan-progress/LEDGER.md
+        deploy/prometheus/rules/recording_test.yml
 git commit -m "feat(M24): add Prometheus recording rules with promtool unit tests
 
 Seven recorded series: request rate, error rate, error ratio, partial-response
@@ -1024,17 +1029,23 @@ Run: `H_NO_EVIDENCE=true scripts/gates/m24.sh 2>&1 | sed -n '/T24.2/,/T24.3/p'`
 
 Expected: `PASS` for `promtool check rules alerts.yml`, `promtool test rules alerts_test.yml`, both count assertions, and one `PASS` per alert name coverage check (four lines).
 
-- [ ] **Step 6: Append the ledger row**
+- [ ] **Step 6: Ledger row — nothing to do here**
 
-```markdown
-| 2026-07-27 | T24.2 | M24 | PASS | <short-sha> | evidence/<file>#T24.2 | 4 alerts, positive+negative promtool cases each |
-```
+**Do not hand-write a ledger row.** Every task row in this project is written
+by `h_finish`, which appends one row per `h_task` call with the note
+`auto (h_finish)` — see any `T20.x`–`T23.x` row in `docs/plan-progress/LEDGER.md`.
+Task 7's real `scripts/verify.sh M24` run writes `T24.1`–`T24.4`, `M24.unit`
+and `M24.gate` automatically, backed by a genuine evidence file.
+
+Hand-writing a row here would duplicate that row, and because the diagnostic
+runs in this plan use `H_NO_EVIDENCE=true` (which suppresses the evidence
+file), the row would cite an evidence path that does not exist — violating the
+project rule that evidence means literal harness-captured output.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add deploy/prometheus/rules/alerts.yml deploy/prometheus/rules/alerts_test.yml \
-        docs/plan-progress/LEDGER.md
+git add deploy/prometheus/rules/alerts.yml deploy/prometheus/rules/alerts_test.yml
 git commit -m "feat(M24): add Prometheus alert rules with positive/negative unit tests
 
 Four alerts per PLAN.md: P95 latency, error rate, config reload failures, and
@@ -1227,16 +1238,23 @@ Run: `H_NO_EVIDENCE=true scripts/gates/m24.sh 2>&1 | sed -n '/T24.3/,/T24.4/p'`
 
 Expected: three `PASS` lines — the request-count magnitude floor, the p95 threshold, and the error-rate threshold. This phase takes ~60s plus build time.
 
-- [ ] **Step 4: Append the ledger row**
+- [ ] **Step 4: Ledger row — nothing to do here**
 
-```markdown
-| 2026-07-27 | T24.3 | M24 | PASS | <short-sha> | evidence/<file>#T24.3 | k6 constant-arrival-rate, gate profile 1000/s |
-```
+**Do not hand-write a ledger row.** Every task row in this project is written
+by `h_finish`, which appends one row per `h_task` call with the note
+`auto (h_finish)` — see any `T20.x`–`T23.x` row in `docs/plan-progress/LEDGER.md`.
+Task 7's real `scripts/verify.sh M24` run writes `T24.1`–`T24.4`, `M24.unit`
+and `M24.gate` automatically, backed by a genuine evidence file.
+
+Hand-writing a row here would duplicate that row, and because the diagnostic
+runs in this plan use `H_NO_EVIDENCE=true` (which suppresses the evidence
+file), the row would cite an evidence path that does not exist — violating the
+project rule that evidence means literal harness-captured output.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add tests/loadtest/m24_baseline.js docs/plan-progress/LEDGER.md
+git add tests/loadtest/m24_baseline.js
 git commit -m "feat(M24): add parameterised k6 baseline load test
 
 Uses constant-arrival-rate rather than an open VU loop so offered load stays
@@ -1494,17 +1512,23 @@ Run: `docker ps -a --filter "name=restitch-m24-gate" --format '{{.Names}}'; dock
 
 Expected: both empty. If not, the trap chaining in the gate is broken — fix it before continuing.
 
-- [ ] **Step 7: Append the ledger row**
+- [ ] **Step 7: Ledger row — nothing to do here**
 
-```markdown
-| 2026-07-27 | T24.4 | M24 | PASS | <short-sha> | evidence/<file>#T24.4 | compose stack, registry mode, rules loaded + gateway scraped |
-```
+**Do not hand-write a ledger row.** Every task row in this project is written
+by `h_finish`, which appends one row per `h_task` call with the note
+`auto (h_finish)` — see any `T20.x`–`T23.x` row in `docs/plan-progress/LEDGER.md`.
+Task 7's real `scripts/verify.sh M24` run writes `T24.1`–`T24.4`, `M24.unit`
+and `M24.gate` automatically, backed by a genuine evidence file.
+
+Hand-writing a row here would duplicate that row, and because the diagnostic
+runs in this plan use `H_NO_EVIDENCE=true` (which suppresses the evidence
+file), the row would cite an evidence path that does not exist — violating the
+project rule that evidence means literal harness-captured output.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add deploy/docker-compose.yml deploy/prometheus/prometheus.yml deploy/README.md \
-        docs/plan-progress/LEDGER.md
+git add deploy/docker-compose.yml deploy/prometheus/prometheus.yml deploy/README.md
 git commit -m "feat(M24): add deploy/ production stack with Prometheus and Jaeger
 
 Gateway runs in registry mode against Studio, exercising the M20+M21
@@ -1670,18 +1694,23 @@ Expected: `EXIT=1` — no output, placeholder gone.
 
 Trigger `workflow_dispatch` again. Expected: the `loadtest` job passes with the computed threshold.
 
-- [ ] **Step 9: Append the ledger row**
+- [ ] **Step 9: Ledger row — nothing to do here**
 
-The T24.3 row already exists from Task 4; this appends a superseding row covering the CI half.
+**Do not hand-write a ledger row.** Every task row in this project is written
+by `h_finish`, which appends one row per `h_task` call with the note
+`auto (h_finish)` — see any `T20.x`–`T23.x` row in `docs/plan-progress/LEDGER.md`.
+Task 7's real `scripts/verify.sh M24` run writes `T24.1`–`T24.4`, `M24.unit`
+and `M24.gate` automatically, backed by a genuine evidence file.
 
-```markdown
-| 2026-07-27 | T24.3 | M24 | PASS | <short-sha> | evidence/<file>#T24.3 | + CI job, P95_MS set from measured runner baseline |
-```
+Hand-writing a row here would duplicate that row, and because the diagnostic
+runs in this plan use `H_NO_EVIDENCE=true` (which suppresses the evidence
+file), the row would cite an evidence path that does not exist — violating the
+project rule that evidence means literal harness-captured output.
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add .github/workflows/ci.yml docs/plan-progress/LEDGER.md
+git add .github/workflows/ci.yml
 git commit -m "feat(M24): set CI load-test P95 threshold from measured baseline
 
 Observed P95 on the GitHub runner: <OBSERVED>ms.
