@@ -55,7 +55,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 20 reached end of life in April 2026. 24 is the active LTS and
+          # is much closer to what this project is developed on, which matters:
+          # a Node-version gap between local and CI is what let an invalid
+          # NODE_OPTIONS flag reach CI and hang this job for 9 minutes.
+          node-version: 24
           cache: npm
           cache-dependency-path: studio/package-lock.json
 
