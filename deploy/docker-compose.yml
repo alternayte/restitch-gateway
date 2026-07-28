@@ -1,0 +1,92 @@
+# Production-shaped stack: gateway in REGISTRY mode against Studio, with
+# Prometheus and Jaeger. This is the only place in the repo that exercises the
+# M20 + M21 centralized-config loop as an operator would actually deploy it.
+# examples/docker-compose/ remains the simple file-config quickstart.
+name: restitch-deploy
+
+services:
+  studio:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${RESTITCH_IMAGE_TAG:-dev}
+    # The Dockerfile's ENTRYPOINT is /restitch, so the studio binary must be
+    # selected with `entrypoint`, NOT `command` — a `command` override would
+    # run `/restitch /restitch-studio` and fail.
+    entrypoint: ["/restitch-studio"]
+    command:
+      - "-port=3080"
+      - "-db-path=/data/studio.db"
+      - "-gateway-admin-url=http://gateway:9090"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: restitch-studio
+    volumes:
+      - studio-data:/data
+    ports:
+      - "${STUDIO_PORT:-3080}:3080"
+    healthcheck:
+      test: ["CMD", "/restitch-studio", "-h"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${RESTITCH_IMAGE_TAG:-dev}
+    entrypoint: ["/restitch"]
+    command:
+      - "run"
+      - "-registry-url=http://studio:3080"
+      - "-poll-interval=10s"
+      - "-port=8080"
+      - "-log-format=json"
+    environment:
+      # In registry mode the whole gateway config comes from the registry
+      # bundle, and a fresh Studio has no configs. Setting the admin server
+      # through env vars means /metrics is up regardless of bundle contents,
+      # so Prometheus has something to scrape from the first second.
+      RESTITCH_ADMIN_ENABLED: "true"
+      RESTITCH_ADMIN_PORT: "9090"
+      RESTITCH_ADMIN_API_KEY: ${RESTITCH_ADMIN_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: restitch-gateway
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+      - "${GATEWAY_ADMIN_PORT:-9090}:9090"
+    depends_on:
+      studio:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION}
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    # Prometheus binds its conventional 9090 INSIDE the network, but the
+    # gateway admin server already owns 9090 on the host, so the host side
+    # comes from PROMETHEUS_PORT (9091 by default).
+    ports:
+      - "${PROMETHEUS_PORT:-9091}:9090"
+    depends_on:
+      - gateway
+
+  jaeger:
+    image: jaegertracing/all-in-one:${JAEGER_VERSION}
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+
+volumes:
+  studio-data:
+  prometheus-data:

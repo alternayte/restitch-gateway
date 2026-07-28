@@ -1,0 +1,35 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Rule files are listed EXPLICITLY rather than globbed so the *_test.yml unit
+# test files living in the same directory are never loaded by the running
+# server. They are promtool inputs, not rules.
+rule_files:
+  - /etc/prometheus/rules/recording.yml
+  - /etc/prometheus/rules/alerts.yml
+
+# No Alertmanager ships with this stack (spec decision D4): a demo receiver
+# that discards every notification proves nothing and is one more service to
+# keep healthy. Point this at your own Alertmanager to wire alerts up.
+#
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # The job name is load-bearing: alerts.yml matches up{job="restitch-gateway"}.
+  # /metrics is served on the ADMIN port and sits outside requireKey, so no
+  # credentials are needed here even when RESTITCH_ADMIN_API_KEY is set.
+  - job_name: restitch-gateway
+    static_configs:
+      - targets: ['gateway:9090']
+
+  - job_name: restitch-studio
+    static_configs:
+      - targets: ['studio:3080']
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
