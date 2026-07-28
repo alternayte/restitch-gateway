@@ -1,15 +1,17 @@
-import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { usePoll } from "../hooks/usePoll"
+import { usePreferences } from "../hooks/usePreferences"
 import { api } from "../lib/api"
 import { SparklineCard } from "../components/charts/SparklineCard"
 import { RequestRateChart } from "../components/charts/RequestRateChart"
 import { LatencyChart } from "../components/charts/LatencyChart"
 import { LatencyHeatmap } from "../components/charts/LatencyHeatmap"
-import { TimeRangeSelector, type TimeRange } from "../components/charts/TimeRangeSelector"
+import { TimeRangeSelector } from "../components/charts/TimeRangeSelector"
 
 export default function Dashboard() {
-  const [range, setRange] = useState<TimeRange>("1h")
+  const { prefs, setDefaultTimeRange } = usePreferences()
+  const range = prefs.defaultTimeRange
+  const setRange = setDefaultTimeRange
   const navigate = useNavigate()
   const { data: stats } = usePoll(() => api.stats(), 5000)
   const { data: upstreams } = usePoll(() => api.upstreams(), 10000)
