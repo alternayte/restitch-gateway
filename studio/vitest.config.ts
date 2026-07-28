@@ -12,9 +12,14 @@ import path from "path"
 // passed to the parent is not. Setting it here rather than inline in the npm
 // script keeps `npm run test` working on Windows, where cmd.exe does not
 // understand `VAR=value command` syntax.
-const NODE_25_WEBSTORAGE_OFF = "--no-experimental-webstorage"
-if (!(process.env.NODE_OPTIONS ?? "").includes(NODE_25_WEBSTORAGE_OFF)) {
-  process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} ${NODE_25_WEBSTORAGE_OFF}`.trim()
+// Guarded on the global actually existing rather than on a version number:
+// older Node (CI runs 20) rejects the flag outright with "--no-experimental-
+// webstorage is not allowed in NODE_OPTIONS", which kills every vitest worker.
+// If this process has no built-in localStorage there is nothing to disable.
+const WEBSTORAGE_OFF = "--no-experimental-webstorage"
+const hasBuiltinWebStorage = typeof (globalThis as { localStorage?: unknown }).localStorage !== "undefined"
+if (hasBuiltinWebStorage && !(process.env.NODE_OPTIONS ?? "").includes(WEBSTORAGE_OFF)) {
+  process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} ${WEBSTORAGE_OFF}`.trim()
 }
 
 export default defineConfig({
