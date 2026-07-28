@@ -168,8 +168,15 @@ func TestMiddlewarePersistsMintedSession(t *testing.T) {
 	h.ServeHTTP(rec, req)
 
 	id := rec.Result().Cookies()[0].Value
-	if _, _, err := store.GetPreferences(req.Context(), id); err != nil {
-		t.Fatalf("minted session not readable from store: %v", err)
+
+	// Query the database directly to verify the session row was persisted.
+	var count int
+	if err := store.db.QueryRowContext(req.Context(),
+		`SELECT COUNT(*) FROM browser_sessions WHERE id = ?`, id).Scan(&count); err != nil {
+		t.Fatalf("query browser_sessions: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("browser_sessions rows for minted session = %d, want 1 (middleware did not persist it)", count)
 	}
 }
 
