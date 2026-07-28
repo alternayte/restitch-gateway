@@ -1,0 +1,201 @@
+=== GATE final (commit bba6fae7, 2026-07-13) ===
+
+
+##[final.static]
+$ go vet ./...
+
+exit_code=0
+PASS final.1 go vet
+$ golangci-lint run
+Error: can't load config: the Go language version (go1.24) used to build golangci-lint is lower than the targeted Go version (1.25.6)
+Failed executing command with error: can't load config: the Go language version (go1.24) used to build golangci-lint is lower than the targeted Go version (1.25.6)
+exit_code=3
+FAIL final.1 golangci-lint
+$ grep TODO/FIXME
+  (none)
+PASS final.1 no TODO/FIXME in non-test code
+
+##[final.tests]
+$ go test -count=1 -race ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	1.443s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	1.834s
+ok  	github.com/restitch/restitch-gateway/internal/admin	2.135s
+ok  	github.com/restitch/restitch-gateway/internal/auth	4.672s
+ok  	github.com/restitch/restitch-gateway/internal/composition	2.559s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	2.650s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	2.900s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	3.061s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	1.890s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	1.648s
+ok  	github.com/restitch/restitch-gateway/internal/server	1.545s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	2.053s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	1.704s
+exit_code=0
+PASS final.2 go test -race
+$ make -C /Users/nathananderson-tennant/Development/restitch e2e
+go test -tags e2e ./tests/ -count=1 -v
+=== RUN   TestSpecs
+2026/07/13 16:23:11 INFO registered composition route composition=user method=GET path=/api/users/{id} public=false
+2026/07/13 16:23:11 INFO registered composition route composition=partial method=GET path=/partial public=false
+2026/07/13 16:23:11 INFO registered composition route composition=timeout method=GET path=/timeout public=false
+2026/07/13 16:23:11 INFO registered composition route composition=echo method=GET path=/echo public=false
+=== RUN   TestSpecs/happy_path_-_user_lookup
+2026/07/13 16:23:11 INFO executing composition composition=user method=GET path=/api/users/42
+2026/07/13 16:23:11 INFO executing composition composition=user waves=1 total_steps=1 execution_order=[[user]]
+2026/07/13 16:23:11 INFO step starting composition=user step=user wave=1 upstream=http://127.0.0.1:52110 optional=false
+2026/07/13 16:23:11 INFO step complete composition=user step=user wave=1 status=200 duration_ms=0.445
+2026/07/13 16:23:11 INFO composition complete composition=user status=200 partial=false errors=0 step_timings=map[user:0.445] total_steps=1 slowest_step="map[duration_ms:0.445 name:user]" gateway_overhead_ms=0.04941699999999993
+=== RUN   TestSpecs/method_not_allowed_-_POST_to_GET-only_route
+=== RUN   TestSpecs/not_found_-_unknown_route
+=== RUN   TestSpecs/partial_response_-_optional_step_failure
+2026/07/13 16:23:11 INFO executing composition composition=partial method=GET path=/partial
+2026/07/13 16:23:11 INFO executing composition composition=partial waves=1 total_steps=2 execution_order="[[main failing]]"
+2026/07/13 16:23:11 INFO step starting composition=partial step=failing wave=1 upstream=http://127.0.0.1:1 optional=true
+2026/07/13 16:23:11 INFO step starting composition=partial step=main wave=1 upstream=http://127.0.0.1:52110 optional=false
+2026/07/13 16:23:11 WARN step failed composition=partial step=failing wave=1 optional=true duration_ms=0.183 error="request failed: Get \"http://127.0.0.1:1/unreachable\": dial tcp 127.0.0.1:1: connect: connection refused"
+2026/07/13 16:23:11 INFO step complete composition=partial step=main wave=1 status=200 duration_ms=0.185
+2026/07/13 16:23:11 INFO composition complete composition=partial status=200 partial=true errors=1 step_timings="map[failing:0.183 main:0.185]" total_steps=2 slowest_step="map[duration_ms:0.185 name:main]" gateway_overhead_ms=0.05566599999999999
+=== RUN   TestSpecs/path_parameters_-_id_passed_through_to_upstream
+2026/07/13 16:23:11 INFO executing composition composition=user method=GET path=/api/users/99
+2026/07/13 16:23:11 INFO executing composition composition=user waves=1 total_steps=1 execution_order=[[user]]
+2026/07/13 16:23:11 INFO step starting composition=user step=user wave=1 upstream=http://127.0.0.1:52110 optional=false
+2026/07/13 16:23:11 INFO step complete composition=user step=user wave=1 status=200 duration_ms=0.134
+2026/07/13 16:23:11 INFO composition complete composition=user status=200 partial=false errors=0 step_timings=map[user:0.134] total_steps=1 slowest_step="map[duration_ms:0.134 name:user]" gateway_overhead_ms=0.016625
+=== RUN   TestSpecs/timeout_-_required_step_timeout_returns_504
+2026/07/13 16:23:11 INFO executing composition composition=timeout method=GET path=/timeout
+2026/07/13 16:23:11 INFO executing composition composition=timeout waves=1 total_steps=1 execution_order=[[slow]]
+2026/07/13 16:23:11 INFO step starting composition=timeout step=slow wave=1 upstream=http://127.0.0.1:52110 optional=false
+2026/07/13 16:23:11 WARN step failed composition=timeout step=slow wave=1 optional=false duration_ms=51.186 error="timeout after 50ms: Get \"http://127.0.0.1:52110/slow?ms=5000\": context deadline exceeded"
+2026/07/13 16:23:11 ERROR required step failed in wave wave=0 step=slow error="timeout after 50ms: Get \"http://127.0.0.1:52110/slow?ms=5000\": context deadline exceeded"
+2026/07/13 16:23:11 ERROR composition execution failed composition=timeout error="required step \"slow\" failed: timeout after 50ms: Get \"http://127.0.0.1:52110/slow?ms=5000\": context deadline exceeded"
+--- PASS: TestSpecs (5.01s)
+    --- PASS: TestSpecs/happy_path_-_user_lookup (0.00s)
+    --- PASS: TestSpecs/method_not_allowed_-_POST_to_GET-only_route (0.00s)
+    --- PASS: TestSpecs/not_found_-_unknown_route (0.00s)
+    --- PASS: TestSpecs/partial_response_-_optional_step_failure (0.00s)
+    --- PASS: TestSpecs/path_parameters_-_id_passed_through_to_upstream (0.00s)
+    --- PASS: TestSpecs/timeout_-_required_step_timeout_returns_504 (0.05s)
+=== RUN   TestExampleConfigs
+=== RUN   TestExampleConfigs/examples/auth/restitch.yaml
+=== RUN   TestExampleConfigs/examples/docker-compose/restitch.yaml
+=== RUN   TestExampleConfigs/examples/quickstart/restitch.yaml
+=== RUN   TestExampleConfigs/examples/resilience/restitch.yaml
+--- PASS: TestExampleConfigs (0.00s)
+    --- PASS: TestExampleConfigs/examples/auth/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/docker-compose/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/quickstart/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/resilience/restitch.yaml (0.00s)
+=== RUN   TestReadmeYAMLBlocks
+=== RUN   TestReadmeYAMLBlocks/block_0
+--- PASS: TestReadmeYAMLBlocks (0.00s)
+    --- PASS: TestReadmeYAMLBlocks/block_0 (0.00s)
+PASS
+ok  	github.com/restitch/restitch-gateway/tests	5.360s
+exit_code=0
+PASS final.2 make e2e
+$ bash -c cd '/Users/nathananderson-tennant/Development/restitch/studio' && npm ci && npm run test -- --passWithNoTests && npm run build
+
+added 513 packages, and audited 514 packages in 6s
+
+142 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+> studio@0.0.0 test
+> vitest run --passWithNoTests
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/Users/nathananderson-tennant/Development/restitch/studio[39m
+
+ [32m✓[39m src/lib/dag.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/lib/builder.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/pages/Requests.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/pages/Dashboard.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m src/pages/CompositionDetail.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 14[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m13 passed[39m[22m[90m (13)[39m
+[2m   Start at [22m 16:23:24
+[2m   Duration [22m 1.30s[2m (transform 295ms, setup 0ms, import 1.30s, tests 52ms, environment 3.40s)[22m
+
+
+> studio@0.0.0 build
+> tsc -b && vite build
+
+vite v8.1.3 building client environment for production...
+[2Ktransforming...✓ 2512 modules transformed.
+rendering chunks...
+computing gzip size...
+../cmd/restitch-studio/dist/index.html                     0.75 kB │ gzip:   0.41 kB
+../cmd/restitch-studio/dist/assets/index-CvTM6g9X.css     82.05 kB │ gzip:  13.98 kB
+../cmd/restitch-studio/dist/assets/index-DhXlj6xy.js   1,363.27 kB │ gzip: 417.46 kB
+
+✓ built in 395ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+exit_code=0
+PASS final.2 studio tests + build
+
+##[final.build]
+$ make -C /Users/nathananderson-tennant/Development/restitch build-all
+go build -ldflags "-X main.version=v1.0-67-gbba6fae7" -o bin/restitch ./cmd/restitch
+go build -ldflags "-X main.version=v1.0-67-gbba6fae7" -o bin/restitch-studio ./cmd/restitch-studio
+exit_code=0
+PASS final.3 make build-all
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch version
+restitch v1.0-67-gbba6fae7 (go1.26.2)
+exit_code=0
+PASS final.3 restitch version
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch check -config /Users/nathananderson-tennant/Development/restitch/examples/quickstart/restitch.yaml
+  echo: 1 steps, 1 waves [e]
+  user-posts: 2 steps, 2 waves [user] → [orders]
+Syntax OK
+exit_code=0
+PASS final.3 quickstart check
+
+##[final.smoke]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-67-gbba6fae7" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 51957...
+# Starting gateway on port 51955 (admin 51956)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:51955/api/users/1
+status=404
+body=404 page not found
+FAIL final.4 data-plane request returns 200 (got 404, expected 200)
+Metric families: 0
+FAIL final.4 only 0 restitch_ metric families (expected >= 8)
+$ curl -s -w '%{http_code}' http://127.0.0.1:51956/admin/api/requests
+status=200
+body=[]
+PASS final.4 admin requests endpoint
+$ grep -E 'config reloaded\|config unchanged' /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.fxcRTqlagN/gateway.log
+FAIL final.4 SIGHUP triggers config reload/unchanged log
+--- last 10 lines of gateway.log ---
+{"time":"2026-07-13T16:23:32.208005+02:00","level":"INFO","msg":"loaded composition config","file":"/var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.fxcRTqlagN/final.yaml","upstreams":1,"compositions":2}
+{"time":"2026-07-13T16:23:32.208463+02:00","level":"INFO","msg":"registered composition route","composition":"user-posts","method":"GET","path":"/api/user-posts","public":false}
+{"time":"2026-07-13T16:23:32.208495+02:00","level":"INFO","msg":"registered composition route","composition":"echo","method":"GET","path":"/api/echo","public":false}
+{"time":"2026-07-13T16:23:32.208827+02:00","level":"INFO","msg":"admin server starting","port":51956}
+{"time":"2026-07-13T16:23:32.208843+02:00","level":"INFO","msg":"server starting","port":51955,"version":"v1.0-67-gbba6fae7"}
+{"time":"2026-07-13T16:23:32.232122+02:00","level":"INFO","msg":"request","method":"GET","path":"/api/users/1","status":404,"duration_ms":0.017083,"bytes_written":19,"remote_addr":"127.0.0.1:52140","user_agent":"curl/8.7.1","request_id":"01KXDXS6W8NCMT2X2TX3MCGT9S"}
+{"time":"2026-07-13T16:23:32.269666+02:00","level":"INFO","msg":"SIGHUP received, reloading config"}
+{"time":"2026-07-13T16:23:32.269864+02:00","level":"INFO","msg":"config unchanged","hash":"186ad0ef841a6f3511ccc822892b1ad7d566ef4d68e57ef4fd07e77f35df4b20"}
+{"time":"2026-07-13T16:23:32.26988+02:00","level":"INFO","msg":"config reloaded","hash":"186ad0ef841a6f3511ccc822892b1ad7d566ef4d68e57ef4fd07e77f35df4b20"}
+# Starting studio on port 51958...
+--- studio log ---
+flag provided but not defined: -admin
+Usage of /Users/nathananderson-tennant/Development/restitch/bin/restitch-studio:
+  -admin-key string
+    	admin API key (X-Admin-Key header)
+  -gateway-admin-url string
+    	gateway admin API URL (default "http://localhost:9090")
+  -port int
+    	studio server port (default 3080)
+FAIL studio failed to start on port 51958 within 10s
+
+RESULT final: FAIL (9 pass, 5 fail, 0 manual, 0 skip)

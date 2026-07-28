@@ -1,0 +1,61 @@
+# Unit tests for recording.yml. `promtool test rules` feeds these synthetic
+# series into the real rule expressions and asserts the resulting values at
+# exact timestamps.
+rule_files:
+  - recording.yml
+
+evaluation_interval: 1m
+
+tests:
+  # 54 successes/min + 6 errors/min for "orders" => 10% error ratio.
+  - interval: 1m
+    input_series:
+      - series: 'restitch_requests_total{composition="orders",method="GET",status="200"}'
+        values: '0+54x10'
+      - series: 'restitch_requests_total{composition="orders",method="GET",status="500"}'
+        values: '0+6x10'
+    promql_expr_test:
+      - expr: composition:restitch_requests:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'composition:restitch_requests:rate5m{composition="orders"}'
+            value: 1
+      - expr: composition:restitch_requests_errors:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'composition:restitch_requests_errors:rate5m{composition="orders"}'
+            value: 1.0E-1
+      - expr: composition:restitch_requests:error_ratio5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'composition:restitch_requests:error_ratio5m{composition="orders"}'
+            value: 1.0E-1
+
+  # A composition with zero 5xx must produce NO error_ratio series at all.
+  # This is the test that would catch someone "helpfully" adding or vector(0).
+  - interval: 1m
+    input_series:
+      - series: 'restitch_requests_total{composition="clean",method="GET",status="200"}'
+        values: '0+60x10'
+    promql_expr_test:
+      - expr: composition:restitch_requests:error_ratio5m
+        eval_time: 10m
+        exp_samples: []
+
+  # Partial responses are recorded on their own series and must never appear
+  # in the error ratio.
+  - interval: 1m
+    input_series:
+      - series: 'restitch_requests_total{composition="degraded",method="GET",status="200"}'
+        values: '0+60x10'
+      - series: 'restitch_partial_responses_total{composition="degraded"}'
+        values: '0+30x10'
+    promql_expr_test:
+      - expr: composition:restitch_partial_responses:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'composition:restitch_partial_responses:rate5m{composition="degraded"}'
+            value: 5.0E-1
+      - expr: composition:restitch_requests:error_ratio5m
+        eval_time: 10m
+        exp_samples: []

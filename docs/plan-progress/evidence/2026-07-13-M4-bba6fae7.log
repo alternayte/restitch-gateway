@@ -1,0 +1,60 @@
+=== GATE M4 (commit bba6fae7, 2026-07-13) ===
+
+
+##[T4.1]
+$ go test -count=1 -race ./internal/server/ -run TestRouter
+ok  	github.com/restitch/restitch-gateway/internal/server	1.222s
+exit_code=0
+PASS T4.1 router tests
+
+##[T4.2]
+$ grep matchComposition|routeKey handler.go
+  (no matches)
+PASS T4.2 matchComposition/routeKey deleted from handler
+$ grep -q func.*RegisterRoutes /Users/nathananderson-tennant/Development/restitch/internal/composition/handler.go
+
+exit_code=0
+PASS T4.2 RegisterRoutes exists
+
+##[T4.3]
+$ go test -count=1 ./internal/server/
+ok  	github.com/restitch/restitch-gateway/internal/server	0.348s
+exit_code=0
+PASS T4.3 server package tests
+
+##[M4.gate]
+$ go test -count=1 -race ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	2.974s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	1.262s
+ok  	github.com/restitch/restitch-gateway/internal/admin	2.588s
+ok  	github.com/restitch/restitch-gateway/internal/auth	4.868s
+ok  	github.com/restitch/restitch-gateway/internal/composition	1.761s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	2.318s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	2.075s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	3.070s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	2.057s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	1.718s
+ok  	github.com/restitch/restitch-gateway/internal/server	1.594s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	2.327s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	1.786s
+exit_code=0
+PASS M4.gate full tests (race)
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-67-gbba6fae7" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 50223...
+# Starting gateway on port 50221 (admin 50222)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:50221/api/users/42
+status=200
+body={"user":{"active":true,"id":"42","name":"user-42"}}
+PASS M4.gate path param request returns 200
+body={"user":{"active":true,"id":"42","name":"user-42"}}
+assert: "user" in data and data["user"].get("id") == "42"
+PASS M4.gate user-42 payload via path param
+$ curl -X POST /api/users/42 → 405
+PASS M4.gate POST returns 405
+$ curl -I /api/users/42 → 200
+PASS M4.gate HEAD returns 200
+
+RESULT M4: PASS (9 pass, 0 fail, 0 manual, 0 skip)

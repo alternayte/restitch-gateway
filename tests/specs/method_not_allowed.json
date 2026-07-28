@@ -1,0 +1,13 @@
+{
+  "name": "method not allowed - POST to GET-only route",
+  "in": {
+    "method": "POST",
+    "path": "/api/users/1",
+    "headers": {}
+  },
+  "out": {
+    "status": 405,
+    "headers": {},
+    "body_contains": []
+  }
+}

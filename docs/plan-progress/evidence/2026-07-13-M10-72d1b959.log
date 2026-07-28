@@ -1,0 +1,48 @@
+=== GATE M10 (commit 72d1b959, 2026-07-13) ===
+
+
+##[T10.1]
+$ test -f /Users/nathananderson-tennant/Development/restitch/cmd/restitch/pipeline.go
+
+exit_code=0
+PASS T10.1 pipeline.go exists
+$ test -f /Users/nathananderson-tennant/Development/restitch/cmd/restitch/reload.go
+
+exit_code=0
+PASS T10.1 reload.go exists
+$ go test -count=1 -race ./cmd/restitch/
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	1.529s
+exit_code=0
+PASS T10.1 cmd/restitch tests (race)
+
+##[M10.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-72-g72d1b959" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 56774...
+# Starting gateway on port 56772 (admin 56773)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:56772/api/users/1
+status=200
+body={"user":{"active":true,"id":"1","name":"user-1"}}
+PASS M10.gate baseline request returns 200
+$ POST /admin/api/reload (with corrupted config)
+{"errors":["parsing config: yaml: line 19: did not find expected node content"],"ok":false}
+PASS M10.gate reload with bad config returns ok:false
+$ curl -s -w '%{http_code}' http://127.0.0.1:56772/api/users/1
+status=200
+body={"user":{"active":true,"id":"1","name":"user-1"}}
+PASS M10.gate still serves after failed reload
+$ grep -E 'config reloaded\|config unchanged\|config file changed' /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.47Yi8sKmBM/gateway.log
+FAIL M10.gate SIGHUP triggers reload log message
+--- last 10 lines of gateway.log ---
+{"time":"2026-07-13T17:51:27.70774+02:00","level":"INFO","msg":"step complete","composition":"user","step":"u","wave":1,"status":200,"duration_ms":0.286,"request_id":"01KXE2T6PVBF88W95ZHSSP1DB6"}
+{"time":"2026-07-13T17:51:27.707803+02:00","level":"DEBUG","msg":"wave complete","wave":0,"duration":362542,"request_id":"01KXE2T6PVBF88W95ZHSSP1DB6"}
+{"time":"2026-07-13T17:51:27.707825+02:00","level":"INFO","msg":"composition complete","composition":"user","status":200,"partial":false,"errors":0,"step_timings":{"u":0.286},"total_steps":1,"slowest_step":{"duration_ms":0.286,"name":"u"},"gateway_overhead_ms":0.06295799999999996,"request_id":"01KXE2T6PVBF88W95ZHSSP1DB6"}
+{"time":"2026-07-13T17:51:27.70785+02:00","level":"INFO","msg":"request","method":"GET","path":"/api/users/1","status":200,"duration_ms":0.5085,"bytes_written":50,"remote_addr":"127.0.0.1:56798","user_agent":"curl/8.7.1","request_id":"01KXE2T6PVBF88W95ZHSSP1DB6"}
+{"time":"2026-07-13T17:51:27.724943+02:00","level":"INFO","msg":"SIGHUP received, reloading config"}
+{"time":"2026-07-13T17:51:27.725156+02:00","level":"INFO","msg":"config unchanged","hash":"af4989d1bd828a8e3879fcd73648e2d566e3729a768d8f704b723fa5b71fbf69"}
+{"time":"2026-07-13T17:51:27.725191+02:00","level":"INFO","msg":"config reloaded","hash":"af4989d1bd828a8e3879fcd73648e2d566e3729a768d8f704b723fa5b71fbf69"}
+{"time":"2026-07-13T17:51:28.225673+02:00","level":"INFO","msg":"config file changed, reloading"}
+{"time":"2026-07-13T17:51:28.22614+02:00","level":"INFO","msg":"config unchanged","hash":"af4989d1bd828a8e3879fcd73648e2d566e3729a768d8f704b723fa5b71fbf69"}
+{"time":"2026-07-13T17:51:28.226164+02:00","level":"INFO","msg":"config reloaded","hash":"af4989d1bd828a8e3879fcd73648e2d566e3729a768d8f704b723fa5b71fbf69"}
+
+RESULT M10: FAIL (6 pass, 1 fail, 0 manual, 0 skip)

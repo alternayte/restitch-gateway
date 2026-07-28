@@ -1,0 +1,49 @@
+=== GATE M9 (commit bba6fae7, 2026-07-13) ===
+
+
+##[T9.1]
+$ test -d /Users/nathananderson-tennant/Development/restitch/internal/inbound
+
+exit_code=0
+PASS T9.1 inbound package exists
+$ go test -count=1 -race ./internal/inbound/ ./internal/composition/
+ok  	github.com/restitch/restitch-gateway/internal/inbound	1.456s
+ok  	github.com/restitch/restitch-gateway/internal/composition	1.574s
+exit_code=0
+PASS T9.1 inbound + composition tests
+
+##[M9.gate]
+$ go test -count=1 -race ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	2.466s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	3.439s
+ok  	github.com/restitch/restitch-gateway/internal/admin	1.655s
+ok  	github.com/restitch/restitch-gateway/internal/auth	4.291s
+ok  	github.com/restitch/restitch-gateway/internal/composition	2.116s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	3.125s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	2.906s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	3.730s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	2.431s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	2.253s
+ok  	github.com/restitch/restitch-gateway/internal/server	2.215s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	2.868s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	2.481s
+exit_code=0
+PASS M9.gate full tests (race)
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-67-gbba6fae7" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 50912...
+# Starting gateway on port 50910 (admin 50911)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:50910/protected
+status=200
+body={"user":{"active":true,"id":"1","name":"user-1"}}
+FAIL M9.gate no API key returns 401 (got 200, expected 401)
+$ curl -H 'X-API-Key: test-key-123' /protected → 200
+PASS M9.gate valid API key returns 200
+$ curl -s -w '%{http_code}' http://127.0.0.1:50910/health
+status=200
+body={"status":"ok"}
+PASS M9.gate /health open without key
+
+RESULT M9: FAIL (5 pass, 1 fail, 0 manual, 0 skip)

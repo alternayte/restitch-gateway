@@ -1,0 +1,42 @@
+=== GATE M18 (commit 8afdda7d, 2026-07-13) ===
+
+
+##[T18.1]
+$ grep -q go.opentelemetry.io/otel /Users/nathananderson-tennant/Development/restitch/go.mod
+
+exit_code=0
+PASS T18.1 OTel dependency
+$ grep -rq SetupTracing\|InitTracing /Users/nathananderson-tennant/Development/restitch/internal/observability/
+
+exit_code=0
+PASS T18.1 tracing setup exists
+
+##[T18.2]
+$ grep -rq StartSpan\|Start(ctx\|tracer\.Start /Users/nathananderson-tennant/Development/restitch/internal/composition/
+
+exit_code=0
+PASS T18.2 span creation in executor or step
+
+##[T18.3]
+$ grep -rq traceparent\|otelhttp\|Inject /Users/nathananderson-tennant/Development/restitch/internal/
+
+exit_code=0
+PASS T18.3 traceparent propagation
+
+##[T18.4]
+$ grep -rq otlptrace\|OTEL_EXPORTER /Users/nathananderson-tennant/Development/restitch/internal/observability/
+
+exit_code=0
+PASS T18.4 OTLP exporter in code
+
+##[T18.5]
+$ grep -rq TraceID\|trace_id /Users/nathananderson-tennant/Development/restitch/internal/reqlog/ /Users/nathananderson-tennant/Development/restitch/internal/admin/
+
+exit_code=0
+PASS T18.5 trace_id field exists
+
+##[M18.gate]
+# Starting OTLP sink on port 57206...
+FAIL otlp-sink failed to start on port 57206 within 5s
+
+RESULT M18: FAIL (6 pass, 1 fail, 0 manual, 0 skip)

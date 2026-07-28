@@ -1,42 +1,31 @@
 package composition
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 )
 
 // CompositionResponse is the final response to send to client.
 type CompositionResponse struct {
 	Status      int
 	ContentType string
-	Body        interface{} // JSON-serializable body
+	Body        interface{}
 }
 
 // BuildResponse evaluates response template with step results.
-// It evaluates the status expression (if present) and recursively evaluates
-// the body template to produce the final response.
-//
-// If stepErrors is non-empty, injects _errors array into response body.
-//
-// Per CONTEXT.md decisions:
-//   - Status defaults to 200 if not specified
-//   - Status can be static int or expression string
-//   - Body template is recursively evaluated preserving structure
-//   - Expression strings like "{{ steps.user.body }}" are evaluated and replaced
-//   - Top-level `_errors` field in response body with failure details
-func BuildResponse(template *CompiledResponse, results map[string]*StepResult, req *http.Request, stepErrors []StepErrorDetail) (*CompositionResponse, error) {
-	// Build environment for expression evaluation
-	env := buildRequestEnv(req, results)
+// failedSteps contains step names that failed or were skipped — used for
+// nil-safe evaluation per K3: on eval error, if the template's deps
+// intersect failedSteps, return nil instead of an error.
+func BuildResponse(ctx context.Context, template *CompiledResponse, results map[string]*StepResult, rd *RequestData, stepErrors []StepErrorDetail, failedSteps map[string]bool) (*CompositionResponse, error) {
+	env := buildRequestEnv(ctx, rd, results)
 
-	// Evaluate status
-	status := 200 // Default status
-	if template.StatusExpr != nil {
-		statusValue, err := EvaluateExpression(template.StatusExpr, env)
+	status := 200
+	if template.StatusTmpl != nil {
+		statusValue, err := template.StatusTmpl.EvalValue(env)
 		if err != nil {
 			return nil, fmt.Errorf("failed to evaluate status expression: %w", err)
 		}
 
-		// Convert to int
 		switch v := statusValue.(type) {
 		case int:
 			status = v
@@ -47,14 +36,11 @@ func BuildResponse(template *CompiledResponse, results map[string]*StepResult, r
 		}
 	}
 
-	// Evaluate body template recursively
-	body, err := evaluateTemplate(template.BodyTemplate, env)
+	body, err := evaluateBodyNode(template.Body, env, failedSteps)
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate response body: %w", err)
 	}
 
-	// Inject _errors array if any step failed
-	// Per CONTEXT.md: "Top-level `_errors` field in response body with failure details"
 	if len(stepErrors) > 0 {
 		if bodyMap, ok := body.(map[string]interface{}); ok {
 			bodyMap["_errors"] = stepErrors
@@ -68,82 +54,61 @@ func BuildResponse(template *CompiledResponse, results map[string]*StepResult, r
 	}, nil
 }
 
-// evaluateTemplate recursively evaluates a template structure.
-// It walks through maps, arrays, and strings, evaluating expression templates
-// and preserving the overall structure.
-//
-// For strings containing {{ expr }}, it evaluates the expression and replaces it.
-// For nested structures, it recurses and evaluates each part.
-func evaluateTemplate(template interface{}, env map[string]interface{}) (interface{}, error) {
-	switch v := template.(type) {
-	case string:
-		// Check if it's an expression template
-		if IsExpression(v) {
-			return evaluateExpressionString(v, env)
-		}
-		return v, nil
+// evaluateBodyNode recursively evaluates a compiled body tree.
+// On eval error, if the template's deps intersect failedSteps, return nil
+// (for IsSingle) or "" (for interpolation) instead of propagating the error.
+func evaluateBodyNode(node *CompiledBodyNode, env map[string]any, failedSteps map[string]bool) (any, error) {
+	if node == nil {
+		return nil, nil
+	}
 
-	case map[string]interface{}:
-		result := make(map[string]interface{})
-		for key, value := range v {
-			evaluated, err := evaluateTemplate(value, env)
+	if node.Tmpl != nil {
+		val, err := node.Tmpl.EvalValue(env)
+		if err != nil {
+			if hasFailedDep(node.Tmpl.Deps, failedSteps) {
+				if node.Tmpl.IsSingle {
+					return nil, nil
+				}
+				return "", nil
+			}
+			return nil, err
+		}
+		return val, nil
+	}
+
+	if node.Map != nil {
+		result := make(map[string]interface{}, len(node.Map))
+		for key, child := range node.Map {
+			val, err := evaluateBodyNode(child, env, failedSteps)
 			if err != nil {
 				return nil, fmt.Errorf("field %s: %w", key, err)
 			}
-			result[key] = evaluated
+			result[key] = val
 		}
 		return result, nil
+	}
 
-	case []interface{}:
-		result := make([]interface{}, len(v))
-		for i, value := range v {
-			evaluated, err := evaluateTemplate(value, env)
+	if node.List != nil {
+		result := make([]interface{}, len(node.List))
+		for i, child := range node.List {
+			val, err := evaluateBodyNode(child, env, failedSteps)
 			if err != nil {
 				return nil, fmt.Errorf("index %d: %w", i, err)
 			}
-			result[i] = evaluated
+			result[i] = val
 		}
 		return result, nil
-
-	default:
-		// Pass through numbers, bools, nil, etc.
-		return v, nil
 	}
+
+	return node.Literal, nil
 }
 
-// evaluateExpressionString evaluates a string that contains expression templates.
-// If it's a single expression like "{{ expr }}", it returns the evaluated value.
-// If it's a template like "Hello {{ name }}", it interpolates and returns a string.
-func evaluateExpressionString(s string, env map[string]interface{}) (interface{}, error) {
-	// Extract expressions from the string
-	exprs := ExtractExpressions(s)
-	if len(exprs) == 0 {
-		return s, nil
-	}
-
-	// Check if the entire string is a single expression
-	// If so, return the evaluated value directly (preserve type)
-	trimmed := trimSpaces(s)
-	if len(exprs) == 1 && len(trimmed) > 4 && trimmed[:2] == "{{" && trimmed[len(trimmed)-2:] == "}}" {
-		// Single expression - evaluate and return as-is
-		compiled, err := CompileExpression(exprs[0], env)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compile expression: %w", err)
+// hasFailedDep checks if any of the template's deps are in the failed set.
+func hasFailedDep(deps []string, failedSteps map[string]bool) bool {
+	for _, d := range deps {
+		if failedSteps[d] {
+			return true
 		}
-
-		value, err := EvaluateExpression(compiled, env)
-		if err != nil {
-			return nil, fmt.Errorf("failed to evaluate expression: %w", err)
-		}
-
-		return value, nil
 	}
-
-	// Template string with embedded expressions - interpolate as string
-	result, err := interpolateTemplate(s, env)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return false
 }

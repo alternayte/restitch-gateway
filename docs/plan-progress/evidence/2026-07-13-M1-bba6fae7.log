@@ -1,0 +1,79 @@
+=== GATE M1 (commit bba6fae7, 2026-07-13) ===
+
+
+##[T1.1]
+$ go vet ./...
+
+exit_code=0
+PASS T1.1 go vet clean
+$ grep -rn 'ShutdownContext\|WaitForShutdown(' internal/ cmd/
+  (no matches)
+count=0
+PASS T1.1 only WaitForShutdownSignal remains
+
+##[T1.2]
+$ go build ./...
+
+exit_code=0
+PASS T1.2 build + tests green
+$ grep -rn 'NoneStrategy\|trimSpaces' internal/
+  (no matches)
+count=0
+PASS T1.2 dead code removed
+
+##[T1.3]
+$ grep -q func Setup /Users/nathananderson-tennant/Development/restitch/internal/observability/logging.go
+
+exit_code=0
+PASS T1.3 observability.Setup exists
+$ grep -q ContextHandler /Users/nathananderson-tennant/Development/restitch/internal/observability/logging.go
+
+exit_code=0
+PASS T1.3 ContextHandler exists
+
+##[T1.4]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-67-gbba6fae7" -o bin/restitch ./cmd/restitch
+PASS T1.4 unreadable config exits non-zero
+$ bin/restitch run -config /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.ENmuA5DRgE/unreadable.yaml
+failed to load config file: reading config: open /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.ENmuA5DRgE/unreadable.yaml: permission denied
+
+##[T1.5]
+$ grep -q ^ci: /Users/nathananderson-tennant/Development/restitch/Makefile
+
+exit_code=0
+PASS T1.5 Makefile exists with ci target
+$ test -f /Users/nathananderson-tennant/Development/restitch/.golangci.yml
+
+exit_code=0
+PASS T1.5 .golangci.yml exists
+$ test -f /Users/nathananderson-tennant/Development/restitch/LICENSE
+
+exit_code=0
+PASS T1.5 LICENSE exists
+$ go build -o /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.ENmuA5DRgE/mockupstream ./cmd/mockupstream
+
+exit_code=0
+PASS T1.5 mockupstream builds
+
+##[T1.6]
+$ python3 -c import yaml; yaml.safe_load(open('/Users/nathananderson-tennant/Development/restitch/.github/workflows/ci.yml'))
+
+exit_code=0
+PASS T1.6 ci.yml is valid YAML
+
+##[M1.gate]
+$ make -C /Users/nathananderson-tennant/Development/restitch ci
+go vet ./...
+golangci-lint run
+Error: can't load config: the Go language version (go1.24) used to build golangci-lint is lower than the targeted Go version (1.25.6)
+Failed executing command with error: can't load config: the Go language version (go1.24) used to build golangci-lint is lower than the targeted Go version (1.25.6)
+make[1]: *** [lint] Error 3
+exit_code=2
+FAIL M1.gate make ci
+# Starting mockupstream on port 50039...
+# Starting gateway on port 50037 (admin 50038)...
+JSON log validation: 12 lines, all valid JSON
+PASS M1.gate all log lines are valid JSON
+
+RESULT M1: FAIL (13 pass, 1 fail, 0 manual, 0 skip)

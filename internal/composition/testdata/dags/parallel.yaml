@@ -1,0 +1,22 @@
+upstreams:
+  svc:
+    url: "http://localhost:9999"
+compositions:
+  test:
+    path: /test
+    steps:
+      - name: a
+        upstream: svc
+        path: /a
+      - name: b
+        upstream: svc
+        path: /b
+      - name: c
+        upstream: svc
+        path: /c
+    response:
+      status: 200
+      body:
+        a: "{{ steps.a.body }}"
+        b: "{{ steps.b.body }}"
+        c: "{{ steps.c.body }}"

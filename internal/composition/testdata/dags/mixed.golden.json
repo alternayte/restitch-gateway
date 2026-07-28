@@ -1,0 +1,31 @@
+{
+  "waves": [
+    [
+      "fetch",
+      "validate"
+    ],
+    [
+      "enrich"
+    ],
+    [
+      "merge"
+    ],
+    [
+      "notify"
+    ]
+  ],
+  "deps": {
+    "enrich": [
+      "fetch"
+    ],
+    "fetch": [],
+    "merge": [
+      "enrich",
+      "validate"
+    ],
+    "notify": [
+      "merge"
+    ],
+    "validate": []
+  }
+}

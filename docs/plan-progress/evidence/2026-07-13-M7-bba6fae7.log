@@ -1,0 +1,29 @@
+=== GATE M7 (commit bba6fae7, 2026-07-13) ===
+
+
+##[T7.1]
+$ test -f /Users/nathananderson-tennant/Development/restitch/internal/upstream/cache.go
+
+exit_code=0
+PASS T7.1 cache.go exists
+$ go test -count=1 ./internal/upstream/ ./internal/gwconfig/
+ok  	github.com/restitch/restitch-gateway/internal/upstream	0.647s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	0.372s
+exit_code=0
+PASS T7.1 upstream + gwconfig tests
+
+##[M7.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-67-gbba6fae7" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 50705...
+# Starting gateway on port 50703 (admin 50704)...
+$ curl -s http://127.0.0.1:50704/metrics | grep restitch_cache_hits_total
+value=1
+expected: >= 1
+PASS M7.gate cache hit metric >= 1
+$ curl -s http://127.0.0.1:50704/metrics | grep restitch_cache_misses_total
+value=1
+expected: >= 1
+PASS M7.gate cache miss metric >= 1 (first request)
+
+RESULT M7: PASS (4 pass, 0 fail, 0 manual, 0 skip)

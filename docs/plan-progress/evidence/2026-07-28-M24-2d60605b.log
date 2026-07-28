@@ -1,0 +1,425 @@
+=== GATE M24 (commit 2d60605b, 2026-07-28) ===
+
+
+##[M24.gate]
+PASS docker available
+PASS k6 available
+PASS PROMETHEUS_VERSION=v3.13.1 (single source of truth)
+# Pre-pulling prom/prometheus:v3.13.1 (first run may take a minute)...
+v3.13.1: Pulling from prom/prometheus
+Digest: sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893
+Status: Image is up to date for prom/prometheus:v3.13.1
+docker.io/prom/prometheus:v3.13.1
+
+##[T24.1]
+$ m24_promtool check rules /p/rules/recording.yml
+Checking /p/rules/recording.yml
+  SUCCESS: 7 rules found
+exit_code=0
+PASS promtool check rules recording.yml
+$ m24_promtool test rules /p/rules/recording_test.yml
+  SUCCESS
+exit_code=0
+PASS promtool test rules recording_test.yml
+$ grep -c -- '  - record:' /Users/nathananderson-tennant/Development/restitch/deploy/prometheus/rules/recording.yml -> 7 (minimum 7)
+PASS recording.yml defines the specified recorded series (7 >= 7)
+$ grep -c -- 'exp_samples:' /Users/nathananderson-tennant/Development/restitch/deploy/prometheus/rules/recording_test.yml -> 6 (minimum 6)
+PASS recording_test.yml exercises the recorded series (not vacuous) (6 >= 6)
+
+##[T24.2]
+$ m24_promtool check rules /p/rules/alerts.yml
+Checking /p/rules/alerts.yml
+  SUCCESS: 4 rules found
+exit_code=0
+PASS promtool check rules alerts.yml
+$ m24_promtool test rules /p/rules/alerts_test.yml
+  SUCCESS
+exit_code=0
+PASS promtool test rules alerts_test.yml
+$ grep -c -- '  - alert:' /Users/nathananderson-tennant/Development/restitch/deploy/prometheus/rules/alerts.yml -> 4 (minimum 4)
+PASS alerts.yml defines all four PLAN.md alerts (4 >= 4)
+$ grep -c -- 'alertname:' /Users/nathananderson-tennant/Development/restitch/deploy/prometheus/rules/alerts_test.yml -> 11 (minimum 8)
+PASS alerts_test.yml has a positive AND negative case per alert (11 >= 8)
+$ grep -c 'alertname: RestitchHighP95Latency' alerts_test.yml -> 3 (minimum 2)
+PASS alerts_test.yml covers RestitchHighP95Latency with 3 cases
+$ grep -c 'alertname: RestitchHighErrorRate' alerts_test.yml -> 3 (minimum 2)
+PASS alerts_test.yml covers RestitchHighErrorRate with 3 cases
+$ grep -c 'alertname: RestitchConfigReloadFailing' alerts_test.yml -> 3 (minimum 2)
+PASS alerts_test.yml covers RestitchConfigReloadFailing with 3 cases
+$ grep -c 'alertname: RestitchGatewayDown' alerts_test.yml -> 2 (minimum 2)
+PASS alerts_test.yml covers RestitchGatewayDown with 2 cases
+$ grep -c -- 'exp_alerts:$' /Users/nathananderson-tennant/Development/restitch/deploy/prometheus/rules/alerts_test.yml -> 4 (minimum 4)
+PASS alerts_test.yml has positive cases (alerts that must FIRE) (4 >= 4)
+$ grep -c -- 'exp_alerts: \[\]' /Users/nathananderson-tennant/Development/restitch/deploy/prometheus/rules/alerts_test.yml -> 7 (minimum 4)
+PASS alerts_test.yml has negative cases (alerts that must stay silent) (7 >= 4)
+
+##[T24.3]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-148-g2d60605b" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 51826...
+# Starting studio on port 51827...
+# Starting gateway on port 51824 (admin 51825)...
+# Running k6: rate=1000/s duration=60s (this takes ~60s)...
+--- tail of k6 output ---
+
+running (0m55.0s), 000/052 VUs, 55266 complete and 0 interrupted iterations
+compositions   [  92% ] 000/050 VUs  0m55.0s/1m0s  1000.00 iters/s
+studio_api     [  92% ] 00/02 VUs    0m55.0s/1m0s  5.00 iters/s
+
+running (0m56.0s), 000/052 VUs, 56271 complete and 0 interrupted iterations
+compositions   [  93% ] 000/050 VUs  0m56.0s/1m0s  1000.00 iters/s
+studio_api     [  93% ] 00/02 VUs    0m56.0s/1m0s  5.00 iters/s
+
+running (0m57.0s), 000/052 VUs, 57276 complete and 0 interrupted iterations
+compositions   [  95% ] 000/050 VUs  0m57.0s/1m0s  1000.00 iters/s
+studio_api     [  95% ] 00/02 VUs    0m57.0s/1m0s  5.00 iters/s
+
+running (0m58.0s), 000/052 VUs, 58281 complete and 0 interrupted iterations
+compositions   [  97% ] 000/050 VUs  0m58.0s/1m0s  1000.00 iters/s
+studio_api     [  97% ] 00/02 VUs    0m58.0s/1m0s  5.00 iters/s
+
+running (0m59.0s), 000/052 VUs, 59286 complete and 0 interrupted iterations
+compositions   [  98% ] 000/050 VUs  0m59.0s/1m0s  1000.00 iters/s
+studio_api     [  98% ] 00/02 VUs    0m59.0s/1m0s  5.00 iters/s
+
+running (1m00.0s), 000/052 VUs, 60291 complete and 0 interrupted iterations
+compositions   [ 100% ] 000/050 VUs  1m00.0s/1m0s  1000.00 iters/s
+studio_api     [ 100% ] 00/02 VUs    1m00.0s/1m0s  5.00 iters/s
+
+M24 summary: {"compositions":{"p95_ms":0.588,"error_rate":0,"reqs":60002},"studio":{"p95_ms":0.4743999999999999,"reqs":300}}
+
+running (1m00.0s), 000/052 VUs, 60302 complete and 0 interrupted iterations
+compositions ✓ [ 100% ] 000/050 VUs  1m0s  1000.00 iters/s
+studio_api   ✓ [ 100% ] 00/02 VUs    1m0s  5.00 iters/s
+--- k6 summary ---
+{
+  "compositions": {
+    "p95_ms": 0.588,
+    "error_rate": 0,
+    "reqs": 60002
+  },
+  "studio": {
+    "p95_ms": 0.4743999999999999,
+    "reqs": 300
+  }
+}
+parsed: p95_ms=0.588 error_rate=0.000000 reqs=60002
+PASS k6 drove 60002 requests (>= 95% of 1000x60 = 57000)
+PASS compositions p95 0.588ms < 1000ms
+PASS compositions error rate 0.000000 < 0.01
+
+##[T24.4]
+--- gate compose env ---
+# Image version pins. Single source of truth: docker-compose.yml AND
+# scripts/gates/m24.sh read PROMETHEUS_VERSION from this file. Never add a
+# second copy of the version, and never fall back to :latest — the gate
+# validates rules with exactly the Prometheus that loads them.
+PROMETHEUS_VERSION=v3.13.1
+JAEGER_VERSION=1.70.0
+RESTITCH_IMAGE_TAG=dev
+
+# Host port bindings. Prometheus is on 9091, NOT its conventional 9090,
+# because the gateway admin/metrics server already owns 9090.
+GATEWAY_PORT=8080
+GATEWAY_ADMIN_PORT=9090
+STUDIO_PORT=3080
+PROMETHEUS_PORT=9091
+JAEGER_UI_PORT=16686
+
+# Set to a non-empty value to require X-Admin-Key on the gateway admin API.
+# /metrics and /health stay unauthenticated either way, so Prometheus does
+# not need this secret.
+RESTITCH_ADMIN_API_KEY=
+
+# Tracing. Unset disables the exporter entirely.
+OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+GATEWAY_PORT=51975
+GATEWAY_ADMIN_PORT=51976
+STUDIO_PORT=51977
+PROMETHEUS_PORT=51978
+JAEGER_UI_PORT=51979
+# Building and starting the deploy stack (first build runs npm ci + two Go builds; expect several minutes)...
+#0 building with "cloud-nayth-projects" instance using cloud driver
+
+#1 [studio internal] connected to docker build cloud service
+#1 DONE 0.0s
+
+#2 [studio internal] load build definition from Dockerfile
+#2 transferring dockerfile: 67B 0.1s
+#2 transferring dockerfile: 930B 0.3s done
+#2 DONE 0.3s
+
+#3 [studio internal] load metadata for docker.io/library/node:20-alpine
+#3 ...
+
+#4 [studio internal] load metadata for gcr.io/distroless/static-debian12:latest
+#4 DONE 0.3s
+
+#5 [studio auth] library/node:pull token for registry-1.docker.io
+#5 DONE 0.0s
+
+#6 [studio auth] library/golang:pull token for registry-1.docker.io
+#6 DONE 0.0s
+
+#7 [studio internal] load metadata for docker.io/library/golang:1.25-alpine
+#7 DONE 0.8s
+
+#3 [studio internal] load metadata for docker.io/library/node:20-alpine
+#3 DONE 0.8s
+
+#8 [studio internal] load .dockerignore
+#8 transferring context: 69B 0.1s
+#8 transferring context: 116B 0.3s done
+#8 DONE 0.3s
+
+#9 [studio studio 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#9 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.1s done
+#9 DONE 0.1s
+
+#10 [studio stage-2 1/3] FROM gcr.io/distroless/static-debian12:latest@sha256:a9fcaedd4c9b59e12dd65d954f0b5044f19b0647a8a3712e77205df9e7b102cd
+#10 resolve gcr.io/distroless/static-debian12:latest@sha256:a9fcaedd4c9b59e12dd65d954f0b5044f19b0647a8a3712e77205df9e7b102cd 0.1s done
+#10 DONE 0.1s
+
+#11 [studio builder 1/9] FROM docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+#11 resolve docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 0.1s done
+#11 DONE 0.1s
+
+#12 [studio internal] load build context
+#12 transferring context: 251.61kB 0.5s done
+#12 DONE 0.5s
+
+#13 [studio builder 3/9] WORKDIR /build
+#13 CACHED
+
+#14 [studio builder 2/9] RUN apk add --no-cache git
+#14 CACHED
+
+#15 [studio builder 4/9] COPY go.mod go.sum ./
+#15 CACHED
+
+#16 [studio studio 4/6] RUN npm ci
+#16 CACHED
+
+#17 [studio studio 5/6] COPY studio/ ./
+#17 CACHED
+
+#18 [studio studio 2/6] WORKDIR /build/studio
+#18 CACHED
+
+#19 [studio studio 3/6] COPY studio/package.json studio/package-lock.json ./
+#19 CACHED
+
+#20 [studio builder 5/9] RUN go mod download
+#20 CACHED
+
+#21 [studio studio 6/6] RUN npm run build
+#21 CACHED
+
+#22 [studio builder 6/9] COPY . .
+#22 DONE 0.7s
+
+#23 [studio builder 7/9] COPY --from=studio /build/cmd/restitch-studio/dist/ ./cmd/restitch-studio/dist/
+#23 DONE 0.1s
+
+#24 [studio builder 8/9] RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=dev" -o /restitch ./cmd/restitch
+#24 DONE 21.6s
+
+#25 [studio builder 9/9] RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=dev" -o /restitch-studio ./cmd/restitch-studio
+#25 DONE 1.2s
+
+#26 [studio stage-2 2/3] COPY --from=builder /restitch /restitch
+#26 CACHED
+
+#27 [studio stage-2 3/3] COPY --from=builder /restitch-studio /restitch-studio
+#27 CACHED
+
+#28 [studio] exporting to image
+#28 exporting layers done
+#28 exporting manifest sha256:9365f935e4f6a3e6efca971756c44ffc4a69e6bbaaccb0bddb27c1134f70800e done
+#28 exporting config sha256:6dd250ad3d27cf56c6349045db1b836b3214ad40a67fe2a5fea70d512e0172da done
+#28 exporting to cloud pull
+#28 ...
+
+#29 [studio] cloud pull
+#29 DONE 0.4s
+
+#28 [studio] exporting to image
+#28 exporting to cloud pull 0.4s done
+#28 DONE 0.5s
+
+#30 [studio] resolving provenance for metadata file
+#30 DONE 0.1s
+
+#31 [gateway internal] connected to docker build cloud service
+#31 DONE 0.0s
+
+#32 [gateway internal] load build definition from Dockerfile
+#32 transferring dockerfile: 67B 0.1s
+#32 transferring dockerfile: 930B 0.3s done
+#32 DONE 0.3s
+
+#3 [gateway internal] load metadata for docker.io/library/node:20-alpine
+#3 ...
+
+#4 [gateway internal] load metadata for gcr.io/distroless/static-debian12:latest
+#4 DONE 0.6s
+
+#7 [gateway internal] load metadata for docker.io/library/golang:1.25-alpine
+#7 DONE 1.2s
+
+#3 [gateway internal] load metadata for docker.io/library/node:20-alpine
+#3 DONE 1.2s
+
+#33 [gateway internal] load .dockerignore
+#33 transferring context: 69B 0.1s
+#33 transferring context: 116B 0.3s done
+#33 DONE 0.3s
+
+#10 [gateway stage-2 1/3] FROM gcr.io/distroless/static-debian12:latest@sha256:a9fcaedd4c9b59e12dd65d954f0b5044f19b0647a8a3712e77205df9e7b102cd
+#10 resolve gcr.io/distroless/static-debian12:latest@sha256:a9fcaedd4c9b59e12dd65d954f0b5044f19b0647a8a3712e77205df9e7b102cd 0.0s done
+#10 DONE 0.1s
+
+#11 [gateway builder 1/9] FROM docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+#11 resolve docker.io/library/golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 0.0s done
+#11 DONE 0.1s
+
+#9 [gateway studio 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#9 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+#9 DONE 0.1s
+
+#34 [gateway internal] load build context
+#34 transferring context: 56.56kB 0.3s done
+#34 DONE 0.3s
+
+#13 [gateway builder 3/9] WORKDIR /build
+#13 CACHED
+
+#35 [gateway builder 4/9] COPY go.mod go.sum ./
+#35 CACHED
+
+#14 [gateway builder 2/9] RUN apk add --no-cache git
+#14 CACHED
+
+#36 [gateway builder 5/9] RUN go mod download
+#36 CACHED
+
+#18 [gateway studio 2/6] WORKDIR /build/studio
+#18 CACHED
+
+#37 [gateway studio 4/6] RUN npm ci
+#37 CACHED
+
+#38 [gateway studio 5/6] COPY studio/ ./
+#38 CACHED
+
+#39 [gateway studio 3/6] COPY studio/package.json studio/package-lock.json ./
+#39 CACHED
+
+#40 [gateway studio 6/6] RUN npm run build
+#40 CACHED
+
+#41 [gateway builder 6/9] COPY . .
+#41 DONE 0.1s
+
+#42 [gateway builder 7/9] COPY --from=studio /build/cmd/restitch-studio/dist/ ./cmd/restitch-studio/dist/
+#42 DONE 0.0s
+
+#43 [gateway builder 8/9] RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=dev" -o /restitch ./cmd/restitch
+#43 DONE 16.5s
+
+#44 [gateway builder 9/9] RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=dev" -o /restitch-studio ./cmd/restitch-studio
+#44 DONE 1.2s
+
+#45 [gateway stage-2 2/3] COPY --from=builder /restitch /restitch
+#45 CACHED
+
+#46 [gateway stage-2 3/3] COPY --from=builder /restitch-studio /restitch-studio
+#46 CACHED
+
+#47 [gateway] exporting to image
+#47 exporting layers done
+#47 exporting manifest sha256:3a0110ae2748ea27af1f22927ad81744479587d79c32d89bc966a909e8d52e56 done
+#47 exporting config sha256:48f26757a53cbcb241bfd221341d0729bd676ec82aaf8eb54805a0ac8624e8d2 done
+#47 exporting to cloud pull
+#47 ...
+
+#48 [gateway] cloud pull
+#48 DONE 0.4s
+
+#47 [gateway] exporting to image
+#47 exporting to cloud pull 0.5s done
+#47 DONE 0.5s
+
+#49 [gateway] resolving provenance for metadata file
+#49 DONE 0.1s
+ Network restitch-m24-gate_default  Creating
+ Network restitch-m24-gate_default  Created
+ Volume "restitch-m24-gate_prometheus-data"  Creating
+ Volume "restitch-m24-gate_prometheus-data"  Created
+ Volume "restitch-m24-gate_studio-data"  Creating
+ Volume "restitch-m24-gate_studio-data"  Created
+ Container restitch-m24-gate-studio-1  Creating
+ Container restitch-m24-gate-jaeger-1  Creating
+ Container restitch-m24-gate-jaeger-1  Created
+ Container restitch-m24-gate-studio-1  Created
+ Container restitch-m24-gate-gateway-1  Creating
+ Container restitch-m24-gate-gateway-1  Created
+ Container restitch-m24-gate-prometheus-1  Creating
+ Container restitch-m24-gate-prometheus-1  Created
+ Container restitch-m24-gate-jaeger-1  Starting
+ Container restitch-m24-gate-studio-1  Starting
+ Container restitch-m24-gate-jaeger-1  Started
+ Container restitch-m24-gate-studio-1  Started
+ Container restitch-m24-gate-gateway-1  Starting
+ Container restitch-m24-gate-gateway-1  Started
+ Container restitch-m24-gate-prometheus-1  Starting
+ Container restitch-m24-gate-prometheus-1  Started
+PASS deploy stack started
+$ curl -s http://127.0.0.1:51978/api/v1/rules  -> predicate 'len(data["data"]["groups"]) >= 2' satisfied
+{"status":"success","data":{"groups":[{"name":"restitch_alerts","file":"/etc/prometheus/rules/alerts.yml","rules":[{"state":"unknown","name":"RestitchHighP95Latency","query":"composition:restitch_request_duration_seconds:p95 \u003e 1","duration":300,"keepFiringFor":0,"labels":{"severity":"warning"},"annotations":{"description":"P95 is {{ $value | humanizeDuration }} over the last 5m.","summary":"P95 latency above 1s for composition {{ $labels.composition }}"},"alerts":[],"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"},{"state":"unknown","name":"RestitchHighErrorRate","query":"composition:restitch_requests:error_ratio5m \u003e 0.05","duration":300,"keepFiringFor":0,"labels":{"severity":"critical"},"annotations":{"description":"Error ratio is {{ $value | humanizePercentage }} over the last 5m.","summary":"5xx rate above 5% for composition {{ $labels.composition }}"},"alerts":[],"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"},{"state":"unknown","name":"RestitchConfigReloadFailing","query":"rate(restitch_registry_polls_total{result!=\"success\"}[5m]) \u003e 0","duration":600,"keepFiringFor":0,"labels":{"severity":"warning"},"annotations":{"description":"Failing poll rate is {{ $value }}/s. The gateway keeps serving its last known good config.","summary":"Gateway registry polls have been failing for 10m"},"alerts":[],"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"},{"state":"unknown","name":"RestitchGatewayDown","query":"up{job=\"restitch-gateway\"} == 0","duration":120,"keepFiringFor":0,"labels":{"severity":"critical"},"annotations":{"description":"Prometheus has failed to scrape the gateway for 2m.","summary":"Gateway target {{ $labels.instance }} is down"},"alerts":[],"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"}],"interval":15,"limit":0,"evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z"},{"name":"restitch_composition","file":"/etc/prometheus/rules/recording.yml","rules":[{"name":"composition:restitch_requests:rate5m","query":"sum by (composition) (rate(restitch_requests_total[5m]))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_requests_errors:rate5m","query":"sum by (composition) (rate(restitch_requests_total{status=~\"5..\"}[5m]))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_requests:error_ratio5m","query":"composition:restitch_requests_errors:rate5m / on (composition) composition:restitch_requests:rate5m","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_partial_responses:rate5m","query":"sum by (composition) (rate(restitch_partial_responses_total[5m]))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_request_duration_seconds:p50","query":"histogram_quantile(0.5, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_request_duration_seconds:p95","query":"histogram_quantile(0.95, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_request_duration_seconds:p99","query":"histogram_quantile(0.99, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"}],"interval":30,"limit":0,"evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z"}]}}
+PASS Prometheus reports >= 2 rule groups loaded
+$ curl -s http://127.0.0.1:51978/api/v1/rules  -> predicate 'sum(len(g["rules"]) for g in data["data"]["groups"]) >= 11' satisfied
+{"status":"success","data":{"groups":[{"name":"restitch_alerts","file":"/etc/prometheus/rules/alerts.yml","rules":[{"state":"unknown","name":"RestitchHighP95Latency","query":"composition:restitch_request_duration_seconds:p95 \u003e 1","duration":300,"keepFiringFor":0,"labels":{"severity":"warning"},"annotations":{"description":"P95 is {{ $value | humanizeDuration }} over the last 5m.","summary":"P95 latency above 1s for composition {{ $labels.composition }}"},"alerts":[],"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"},{"state":"unknown","name":"RestitchHighErrorRate","query":"composition:restitch_requests:error_ratio5m \u003e 0.05","duration":300,"keepFiringFor":0,"labels":{"severity":"critical"},"annotations":{"description":"Error ratio is {{ $value | humanizePercentage }} over the last 5m.","summary":"5xx rate above 5% for composition {{ $labels.composition }}"},"alerts":[],"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"},{"state":"unknown","name":"RestitchConfigReloadFailing","query":"rate(restitch_registry_polls_total{result!=\"success\"}[5m]) \u003e 0","duration":600,"keepFiringFor":0,"labels":{"severity":"warning"},"annotations":{"description":"Failing poll rate is {{ $value }}/s. The gateway keeps serving its last known good config.","summary":"Gateway registry polls have been failing for 10m"},"alerts":[],"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"},{"state":"unknown","name":"RestitchGatewayDown","query":"up{job=\"restitch-gateway\"} == 0","duration":120,"keepFiringFor":0,"labels":{"severity":"critical"},"annotations":{"description":"Prometheus has failed to scrape the gateway for 2m.","summary":"Gateway target {{ $labels.instance }} is down"},"alerts":[],"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"}],"interval":15,"limit":0,"evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z"},{"name":"restitch_composition","file":"/etc/prometheus/rules/recording.yml","rules":[{"name":"composition:restitch_requests:rate5m","query":"sum by (composition) (rate(restitch_requests_total[5m]))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_requests_errors:rate5m","query":"sum by (composition) (rate(restitch_requests_total{status=~\"5..\"}[5m]))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_requests:error_ratio5m","query":"composition:restitch_requests_errors:rate5m / on (composition) composition:restitch_requests:rate5m","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_partial_responses:rate5m","query":"sum by (composition) (rate(restitch_partial_responses_total[5m]))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_request_duration_seconds:p50","query":"histogram_quantile(0.5, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_request_duration_seconds:p95","query":"histogram_quantile(0.95, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"},{"name":"composition:restitch_request_duration_seconds:p99","query":"histogram_quantile(0.99, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))","labels":{},"health":"unknown","evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","type":"recording"}],"interval":30,"limit":0,"evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z"}]}}
+PASS Prometheus loaded >= 11 rules (7 recording + 4 alerting)
+$ curl -s http://127.0.0.1:51978/api/v1/rules  -> predicate 'all(r.get("health") == "ok" for g in data["data"]["groups"] for r in g["rules"])' satisfied
+{"status":"success","data":{"groups":[{"name":"restitch_alerts","file":"/etc/prometheus/rules/alerts.yml","rules":[{"state":"inactive","name":"RestitchHighP95Latency","query":"composition:restitch_request_duration_seconds:p95 \u003e 1","duration":300,"keepFiringFor":0,"labels":{"severity":"warning"},"annotations":{"description":"P95 is {{ $value | humanizeDuration }} over the last 5m.","summary":"P95 latency above 1s for composition {{ $labels.composition }}"},"alerts":[],"health":"ok","evaluationTime":0.000754375,"lastEvaluation":"2026-07-28T11:02:24.512144794Z","type":"alerting"},{"state":"inactive","name":"RestitchHighErrorRate","query":"composition:restitch_requests:error_ratio5m \u003e 0.05","duration":300,"keepFiringFor":0,"labels":{"severity":"critical"},"annotations":{"description":"Error ratio is {{ $value | humanizePercentage }} over the last 5m.","summary":"5xx rate above 5% for composition {{ $labels.composition }}"},"alerts":[],"health":"ok","evaluationTime":0.000091875,"lastEvaluation":"2026-07-28T11:02:24.512916669Z","type":"alerting"},{"state":"inactive","name":"RestitchConfigReloadFailing","query":"rate(restitch_registry_polls_total{result!=\"success\"}[5m]) \u003e 0","duration":600,"keepFiringFor":0,"labels":{"severity":"warning"},"annotations":{"description":"Failing poll rate is {{ $value }}/s. The gateway keeps serving its last known good config.","summary":"Gateway registry polls have been failing for 10m"},"alerts":[],"health":"ok","evaluationTime":0.000271791,"lastEvaluation":"2026-07-28T11:02:24.513015544Z","type":"alerting"},{"state":"inactive","name":"RestitchGatewayDown","query":"up{job=\"restitch-gateway\"} == 0","duration":120,"keepFiringFor":0,"labels":{"severity":"critical"},"annotations":{"description":"Prometheus has failed to scrape the gateway for 2m.","summary":"Gateway target {{ $labels.instance }} is down"},"alerts":[],"health":"ok","evaluationTime":0.000133542,"lastEvaluation":"2026-07-28T11:02:24.513296128Z","type":"alerting"}],"interval":15,"limit":0,"evaluationTime":0.001383167,"lastEvaluation":"2026-07-28T11:02:24.512052878Z"},{"name":"restitch_composition","file":"/etc/prometheus/rules/recording.yml","rules":[{"name":"composition:restitch_requests:rate5m","query":"sum by (composition) (rate(restitch_requests_total[5m]))","labels":{},"health":"ok","evaluationTime":0.000360875,"lastEvaluation":"2026-07-28T11:02:29.828091963Z","type":"recording"},{"name":"composition:restitch_requests_errors:rate5m","query":"sum by (composition) (rate(restitch_requests_total{status=~\"5..\"}[5m]))","labels":{},"health":"ok","evaluationTime":0.000104375,"lastEvaluation":"2026-07-28T11:02:29.828459547Z","type":"recording"},{"name":"composition:restitch_requests:error_ratio5m","query":"composition:restitch_requests_errors:rate5m / on (composition) composition:restitch_requests:rate5m","labels":{},"health":"ok","evaluationTime":0.000069083,"lastEvaluation":"2026-07-28T11:02:29.828569505Z","type":"recording"},{"name":"composition:restitch_partial_responses:rate5m","query":"sum by (composition) (rate(restitch_partial_responses_total[5m]))","labels":{},"health":"ok","evaluationTime":0.000057917,"lastEvaluation":"2026-07-28T11:02:29.828645922Z","type":"recording"},{"name":"composition:restitch_request_duration_seconds:p50","query":"histogram_quantile(0.5, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))","labels":{},"health":"ok","evaluationTime":0.000133333,"lastEvaluation":"2026-07-28T11:02:29.828707922Z","type":"recording"},{"name":"composition:restitch_request_duration_seconds:p95","query":"histogram_quantile(0.95, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))","labels":{},"health":"ok","evaluationTime":0.000059375,"lastEvaluation":"2026-07-28T11:02:29.828846255Z","type":"recording"},{"name":"composition:restitch_request_duration_seconds:p99","query":"histogram_quantile(0.99, sum by (composition, le) (rate(restitch_request_duration_seconds_bucket[5m])))","labels":{},"health":"ok","evaluationTime":0.000061125,"lastEvaluation":"2026-07-28T11:02:29.828910047Z","type":"recording"}],"interval":30,"limit":0,"evaluationTime":0.000942834,"lastEvaluation":"2026-07-28T11:02:29.828031797Z"}]}}
+PASS every loaded rule reports health=ok
+$ curl -s http://127.0.0.1:51978/api/v1/query?query=up%7Bjob%3D%22restitch-gateway%22%7D  -> predicate 'any(float(r["value"][1]) == 1 for r in data["data"]["result"])' satisfied
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"up","instance":"gateway:9090","job":"restitch-gateway"},"value":[1785236551.965,"1"]}]}}
+PASS up{job="restitch-gateway"} == 1 — Prometheus is scraping the gateway
+# Tearing down the deploy stack...
+ Container restitch-m24-gate-jaeger-1  Stopping
+ Container restitch-m24-gate-prometheus-1  Stopping
+ Container restitch-m24-gate-jaeger-1  Stopped
+ Container restitch-m24-gate-jaeger-1  Removing
+ Container restitch-m24-gate-jaeger-1  Removed
+ Container restitch-m24-gate-prometheus-1  Stopped
+ Container restitch-m24-gate-prometheus-1  Removing
+ Container restitch-m24-gate-prometheus-1  Removed
+ Container restitch-m24-gate-gateway-1  Stopping
+ Container restitch-m24-gate-gateway-1  Stopped
+ Container restitch-m24-gate-gateway-1  Removing
+ Container restitch-m24-gate-gateway-1  Removed
+ Container restitch-m24-gate-studio-1  Stopping
+ Container restitch-m24-gate-studio-1  Stopped
+ Container restitch-m24-gate-studio-1  Removing
+ Container restitch-m24-gate-studio-1  Removed
+ Volume restitch-m24-gate_prometheus-data  Removing
+ Volume restitch-m24-gate_studio-data  Removing
+ Network restitch-m24-gate_default  Removing
+ Volume restitch-m24-gate_studio-data  Removed
+ Volume restitch-m24-gate_prometheus-data  Removed
+ Network restitch-m24-gate_default  Removed
+
+##[M24.unit]
+$ m24_promtool test rules /p/rules/recording_test.yml /p/rules/alerts_test.yml
+  SUCCESS
+
+  SUCCESS
+exit_code=0
+PASS promtool test rules (all suites)
+
+##[M24.gate]
+PASS M24 gate: all phases passed
+
+RESULT M24: PASS (27 pass, 0 fail, 0 manual, 0 skip)

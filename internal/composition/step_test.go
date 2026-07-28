@@ -8,11 +8,22 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	upstreampkg "github.com/restitch/restitch-gateway/internal/upstream"
 )
+
+func mustCompileTemplate(t *testing.T, raw string) *Template {
+	t.Helper()
+	env := BuildBaseEnvironment(nil)
+	tmpl, err := CompileTemplate(raw, env)
+	if err != nil {
+		t.Fatalf("CompileTemplate(%q) failed: %v", raw, err)
+	}
+	return tmpl
+}
 
 func TestExecuteStep(t *testing.T) {
 	t.Run("simple GET request", func(t *testing.T) {
-		// Mock upstream server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/users/123" {
 				t.Errorf("Expected path /users/123, got %s", r.URL.Path)
@@ -22,40 +33,34 @@ func TestExecuteStep(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id":   123,
 				"name": "Alice",
 			})
 		}))
 		defer server.Close()
 
-		// Create compiled step
 		step := &CompiledStep{
 			Step: &Step{
-				Name:     "user",
-				Method:   "GET",
-				Headers:  map[string]string{},
+				Name:    "user",
+				Method:  "GET",
+				Headers: map[string]string{},
 			},
-			PathExpr: &CompiledExpr{
-				Raw: "/users/123",
-			},
-			HeaderExprs: map[string]*CompiledExpr{},
+			PathPart: mustCompileTemplate(t, "/users/123"),
+			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
-			Upstream: &Upstream{URL: server.URL},
-			Auth:     nil, // No auth for this test
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(httptest.NewRequest("GET", "/", nil), nil, nil), nil)
 
-		// Execute step
-		result, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		result, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
 			t.Fatalf("ExecuteStep failed: %v", err)
 		}
 
-		// Verify result
 		if result.Status != 200 {
 			t.Errorf("Expected status 200, got %d", result.Status)
 		}
@@ -71,47 +76,41 @@ func TestExecuteStep(t *testing.T) {
 	})
 
 	t.Run("path with expression evaluation", func(t *testing.T) {
-		// Mock upstream server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/users/456" {
 				t.Errorf("Expected path /users/456, got %s", r.URL.Path)
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"id": 456,
 			})
 		}))
 		defer server.Close()
 
-		// Create environment with query parameter
 		incomingReq := httptest.NewRequest("GET", "/?user_id=456", nil)
-		env := buildRequestEnv(incomingReq, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(incomingReq, nil, nil), nil)
 
-		// Compile path expression
-		pathExpr, err := CompileExpression("req.query.user_id", BuildBaseEnvironment(nil))
+		pathTmpl, err := CompileTemplate("/users/{{ req.query.user_id }}", env)
 		if err != nil {
-			t.Fatalf("Failed to compile path expression: %v", err)
+			t.Fatalf("Failed to compile path template: %v", err)
 		}
-		pathExpr.Raw = "/users/{{ req.query.user_id }}"
 
 		step := &CompiledStep{
 			Step: &Step{
-				Name:     "user",
-				Method:   "GET",
-				Headers:  map[string]string{},
+				Name:    "user",
+				Method:  "GET",
+				Headers: map[string]string{},
 			},
-			PathExpr: pathExpr,
-			HeaderExprs: map[string]*CompiledExpr{},
+			PathPart: pathTmpl,
+			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
-			Upstream: &Upstream{URL: server.URL},
-			Auth:     nil, // No auth for this test
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
-		// Execute step
-		result, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		result, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
 			t.Fatalf("ExecuteStep failed: %v", err)
 		}
@@ -122,136 +121,115 @@ func TestExecuteStep(t *testing.T) {
 	})
 
 	t.Run("header propagation", func(t *testing.T) {
-		// Mock upstream server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Verify X-Request-ID was propagated
 			requestID := r.Header.Get("X-Request-ID")
 			if requestID != "test-request-123" {
 				t.Errorf("Expected X-Request-ID test-request-123, got %s", requestID)
 			}
 
-			// Verify traceparent was propagated
 			traceparent := r.Header.Get("traceparent")
 			if traceparent != "00-trace-123" {
 				t.Errorf("Expected traceparent 00-trace-123, got %s", traceparent)
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 		}))
 		defer server.Close()
 
-		// Create incoming request with headers
 		incomingReq := httptest.NewRequest("GET", "/", nil)
 		incomingReq.Header.Set("X-Request-ID", "test-request-123")
 		incomingReq.Header.Set("X-Correlation-ID", "corr-456")
 		incomingReq.Header.Set("traceparent", "00-trace-123")
 
-		env := buildRequestEnv(incomingReq, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(incomingReq, nil, nil), nil)
 
 		step := &CompiledStep{
 			Step: &Step{
-				Name:     "test",
-				Method:   "GET",
-				Headers:  map[string]string{},
+				Name:    "test",
+				Method:  "GET",
+				Headers: map[string]string{},
 			},
-			PathExpr: &CompiledExpr{
-				Raw: "/test",
-			},
-			HeaderExprs: map[string]*CompiledExpr{},
+			PathPart: mustCompileTemplate(t, "/test"),
+			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
-			Upstream: &Upstream{URL: server.URL},
-			Auth:     nil, // No auth for this test
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
-		// Execute step
-		_, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		_, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
 			t.Fatalf("ExecuteStep failed: %v", err)
 		}
 	})
 
 	t.Run("X-Request-ID generation when missing", func(t *testing.T) {
-		// Mock upstream server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Verify X-Request-ID was generated (should be a UUID)
 			requestID := r.Header.Get("X-Request-ID")
 			if requestID == "" {
 				t.Error("Expected X-Request-ID to be generated")
 			}
-			if len(requestID) < 36 { // UUID length
+			if len(requestID) < 36 {
 				t.Errorf("Expected UUID format for X-Request-ID, got %s", requestID)
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 		}))
 		defer server.Close()
 
-		// Create incoming request WITHOUT X-Request-ID
 		incomingReq := httptest.NewRequest("GET", "/", nil)
-		env := buildRequestEnv(incomingReq, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(incomingReq, nil, nil), nil)
 
 		step := &CompiledStep{
 			Step: &Step{
-				Name:     "test",
-				Method:   "GET",
-				Headers:  map[string]string{},
+				Name:    "test",
+				Method:  "GET",
+				Headers: map[string]string{},
 			},
-			PathExpr: &CompiledExpr{
-				Raw: "/test",
-			},
-			HeaderExprs: map[string]*CompiledExpr{},
+			PathPart: mustCompileTemplate(t, "/test"),
+			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
-			Upstream: &Upstream{URL: server.URL},
-			Auth:     nil, // No auth for this test
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
-		// Execute step
-		_, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		_, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
 			t.Fatalf("ExecuteStep failed: %v", err)
 		}
 	})
 
 	t.Run("context cancellation", func(t *testing.T) {
-		// Mock upstream server with delay
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(100 * time.Millisecond)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 		}))
 		defer server.Close()
 
 		step := &CompiledStep{
 			Step: &Step{
-				Name:     "test",
-				Method:   "GET",
-				Headers:  map[string]string{},
+				Name:    "test",
+				Method:  "GET",
+				Headers: map[string]string{},
 			},
-			PathExpr: &CompiledExpr{
-				Raw: "/test",
-			},
-			HeaderExprs: map[string]*CompiledExpr{},
+			PathPart: mustCompileTemplate(t, "/test"),
+			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
-			Upstream: &Upstream{URL: server.URL},
-			Auth:     nil, // No auth for this test
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(httptest.NewRequest("GET", "/", nil), nil, nil), nil)
 
-		// Create context that will be cancelled
 		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // Cancel immediately
+		cancel()
 
-		// Execute step - should fail with context cancelled error
-		_, err := ExecuteStep(ctx, step, upstream, env, http.DefaultClient)
+		_, err := ExecuteStep(ctx, step, upstream, env)
 		if err == nil {
 			t.Error("Expected error from cancelled context")
 		}
@@ -261,11 +239,10 @@ func TestExecuteStep(t *testing.T) {
 	})
 
 	t.Run("upstream error passthrough", func(t *testing.T) {
-		// Mock upstream server returning error
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"error": "user not found",
 			})
 		}))
@@ -273,41 +250,95 @@ func TestExecuteStep(t *testing.T) {
 
 		step := &CompiledStep{
 			Step: &Step{
-				Name:     "user",
-				Method:   "GET",
-				Headers:  map[string]string{},
+				Name:    "user",
+				Method:  "GET",
+				Headers: map[string]string{},
 			},
-			PathExpr: &CompiledExpr{
-				Raw: "/users/999",
-			},
-			HeaderExprs: map[string]*CompiledExpr{},
+			PathPart: mustCompileTemplate(t, "/users/999"),
+			Headers:  map[string]*Template{},
 		}
 
-		upstream := &CompiledUpstream{
-			Upstream: &Upstream{URL: server.URL},
-			Auth:     nil, // No auth for this test
+		upstream := &upstreampkg.Upstream{MaxResponseBytes: 10 * 1024 * 1024, Client: http.DefaultClient,
+			BaseURL: server.URL,
 		}
 
-		env := buildRequestEnv(httptest.NewRequest("GET", "/", nil), nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(httptest.NewRequest("GET", "/", nil), nil, nil), nil)
 
-		// Execute step - should NOT return error (passthrough upstream status)
-		result, err := ExecuteStep(context.Background(), step, upstream, env, http.DefaultClient)
+		result, err := ExecuteStep(context.Background(), step, upstream, env)
 		if err != nil {
 			t.Fatalf("ExecuteStep should not return error for upstream 404: %v", err)
 		}
 
-		// Verify status code is passed through
 		if result.Status != 404 {
 			t.Errorf("Expected status 404, got %d", result.Status)
 		}
 
-		// Verify error body is passed through
 		body, ok := result.Body.(map[string]interface{})
 		if !ok {
 			t.Fatalf("Expected body to be map, got %T", result.Body)
 		}
 		if body["error"] != "user not found" {
 			t.Errorf("Expected error message, got %v", body["error"])
+		}
+	})
+
+	t.Run("response size cap", func(t *testing.T) {
+		bigBody := strings.Repeat("x", 200)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":"` + bigBody + `"}`))
+		}))
+		defer server.Close()
+
+		pathTmpl, _ := CompileTemplate("/test", map[string]any{})
+		step := &CompiledStep{
+			Step:     &Step{Name: "big", Method: "GET", Headers: map[string]string{}},
+			PathPart: pathTmpl,
+			Headers:  map[string]*Template{},
+		}
+
+		upstream := &upstreampkg.Upstream{
+			BaseURL:          server.URL,
+			MaxResponseBytes: 100,
+			Client:           http.DefaultClient,
+		}
+
+		env := buildRequestEnv(context.Background(), NewRequestData(httptest.NewRequest("GET", "/", nil), nil, nil), nil)
+		_, err := ExecuteStep(context.Background(), step, upstream, env)
+		if err == nil {
+			t.Fatal("expected error for oversized response")
+		}
+		if !strings.Contains(err.Error(), "exceeds 100 bytes") {
+			t.Errorf("expected size cap error, got: %v", err)
+		}
+	})
+
+	t.Run("response size cap optional step degrades", func(t *testing.T) {
+		bigBody := strings.Repeat("x", 200)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":"` + bigBody + `"}`))
+		}))
+		defer server.Close()
+
+		pathTmpl, _ := CompileTemplate("/test", map[string]any{})
+		step := &CompiledStep{
+			Step:     &Step{Name: "big", Method: "GET", Headers: map[string]string{}},
+			PathPart: pathTmpl,
+			Headers:  map[string]*Template{},
+			Optional: true,
+		}
+
+		upstream := &upstreampkg.Upstream{
+			BaseURL:          server.URL,
+			MaxResponseBytes: 100,
+			Client:           http.DefaultClient,
+		}
+
+		env := buildRequestEnv(context.Background(), NewRequestData(httptest.NewRequest("GET", "/", nil), nil, nil), nil)
+		_, err := ExecuteStep(context.Background(), step, upstream, env)
+		if err == nil {
+			t.Fatal("expected error for oversized response")
 		}
 	})
 }
@@ -318,10 +349,9 @@ func TestBuildRequestEnv(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer token")
 		req.Header.Set("X-Request-ID", "req-123")
 
-		env := buildRequestEnv(req, nil)
+		env := buildRequestEnv(context.Background(), NewRequestData(req, nil, nil), nil)
 
-		// Verify request data
-		reqData, ok := env["req"].(map[string]interface{})
+		reqData, ok := env["req"].(map[string]any)
 		if !ok {
 			t.Fatalf("Expected req to be map, got %T", env["req"])
 		}
@@ -360,29 +390,28 @@ func TestBuildRequestEnv(t *testing.T) {
 					"Content-Type": []string{"application/json"},
 				},
 				Body: map[string]interface{}{
-					"id":   123,
+					"id":   float64(1),
 					"name": "Alice",
 				},
 			},
 			"orders": {
-				Status: 200,
+				Status:  200,
 				Headers: http.Header{},
 				Body: []interface{}{
-					map[string]interface{}{"id": 1},
-					map[string]interface{}{"id": 2},
+					map[string]interface{}{"id": float64(1)},
+					map[string]interface{}{"id": float64(2)},
 				},
 			},
 		}
 
-		env := buildRequestEnv(req, stepResults)
+		env := buildRequestEnv(context.Background(), NewRequestData(req, nil, nil), stepResults)
 
-		// Verify steps are included
-		steps, ok := env["steps"].(map[string]interface{})
+		steps, ok := env["steps"].(map[string]any)
 		if !ok {
 			t.Fatalf("Expected steps to be map, got %T", env["steps"])
 		}
 
-		user, ok := steps["user"].(map[string]interface{})
+		user, ok := steps["user"].(map[string]any)
 		if !ok {
 			t.Fatalf("Expected user to be map, got %T", steps["user"])
 		}
@@ -450,19 +479,24 @@ func TestParseJSONBody(t *testing.T) {
 	})
 }
 
-func TestInterpolateTemplate(t *testing.T) {
+func TestTemplate_Interpolation(t *testing.T) {
 	t.Run("simple interpolation", func(t *testing.T) {
-		env := map[string]interface{}{
-			"req": map[string]interface{}{
+		env := map[string]any{
+			"req": map[string]any{
 				"query": map[string]string{
 					"id": "123",
 				},
 			},
 		}
 
-		result, err := interpolateTemplate("/users/{{ req.query.id }}", env)
+		tmpl, err := CompileTemplate("/users/{{ req.query.id }}", env)
 		if err != nil {
-			t.Fatalf("Interpolation failed: %v", err)
+			t.Fatalf("CompileTemplate failed: %v", err)
+		}
+
+		result, err := tmpl.EvalString(env, EscapeNone)
+		if err != nil {
+			t.Fatalf("EvalString failed: %v", err)
 		}
 
 		if result != "/users/123" {
@@ -471,8 +505,8 @@ func TestInterpolateTemplate(t *testing.T) {
 	})
 
 	t.Run("multiple interpolations", func(t *testing.T) {
-		env := map[string]interface{}{
-			"req": map[string]interface{}{
+		env := map[string]any{
+			"req": map[string]any{
 				"query": map[string]string{
 					"user_id":  "123",
 					"order_id": "456",
@@ -480,9 +514,14 @@ func TestInterpolateTemplate(t *testing.T) {
 			},
 		}
 
-		result, err := interpolateTemplate("/users/{{ req.query.user_id }}/orders/{{ req.query.order_id }}", env)
+		tmpl, err := CompileTemplate("/users/{{ req.query.user_id }}/orders/{{ req.query.order_id }}", env)
 		if err != nil {
-			t.Fatalf("Interpolation failed: %v", err)
+			t.Fatalf("CompileTemplate failed: %v", err)
+		}
+
+		result, err := tmpl.EvalString(env, EscapeNone)
+		if err != nil {
+			t.Fatalf("EvalString failed: %v", err)
 		}
 
 		if result != "/users/123/orders/456" {
@@ -491,21 +530,26 @@ func TestInterpolateTemplate(t *testing.T) {
 	})
 
 	t.Run("interpolate with step results", func(t *testing.T) {
-		env := map[string]interface{}{
-			"steps": map[string]interface{}{
-				"user": map[string]interface{}{
+		env := map[string]any{
+			"steps": map[string]any{
+				"user": map[string]any{
 					"status": 200,
-					"body": map[string]interface{}{
-						"id":   float64(123), // JSON unmarshals numbers as float64
+					"body": map[string]any{
+						"id":   float64(123),
 						"name": "Alice",
 					},
 				},
 			},
 		}
 
-		result, err := interpolateTemplate("/orders?user_id={{ steps.user.body.id }}", env)
+		tmpl, err := CompileTemplate("/orders?user_id={{ steps.user.body.id }}", env)
 		if err != nil {
-			t.Fatalf("Interpolation failed: %v", err)
+			t.Fatalf("CompileTemplate failed: %v", err)
+		}
+
+		result, err := tmpl.EvalString(env, EscapeNone)
+		if err != nil {
+			t.Fatalf("EvalString failed: %v", err)
 		}
 
 		if result != "/orders?user_id=123" {

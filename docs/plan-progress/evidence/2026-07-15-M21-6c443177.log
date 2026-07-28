@@ -1,0 +1,135 @@
+=== GATE M21 (commit 6c443177, 2026-07-15) ===
+
+
+##[T21.1]
+$ test -f internal/hotreload/client.go
+
+exit_code=1
+FAIL client.go exists
+$ test -f internal/hotreload/client_test.go
+
+exit_code=1
+FAIL client_test.go exists
+$ grep -q type FetchResult struct internal/hotreload/client.go
+grep: internal/hotreload/client.go: No such file or directory
+exit_code=2
+FAIL FetchResult type defined
+
+##[T21.2]
+$ test -f internal/hotreload/poller.go
+
+exit_code=1
+FAIL poller.go exists
+$ test -f internal/hotreload/backoff.go
+
+exit_code=1
+FAIL backoff.go exists
+$ grep -q type PollStatus struct internal/hotreload/poller.go
+grep: internal/hotreload/poller.go: No such file or directory
+exit_code=2
+FAIL PollStatus type defined
+$ grep -q func.*Poller.*Trigger internal/hotreload/poller.go
+grep: internal/hotreload/poller.go: No such file or directory
+exit_code=2
+FAIL Trigger method exists
+
+##[T21.3]
+$ grep -q registry-url cmd/restitch/run.go
+
+exit_code=1
+FAIL registry-url flag in run.go
+$ grep -q poll-interval cmd/restitch/run.go
+
+exit_code=1
+FAIL poll-interval flag in run.go
+$ grep -q registry-key cmd/restitch/run.go
+
+exit_code=1
+FAIL registry-key flag in run.go
+$ grep -q RESTITCH_REGISTRY_URL cmd/restitch/run.go
+
+exit_code=1
+FAIL RESTITCH_REGISTRY_URL env
+
+##[T21.4]
+$ grep -q RegistryStatus internal/admin/server.go
+
+exit_code=1
+FAIL RegistryStatus in admin Deps
+$ grep -q registry/status internal/admin/server.go
+
+exit_code=1
+FAIL registry/status endpoint
+
+##[T21.5]
+$ grep -q triggerCh internal/hotreload/poller.go
+grep: internal/hotreload/poller.go: No such file or directory
+exit_code=2
+FAIL triggerCh in poller
+
+##[M21.unit]
+$ go vet ./internal/hotreload/...
+pattern ./internal/hotreload/...: lstat ./internal/hotreload/: no such file or directory
+exit_code=1
+FAIL go vet hotreload
+$ go test -race -count=1 ./internal/hotreload/...
+# ./internal/hotreload/...
+pattern ./internal/hotreload/...: lstat ./internal/hotreload/: no such file or directory
+FAIL	./internal/hotreload/... [setup failed]
+FAIL
+exit_code=1
+FAIL go test hotreload
+$ go test -race -count=1 ./internal/admin/...
+ok  	github.com/restitch/restitch-gateway/internal/admin	1.558s
+exit_code=0
+PASS go test admin
+$ go test -race -count=1 ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	1.585s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	2.482s
+ok  	github.com/restitch/restitch-gateway/internal/admin	1.828s
+ok  	github.com/restitch/restitch-gateway/internal/auth	6.000s
+ok  	github.com/restitch/restitch-gateway/internal/composition	3.591s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	2.622s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	3.804s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	4.098s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	2.819s
+ok  	github.com/restitch/restitch-gateway/internal/registry	3.230s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	2.634s
+ok  	github.com/restitch/restitch-gateway/internal/server	2.829s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	2.948s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	2.581s
+exit_code=0
+PASS go test full suite
+
+##[M21.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-98-g6c443177" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 49482...
+# Starting studio on port 49483...
+config create response: {"id":"01KXKCE9DSH3MS9W2PAT1YJNVG","name":"regtest","description":"","tags":[],"active_version_id":1,"active_version":1,"created_at":"2026-07-15T17:15:55Z","updated_at":"2026-07-15T17:15:55Z","yaml_content":"upstreams:\n  mock:\n    url: \"http://localhost:49482\"\ncompositions:\n  regtest:\n    path: \"/regtest\"\n    steps:\n      - name: e\n        upstream: mock\n        path: \"/echo\"\n    response:\n      body:\n        result: \"{{ steps.e.body }}\"\n\n","version_number":1}
+$ test -n {"id":"01KXKCE9DSH3MS9W2PAT1YJNVG","name":"regtest","description":"","tags":[],"active_version_id":1,"active_version":1,"created_at":"2026-07-15T17:15:55Z","updated_at":"2026-07-15T17:15:55Z","yaml_content":"upstreams:\n  mock:\n    url: \"http://localhost:49482\"\ncompositions:\n  regtest:\n    path: \"/regtest\"\n    steps:\n      - name: e\n        upstream: mock\n        path: \"/echo\"\n    response:\n      body:\n        result: \"{{ steps.e.body }}\"\n\n","version_number":1}
+
+exit_code=0
+PASS config created in registry
+--- gw_reg log ---
+flag provided but not defined: -registry-url
+Usage of run:
+  -cert string
+    	Path to TLS certificate file
+  -config string
+    	path to composition config file (default "restitch.yaml")
+  -key string
+    	Path to TLS private key file
+  -log-format string
+    	Log format: json or text (default "json")
+  -log-level string
+    	Log level: debug, info, warn, error (default "info")
+  -port int
+    	HTTP server port (default 8080)
+  -tls-port int
+    	HTTPS server port (default 8443)
+FAIL gw_reg failed to start on port 49480 within 10s
+
+RESULT M21: FAIL (3 pass, 17 fail, 0 manual, 0 skip)

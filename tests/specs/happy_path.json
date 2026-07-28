@@ -1,0 +1,15 @@
+{
+  "name": "happy path - user lookup",
+  "in": {
+    "method": "GET",
+    "path": "/api/users/42",
+    "headers": {}
+  },
+  "out": {
+    "status": 200,
+    "headers": {
+      "X-Restitch-Complete": "true"
+    },
+    "body_contains": ["user-42", "\"active\":true"]
+  }
+}

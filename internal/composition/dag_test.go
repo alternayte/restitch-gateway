@@ -16,14 +16,8 @@ func TestBuildDAG(t *testing.T) {
 			name: "no dependencies - all in wave 1",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"user": {
-						Step:     &Step{Name: "user"},
-						PathExpr: &CompiledExpr{Raw: "/users"},
-					},
-					"orders": {
-						Step:     &Step{Name: "orders"},
-						PathExpr: &CompiledExpr{Raw: "/orders"},
-					},
+					"user":   {Step: &Step{Name: "user"}, Deps: nil},
+					"orders": {Step: &Step{Name: "orders"}, Deps: nil},
 				},
 			},
 			wantWaves: [][]string{
@@ -34,18 +28,9 @@ func TestBuildDAG(t *testing.T) {
 			name: "linear chain - sequential waves",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"a": {
-						Step:     &Step{Name: "a"},
-						PathExpr: &CompiledExpr{Raw: "/a"},
-					},
-					"b": {
-						Step:     &Step{Name: "b"},
-						PathExpr: &CompiledExpr{Raw: "/b/{{ steps.a.body.id }}"},
-					},
-					"c": {
-						Step:     &Step{Name: "c"},
-						PathExpr: &CompiledExpr{Raw: "/c/{{ steps.b.body.id }}"},
-					},
+					"a": {Step: &Step{Name: "a"}, Deps: nil},
+					"b": {Step: &Step{Name: "b"}, Deps: []string{"a"}},
+					"c": {Step: &Step{Name: "c"}, Deps: []string{"b"}},
 				},
 			},
 			wantWaves: [][]string{
@@ -58,18 +43,9 @@ func TestBuildDAG(t *testing.T) {
 			name: "diamond pattern - parallel then merge",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"a": {
-						Step:     &Step{Name: "a"},
-						PathExpr: &CompiledExpr{Raw: "/a"},
-					},
-					"b": {
-						Step:     &Step{Name: "b"},
-						PathExpr: &CompiledExpr{Raw: "/b"},
-					},
-					"c": {
-						Step:     &Step{Name: "c"},
-						PathExpr: &CompiledExpr{Raw: "/c/{{ steps.a.body.id }}/{{ steps.b.body.id }}"},
-					},
+					"a": {Step: &Step{Name: "a"}, Deps: nil},
+					"b": {Step: &Step{Name: "b"}, Deps: nil},
+					"c": {Step: &Step{Name: "c"}, Deps: []string{"a", "b"}},
 				},
 			},
 			wantWaves: [][]string{
@@ -81,14 +57,8 @@ func TestBuildDAG(t *testing.T) {
 			name: "explicit depends_on",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"user": {
-						Step:     &Step{Name: "user"},
-						PathExpr: &CompiledExpr{Raw: "/users"},
-					},
-					"profile": {
-						Step:     &Step{Name: "profile", DependsOn: []string{"user"}},
-						PathExpr: &CompiledExpr{Raw: "/profile"},
-					},
+					"user":    {Step: &Step{Name: "user"}, Deps: nil},
+					"profile": {Step: &Step{Name: "profile", DependsOn: []string{"user"}}, Deps: []string{"user"}},
 				},
 			},
 			wantWaves: [][]string{
@@ -100,18 +70,9 @@ func TestBuildDAG(t *testing.T) {
 			name: "mixed explicit and inferred dependencies",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"user": {
-						Step:     &Step{Name: "user"},
-						PathExpr: &CompiledExpr{Raw: "/users"},
-					},
-					"orders": {
-						Step:     &Step{Name: "orders"},
-						PathExpr: &CompiledExpr{Raw: "/orders/{{ steps.user.body.id }}"},
-					},
-					"profile": {
-						Step:     &Step{Name: "profile", DependsOn: []string{"user"}},
-						PathExpr: &CompiledExpr{Raw: "/profile"},
-					},
+					"user":    {Step: &Step{Name: "user"}, Deps: nil},
+					"orders":  {Step: &Step{Name: "orders"}, Deps: []string{"user"}},
+					"profile": {Step: &Step{Name: "profile", DependsOn: []string{"user"}}, Deps: []string{"user"}},
 				},
 			},
 			wantWaves: [][]string{
@@ -123,14 +84,8 @@ func TestBuildDAG(t *testing.T) {
 			name: "circular dependency - direct cycle",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"a": {
-						Step:     &Step{Name: "a"},
-						PathExpr: &CompiledExpr{Raw: "/a/{{ steps.b.body.id }}"},
-					},
-					"b": {
-						Step:     &Step{Name: "b"},
-						PathExpr: &CompiledExpr{Raw: "/b/{{ steps.a.body.id }}"},
-					},
+					"a": {Step: &Step{Name: "a"}, Deps: []string{"b"}},
+					"b": {Step: &Step{Name: "b"}, Deps: []string{"a"}},
 				},
 			},
 			wantErr: true,
@@ -140,18 +95,9 @@ func TestBuildDAG(t *testing.T) {
 			name: "circular dependency - indirect cycle",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"a": {
-						Step:     &Step{Name: "a"},
-						PathExpr: &CompiledExpr{Raw: "/a/{{ steps.c.body.id }}"},
-					},
-					"b": {
-						Step:     &Step{Name: "b"},
-						PathExpr: &CompiledExpr{Raw: "/b/{{ steps.a.body.id }}"},
-					},
-					"c": {
-						Step:     &Step{Name: "c"},
-						PathExpr: &CompiledExpr{Raw: "/c/{{ steps.b.body.id }}"},
-					},
+					"a": {Step: &Step{Name: "a"}, Deps: []string{"c"}},
+					"b": {Step: &Step{Name: "b"}, Deps: []string{"a"}},
+					"c": {Step: &Step{Name: "c"}, Deps: []string{"b"}},
 				},
 			},
 			wantErr: true,
@@ -161,28 +107,18 @@ func TestBuildDAG(t *testing.T) {
 			name: "missing step reference",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"user": {
-						Step:     &Step{Name: "user"},
-						PathExpr: &CompiledExpr{Raw: "/users/{{ steps.nonexistent.body.id }}"},
-					},
+					"user": {Step: &Step{Name: "user"}, Deps: []string{"nonexistent"}},
 				},
 			},
 			wantErr: true,
 			errMsg:  "non-existent step",
 		},
 		{
-			name: "dependencies from body expression",
+			name: "dependencies from body (pre-computed)",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"user": {
-						Step:     &Step{Name: "user"},
-						PathExpr: &CompiledExpr{Raw: "/users"},
-					},
-					"create": {
-						Step:     &Step{Name: "create"},
-						PathExpr: &CompiledExpr{Raw: "/create"},
-						BodyExpr: &CompiledExpr{Raw: `{"user_id": "{{ steps.user.body.id }}"}`},
-					},
+					"user":   {Step: &Step{Name: "user"}, Deps: nil},
+					"create": {Step: &Step{Name: "create"}, Deps: []string{"user"}},
 				},
 			},
 			wantWaves: [][]string{
@@ -191,20 +127,11 @@ func TestBuildDAG(t *testing.T) {
 			},
 		},
 		{
-			name: "dependencies from header expressions",
+			name: "dependencies from headers (pre-computed)",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"user": {
-						Step:     &Step{Name: "user"},
-						PathExpr: &CompiledExpr{Raw: "/users"},
-					},
-					"authorized": {
-						Step:     &Step{Name: "authorized"},
-						PathExpr: &CompiledExpr{Raw: "/authorized"},
-						HeaderExprs: map[string]*CompiledExpr{
-							"X-User-ID": {Raw: "{{ steps.user.body.id }}"},
-						},
-					},
+					"user":       {Step: &Step{Name: "user"}, Deps: nil},
+					"authorized": {Step: &Step{Name: "authorized"}, Deps: []string{"user"}},
 				},
 			},
 			wantWaves: [][]string{
@@ -216,26 +143,11 @@ func TestBuildDAG(t *testing.T) {
 			name: "complex DAG with multiple waves",
 			comp: &CompiledComposition{
 				Steps: map[string]*CompiledStep{
-					"user": {
-						Step:     &Step{Name: "user"},
-						PathExpr: &CompiledExpr{Raw: "/users"},
-					},
-					"profile": {
-						Step:     &Step{Name: "profile"},
-						PathExpr: &CompiledExpr{Raw: "/profile"},
-					},
-					"orders": {
-						Step:     &Step{Name: "orders"},
-						PathExpr: &CompiledExpr{Raw: "/orders/{{ steps.user.body.id }}"},
-					},
-					"payments": {
-						Step:     &Step{Name: "payments"},
-						PathExpr: &CompiledExpr{Raw: "/payments/{{ steps.user.body.id }}"},
-					},
-					"summary": {
-						Step:     &Step{Name: "summary"},
-						PathExpr: &CompiledExpr{Raw: "/summary/{{ steps.orders.body.id }}/{{ steps.payments.body.id }}"},
-					},
+					"user":     {Step: &Step{Name: "user"}, Deps: nil},
+					"profile":  {Step: &Step{Name: "profile"}, Deps: nil},
+					"orders":   {Step: &Step{Name: "orders"}, Deps: []string{"user"}},
+					"payments": {Step: &Step{Name: "payments"}, Deps: []string{"user"}},
+					"summary":  {Step: &Step{Name: "summary"}, Deps: []string{"orders", "payments"}},
 				},
 			},
 			wantWaves: [][]string{
@@ -371,7 +283,6 @@ func equalWave(got, want []string) bool {
 		return false
 	}
 
-	// Convert to map for order-independent comparison
 	gotMap := make(map[string]bool)
 	for _, step := range got {
 		gotMap[step] = true

@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -9,9 +10,8 @@ import (
 
 // Config holds server configuration options.
 type Config struct {
-	Port      int    // HTTP server port
-	TLSPort   int    // HTTPS server port
-	LogFormat string // Log format: "json" or "text"
+	Port    int
+	TLSPort int
 }
 
 // Server represents the restitch HTTP/HTTPS server.
@@ -34,22 +34,22 @@ func New(config Config) *Server {
 		startTime: time.Now(),
 	}
 
-	// Create HTTP server with proper timeouts
 	s.httpServer = &http.Server{
-		Addr:         fmt.Sprintf(":%d", config.Port),
-		Handler:      router,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:              fmt.Sprintf(":%d", config.Port),
+		Handler:           router,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
-	// Create HTTPS server with same timeouts (TLS config added in ListenAndServeTLS)
 	s.httpsServer = &http.Server{
-		Addr:         fmt.Sprintf(":%d", config.TLSPort),
-		Handler:      router,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:              fmt.Sprintf(":%d", config.TLSPort),
+		Handler:           router,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	return s
@@ -60,16 +60,24 @@ func (s *Server) Router() *Router {
 	return s.router
 }
 
-// ListenAndServe starts the HTTP server.
-// It blocks until the server is stopped or an error occurs.
+// SetHandler overrides the server's handler (used when wrapping with middleware).
+func (s *Server) SetHandler(h http.Handler) {
+	s.httpServer.Handler = h
+	s.httpsServer.Handler = h
+}
+
+// ListenAndServe starts the HTTP server. Ready is set only after the
+// listener is bound, so /ready never returns 200 before the port is open.
 func (s *Server) ListenAndServe() error {
+	ln, err := net.Listen("tcp", s.httpServer.Addr)
+	if err != nil {
+		return err
+	}
 	s.ready.Store(true)
-	return s.httpServer.ListenAndServe()
+	return s.httpServer.Serve(ln)
 }
 
 // ListenAndServeTLS starts the HTTPS server with TLS.
-// It loads the TLS configuration from the provided certificate and key files.
-// It blocks until the server is stopped or an error occurs.
 func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	tlsConfig, err := LoadTLSConfig(certFile, keyFile)
 	if err != nil {
@@ -77,10 +85,13 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	}
 
 	s.httpsServer.TLSConfig = tlsConfig
-	s.ready.Store(true)
 
-	// ListenAndServeTLS with empty cert/key since we already configured TLSConfig
-	return s.httpsServer.ListenAndServeTLS("", "")
+	ln, err := net.Listen("tcp", s.httpsServer.Addr)
+	if err != nil {
+		return err
+	}
+	s.ready.Store(true)
+	return s.httpsServer.ServeTLS(ln, "", "")
 }
 
 // Ready returns whether the server is ready to accept requests.
@@ -89,7 +100,6 @@ func (s *Server) Ready() bool {
 }
 
 // SetReady sets the server's ready state.
-// Used during shutdown to indicate the server is no longer accepting traffic.
 func (s *Server) SetReady(ready bool) {
 	s.ready.Store(ready)
 }

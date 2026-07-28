@@ -1,0 +1,138 @@
+=== GATE M22 (commit a0c9bd35, 2026-07-16) ===
+
+
+##[T22.1]
+$ test -f internal/devmode/writer.go
+
+exit_code=0
+PASS writer.go exists
+$ test -f internal/devmode/writer_test.go
+
+exit_code=0
+PASS writer_test.go exists
+$ grep -q type PrefixWriter struct internal/devmode/writer.go
+
+exit_code=0
+PASS PrefixWriter defined
+$ grep -q func WaitForHealth internal/devmode/writer.go
+
+exit_code=0
+PASS WaitForHealth defined
+$ grep -q NO_COLOR internal/devmode/writer.go
+
+exit_code=0
+PASS NO_COLOR support
+
+##[T22.2]
+$ test -f internal/devmode/manager.go
+
+exit_code=0
+PASS manager.go exists
+$ test -f internal/devmode/manager_test.go
+
+exit_code=0
+PASS manager_test.go exists
+$ grep -q type ProcessConfig struct internal/devmode/manager.go
+
+exit_code=0
+PASS ProcessConfig defined
+$ grep -q type ProcessManager struct internal/devmode/manager.go
+
+exit_code=0
+PASS ProcessManager defined
+$ grep -q cenkalti/backoff internal/devmode/manager.go
+
+exit_code=0
+PASS uses cenkalti/backoff
+
+##[T22.3]
+$ test ! -f internal/hotreload/backoff.go
+
+exit_code=0
+PASS backoff.go deleted
+$ test ! -f internal/hotreload/backoff_test.go
+
+exit_code=0
+PASS backoff_test.go deleted
+$ bash -c ! grep -rn "backoffDuration" internal/
+
+exit_code=0
+PASS no backoffDuration references
+$ grep -q cenkalti/backoff internal/hotreload/poller.go
+
+exit_code=0
+PASS poller uses cenkalti
+
+##[T22.4]
+$ test -f cmd/restitch/dev.go
+
+exit_code=0
+PASS dev.go exists
+$ grep -q func devCmd cmd/restitch/dev.go
+
+exit_code=0
+PASS devCmd function
+$ grep -q func findStudioBinary cmd/restitch/dev.go
+
+exit_code=0
+PASS findStudioBinary function
+$ grep -q "dev" cmd/restitch/main.go
+
+exit_code=0
+PASS dev case in main.go
+$ grep -q dev cmd/restitch/main.go
+
+exit_code=0
+PASS usage updated
+
+##[M22.unit]
+$ go vet ./...
+
+exit_code=0
+PASS go vet
+$ go test -race -count=1 ./internal/devmode/...
+ok  	github.com/restitch/restitch-gateway/internal/devmode	3.760s
+exit_code=0
+PASS devmode tests
+$ go test -race -count=1 ./internal/hotreload/...
+ok  	github.com/restitch/restitch-gateway/internal/hotreload	4.920s
+exit_code=0
+PASS hotreload tests
+$ go test -race -count=1 ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	1.972s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	2.928s
+ok  	github.com/restitch/restitch-gateway/internal/admin	1.371s
+ok  	github.com/restitch/restitch-gateway/internal/auth	4.577s
+ok  	github.com/restitch/restitch-gateway/internal/composition	2.469s
+ok  	github.com/restitch/restitch-gateway/internal/devmode	5.303s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	2.980s
+ok  	github.com/restitch/restitch-gateway/internal/hotreload	6.701s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	2.391s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	1.924s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	1.615s
+ok  	github.com/restitch/restitch-gateway/internal/registry	1.712s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	1.458s
+ok  	github.com/restitch/restitch-gateway/internal/server	1.252s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	2.099s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	1.648s
+exit_code=0
+PASS full test suite
+
+##[M22.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-110-ga0c9bd35" -o bin/restitch ./cmd/restitch
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch dev --help
+Usage of dev:
+  -config string
+    	path to composition config file (default "restitch.yaml")
+  -log-format string
+    	log format: json or text (default "text")
+  -studio-bin string
+    	path to restitch-studio binary (auto-discovered if empty)
+exit_code=0
+PASS restitch dev --help exits 0
+MANUAL Run 'make build-all && bin/restitch dev' — verify colored output, Ctrl+C shutdown
+
+RESULT M22: PASS (24 pass, 0 fail, 1 manual, 0 skip)

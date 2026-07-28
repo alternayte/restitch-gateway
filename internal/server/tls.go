@@ -6,12 +6,6 @@ import (
 	"os"
 )
 
-// TLSConfig holds TLS certificate configuration.
-type TLSConfig struct {
-	CertFile string // Path to TLS certificate file
-	KeyFile  string // Path to TLS private key file
-}
-
 // LoadTLSConfig loads and validates TLS configuration from certificate files.
 // Returns a configured tls.Config with modern security settings.
 func LoadTLSConfig(certFile, keyFile string) (*tls.Config, error) {

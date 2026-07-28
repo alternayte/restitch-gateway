@@ -1,0 +1,51 @@
+# T24.2 — alert rules.
+#
+# There is deliberately no Alertmanager in the deploy stack (spec decision D4).
+# A demo Alertmanager whose receiver discards every notification proves nothing.
+# deploy/prometheus/prometheus.yml carries a commented alerting: block marking
+# exactly where a real Alertmanager target goes.
+groups:
+  - name: restitch_alerts
+    rules:
+      # TUNING KNOB: the 1-second P95 threshold. Prometheus rule files have no
+      # variable substitution, so this literal IS the configuration point.
+      # Documented in deploy/README.md.
+      - alert: RestitchHighP95Latency
+        expr: composition:restitch_request_duration_seconds:p95 > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency above 1s for composition {{ $labels.composition }}"
+          description: "P95 is {{ $value | humanizeDuration }} over the last 5m."
+
+      - alert: RestitchHighErrorRate
+        expr: composition:restitch_requests:error_ratio5m > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "5xx rate above 5% for composition {{ $labels.composition }}"
+          description: "Error ratio is {{ $value | humanizePercentage }} over the last 5m."
+
+      # A 10m `for` is deliberate. M21's poller retries with exponential
+      # backoff, so a single transient fetch failure is normal self-healing
+      # behaviour. Alerting at 5m would page on something the system is
+      # designed to absorb.
+      - alert: RestitchConfigReloadFailing
+        expr: rate(restitch_registry_polls_total{result!="success"}[5m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Gateway registry polls have been failing for 10m"
+          description: "Failing poll rate is {{ $value }}/s. The gateway keeps serving its last known good config."
+
+      - alert: RestitchGatewayDown
+        expr: up{job="restitch-gateway"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Gateway target {{ $labels.instance }} is down"
+          description: "Prometheus has failed to scrape the gateway for 2m."

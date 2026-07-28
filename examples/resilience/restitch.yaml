@@ -1,0 +1,44 @@
+# Resilience example — retry, circuit breaker, and cache.
+# Uses mockupstream /status/{code} to simulate failures.
+
+upstreams:
+  flaky:
+    url: "http://localhost:8081"
+    retry:
+      max_attempts: 3
+      interval: 100ms
+      max_backoff: 1s
+      backoff_on: [503]
+    circuit_breaker:
+      max_failures: 5
+      interval: 60s
+      timeout: 10s
+
+  stable:
+    url: "http://localhost:8081"
+
+compositions:
+  flaky-endpoint:
+    path: "/api/flaky"
+    method: GET
+    steps:
+      - name: data
+        upstream: flaky
+        path: "/status/503"
+    response:
+      body:
+        status: "{{ steps.data.status }}"
+
+  cached-user:
+    path: "/api/cached-user"
+    method: GET
+    steps:
+      - name: user
+        upstream: stable
+        path: "/users/{{ req.query.id }}"
+        cache:
+          ttl: 30s
+        coalesce: true
+    response:
+      body:
+        user: "{{ steps.user.body }}"

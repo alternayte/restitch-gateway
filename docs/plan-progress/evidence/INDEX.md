@@ -1,0 +1,66 @@
+# Evidence Log Index
+
+Chronological index of gate verification runs.
+
+| Date | Gate | Commit | Result | File |
+|------|------|--------|--------|------|
+| 2026-07-13 | M3 | 0eaa64df | PASS | 2026-07-13-M3-0eaa64df.log |
+| 2026-07-13 | M1 | bba6fae7 | FAIL | 2026-07-13-M1-bba6fae7.log |
+| 2026-07-13 | M2 | bba6fae7 | PASS | 2026-07-13-M2-bba6fae7.log |
+| 2026-07-13 | M3 | bba6fae7 | PASS | 2026-07-13-M3-bba6fae7.log |
+| 2026-07-13 | M4 | bba6fae7 | PASS | 2026-07-13-M4-bba6fae7.log |
+| 2026-07-13 | M5 | bba6fae7 | PASS | 2026-07-13-M5-bba6fae7.log |
+| 2026-07-13 | M6 | bba6fae7 | PASS | 2026-07-13-M6-bba6fae7.log |
+| 2026-07-13 | M7 | bba6fae7 | PASS | 2026-07-13-M7-bba6fae7.log |
+| 2026-07-13 | M8 | bba6fae7 | PASS | 2026-07-13-M8-bba6fae7.log |
+| 2026-07-13 | M9 | bba6fae7 | FAIL | 2026-07-13-M9-bba6fae7.log |
+| 2026-07-13 | M10 | bba6fae7 | FAIL | 2026-07-13-M10-bba6fae7.log |
+| 2026-07-13 | M11 | bba6fae7 | PASS | 2026-07-13-M11-bba6fae7.log |
+| 2026-07-13 | M12 | bba6fae7 | FAIL | 2026-07-13-M12-bba6fae7.log |
+| 2026-07-13 | M13 | bba6fae7 | PASS | 2026-07-13-M13-bba6fae7.log |
+| 2026-07-13 | M14 | bba6fae7 | FAIL | 2026-07-13-M14-bba6fae7.log |
+| 2026-07-13 | M15 | bba6fae7 | PASS | 2026-07-13-M15-bba6fae7.log |
+| 2026-07-13 | M16a | bba6fae7 | PASS | 2026-07-13-M16a-bba6fae7.log |
+| 2026-07-13 | M17 | bba6fae7 | PASS | 2026-07-13-M17-bba6fae7.log |
+| 2026-07-13 | M18 | bba6fae7 | FAIL | 2026-07-13-M18-bba6fae7.log |
+| 2026-07-13 | M19 | bba6fae7 | PASS | 2026-07-13-M19-bba6fae7.log |
+| 2026-07-13 | M20 | bba6fae7 | FAIL | 2026-07-13-M20-bba6fae7.log |
+| 2026-07-13 | M21 | bba6fae7 | FAIL | 2026-07-13-M21-bba6fae7.log |
+| 2026-07-13 | M22 | bba6fae7 | FAIL | 2026-07-13-M22-bba6fae7.log |
+| 2026-07-13 | M23 | bba6fae7 | FAIL | 2026-07-13-M23-bba6fae7.log |
+| 2026-07-13 | M24 | bba6fae7 | FAIL | 2026-07-13-M24-bba6fae7.log |
+| 2026-07-13 | M25 | bba6fae7 | FAIL | 2026-07-13-M25-bba6fae7.log |
+| 2026-07-13 | final | bba6fae7 | FAIL | 2026-07-13-final-bba6fae7.log |
+| 2026-07-13 | M2 | 9a1c3964 | PASS | 2026-07-13-M2-9a1c3964.log |
+| 2026-07-13 | M2 | 9a1c3964 | PASS | 2026-07-13-M2-9a1c3964.log |
+| 2026-07-13 | M9 | dd737e61 | PASS | 2026-07-13-M9-dd737e61.log |
+| 2026-07-13 | M10 | 72d1b959 | FAIL | 2026-07-13-M10-72d1b959.log |
+| 2026-07-13 | M10 | 8afdda7d | PASS | 2026-07-13-M10-8afdda7d.log |
+| 2026-07-13 | M12 | 8afdda7d | PASS | 2026-07-13-M12-8afdda7d.log |
+| 2026-07-13 | M18 | 8afdda7d | FAIL | 2026-07-13-M18-8afdda7d.log |
+| 2026-07-13 | M18 | 8afdda7d | FAIL | 2026-07-13-M18-8afdda7d.log |
+| 2026-07-13 | M1 | 8afdda7d | FAIL | 2026-07-13-M1-8afdda7d.log |
+| 2026-07-13 | M1 | 8afdda7d | FAIL | 2026-07-13-M1-8afdda7d.log |
+| 2026-07-13 | M1 | be7a6e44 | PASS | 2026-07-13-M1-be7a6e44.log |
+| 2026-07-13 | M14 | be7a6e44 | FAIL | 2026-07-13-M14-be7a6e44.log |
+| 2026-07-13 | final | be7a6e44 | FAIL | 2026-07-13-final-be7a6e44.log |
+| 2026-07-13 | final | 05e25b43 | FAIL | 2026-07-13-final-05e25b43.log |
+| 2026-07-13 | M18 | f086b8ee | FAIL | 2026-07-13-M18-f086b8ee.log |
+| 2026-07-13 | M18 | 44d18e5d | PASS | 2026-07-13-M18-44d18e5d.log |
+| 2026-07-14 | M14 | 89890785 | PASS | 2026-07-14-M14-89890785.log |
+| 2026-07-14 | final | 89890785 | FAIL | 2026-07-14-final-89890785.log |
+| 2026-07-14 | final | 89890785 | PASS | 2026-07-14-final-89890785.log |
+| 2026-07-15 | M20 | 55d269d2 | PASS | 2026-07-15-M20-55d269d2.log |
+| 2026-07-15 | M20 | 21a84b20 | PASS | 2026-07-15-M20-21a84b20.log |
+| 2026-07-15 | M21 | 6c443177 | FAIL | 2026-07-15-M21-6c443177.log |
+| 2026-07-15 | M21 | eaa1419c | FAIL | 2026-07-15-M21-eaa1419c.log |
+| 2026-07-15 | M21 | eaa1419c | PASS | 2026-07-15-M21-eaa1419c.log |
+| 2026-07-16 | M22 | 6e233404 | FAIL | 2026-07-16-M22-6e233404.log |
+| 2026-07-16 | M22 | a0c9bd35 | PASS | 2026-07-16-M22-a0c9bd35.log |
+| 2026-07-27 | M23 | f155cd30 | FAIL | 2026-07-27-M23-f155cd30.log |
+| 2026-07-27 | M23 | 8c790a4c | FAIL | 2026-07-27-M23-8c790a4c.log |
+| 2026-07-27 | M23 | cce97951 | PASS | 2026-07-27-M23-cce97951.log |
+| 2026-07-27 | M23 | 251ec993 | PASS | 2026-07-27-M23-251ec993.log |
+| 2026-07-27 | M22 | 318f2cf7 | PASS | 2026-07-27-M22-318f2cf7.log |
+| 2026-07-28 | M24 | 2d60605b | PASS | 2026-07-28-M24-2d60605b.log |
+| 2026-07-28 | M25 | 2795d26d | PASS | 2026-07-28-M25-2795d26d.log |

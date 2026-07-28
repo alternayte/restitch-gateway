@@ -1,10 +1,15 @@
-# Binaries (root level only)
+# Compiled binaries
 /restitch
+bin/
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+
+# Bundled frontend assets (keep placeholder for go:embed)
+cmd/restitch-studio/dist/*
+!cmd/restitch-studio/dist/index.html
 
 # Test binary
 *.test
@@ -27,3 +32,8 @@ Thumbs.db
 
 # TLS certificates (test)
 *.pem
+
+# Studio runtime database (created by `restitch-studio` when run from the repo root)
+studio.db
+studio.db-shm
+studio.db-wal
