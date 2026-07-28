@@ -165,3 +165,41 @@ func TestPreferencesPutWithoutCookieMintsSession(t *testing.T) {
 		t.Error("PUT without a cookie should mint a session rather than 401")
 	}
 }
+
+// hasCookie reports whether the recorded response set a cookie with the
+// given name.
+func hasCookie(rec *httptest.ResponseRecorder, name string) bool {
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// TestSPAHandlerMintsOnlyOnDocumentRequests proves buildMux actually wires
+// the SPA handler with session.MintOnDocument (not session.AlwaysMint): a
+// cold page load's static asset requests must not each mint their own
+// session, but the document request itself must.
+func TestSPAHandlerMintsOnlyOnDocumentRequests(t *testing.T) {
+	mux := prefsMux(t)
+
+	assetReq := httptest.NewRequest(http.MethodGet, "/favicon.svg", nil)
+	assetReq.Header.Set("Accept", "*/*")
+	assetRec := httptest.NewRecorder()
+	mux.ServeHTTP(assetRec, assetReq)
+	if assetRec.Code != http.StatusOK {
+		t.Fatalf("favicon.svg status = %d, want 200; body=%s", assetRec.Code, assetRec.Body.String())
+	}
+	if hasCookie(assetRec, session.CookieName) {
+		t.Error("static asset request should not mint a session")
+	}
+
+	docReq := httptest.NewRequest(http.MethodGet, "/compositions", nil)
+	docReq.Header.Set("Accept", "text/html,application/xhtml+xml")
+	docRec := httptest.NewRecorder()
+	mux.ServeHTTP(docRec, docReq)
+	if !hasCookie(docRec, session.CookieName) {
+		t.Error("document request should mint a session")
+	}
+}
