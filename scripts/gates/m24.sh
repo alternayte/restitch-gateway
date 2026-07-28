@@ -158,14 +158,31 @@ m24_assert_min_count "${RULES_DIR}/alerts_test.yml" "alertname:" 8 \
 # A positive case per alert is what catches a recording rule renamed in
 # recording.yml but not in alerts.yml — that defect leaves an alert that
 # silently never fires, and a negative-only test suite would still pass.
+#
+# Each alert therefore needs BOTH a positive and a negative case: require >= 2
+# alertname occurrences per alert. A bare `grep -q` here proved vacuous — a
+# suite whose every case was negative satisfied it for all four alerts, i.e.
+# the exact omission this block exists to catch.
 for alert in RestitchHighP95Latency RestitchHighErrorRate \
              RestitchConfigReloadFailing RestitchGatewayDown; do
-    if grep -q "alertname: ${alert}" "${RULES_DIR}/alerts_test.yml" 2>/dev/null; then
-        h_pass "alerts_test.yml covers ${alert}"
+    alert_cases="$(grep -c "alertname: ${alert}" "${RULES_DIR}/alerts_test.yml" 2>/dev/null || true)"
+    alert_cases="${alert_cases:-0}"
+    h_evidence "$ grep -c 'alertname: ${alert}' alerts_test.yml -> ${alert_cases} (minimum 2)"
+    if [[ "${alert_cases}" -ge 2 ]]; then
+        h_pass "alerts_test.yml covers ${alert} with ${alert_cases} cases"
     else
-        h_fail "alerts_test.yml has no test for ${alert}"
+        h_fail "alerts_test.yml has ${alert_cases} case(s) for ${alert}; need >= 2 (positive AND negative)"
     fi
 done
+
+# Per-alert counts cannot tell a positive case from a negative one, so assert
+# the distribution as well. `exp_alerts:` followed by entries is a positive
+# case (the alert MUST fire); `exp_alerts: []` is a negative one (it must stay
+# silent). Four alerts => at least four of each.
+m24_assert_min_count "${RULES_DIR}/alerts_test.yml" "exp_alerts:$" 4 \
+    "alerts_test.yml has positive cases (alerts that must FIRE)"
+m24_assert_min_count "${RULES_DIR}/alerts_test.yml" "exp_alerts: \[\]" 4 \
+    "alerts_test.yml has negative cases (alerts that must stay silent)"
 
 # ── T24.3 — k6 load test ─────────────────────────────────────────────────────
 h_task T24.3
