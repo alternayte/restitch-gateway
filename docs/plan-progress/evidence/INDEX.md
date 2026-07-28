@@ -63,3 +63,4 @@ Chronological index of gate verification runs.
 | 2026-07-27 | M23 | 251ec993 | PASS | 2026-07-27-M23-251ec993.log |
 | 2026-07-27 | M22 | 318f2cf7 | PASS | 2026-07-27-M22-318f2cf7.log |
 | 2026-07-28 | M24 | 2d60605b | PASS | 2026-07-28-M24-2d60605b.log |
+| 2026-07-28 | M25 | 2795d26d | PASS | 2026-07-28-M25-2795d26d.log |
