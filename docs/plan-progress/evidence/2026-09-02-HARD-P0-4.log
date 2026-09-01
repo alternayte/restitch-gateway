@@ -1,0 +1,11 @@
+$ curl -s -H "X-Admin-Key: k4" /admin/api/upstreams  # before reload
+['mock']
+$ curl -s -w "HTTP %{http_code}" -H "X-Admin-Key: k4" /admin/api/upstreams  # after reload adding mock2
+['mock', 'mock2'] HTTP 200
+
+$ grep "config reloaded" gw.log
+3
+
+## go test -race ./cmd/restitch/... ./internal/upstream/...
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	1.822s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	1.420s

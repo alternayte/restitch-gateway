@@ -78,6 +78,12 @@ func (c *Checker) checkOne(ctx context.Context, name string) HealthStatus {
 
 	val, _, _ := c.group.Do(name, func() (any, error) {
 		up := c.upstreams[name]
+		// A nil upstream means the checker's map is stale (for example after
+		// a reload added an upstream before the checker was rebuilt). Return
+		// "unknown" instead of panicking (finding H3).
+		if up == nil {
+			return HealthStatus{Status: "unknown", CheckedAt: time.Now().UTC()}, nil
+		}
 		status := probeUpstream(ctx, up)
 
 		c.mu.Lock()
