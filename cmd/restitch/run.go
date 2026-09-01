@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -325,6 +326,12 @@ func runCmd(args []string) int {
 		wrapped := applyMiddleware(swapper, middlewares...)
 		srv.SetHandler(wrapped)
 
+		// Build an upstream health checker for the admin API. It is rebuilt
+		// on every reload (finding H3) and swapped atomically so the admin
+		// handler never reads a checker whose upstream map is stale.
+		var healthChecker atomic.Pointer[upstream.Checker]
+		healthChecker.Store(upstream.NewChecker(compiled.Upstreams, 10*time.Second))
+
 		// reloadFromBytes compiles raw YAML and hot-swaps the pipeline. It is
 		// shared between file-mode reload (SIGHUP/fsnotify/admin API) and
 		// registry-mode reload (poller/SIGHUP/admin API).
@@ -369,6 +376,7 @@ func runCmd(args []string) int {
 				Compiled: newCompiled,
 				Executor: composition.NewExecutor(newCompiled),
 			}
+			healthChecker.Store(upstream.NewChecker(newCompiled.Upstreams, 10*time.Second))
 			newHandler := composition.NewHandler(newCompiled, newAuth)
 			newHandler.SetRecorder(recorder)
 			newRouter := server.NewRouter()
@@ -396,9 +404,6 @@ func runCmd(args []string) int {
 			}
 			return reloadFromBytes(raw)
 		}
-
-		// Build an upstream health checker for the admin API
-		healthChecker := upstream.NewChecker(compiled.Upstreams, 10*time.Second)
 
 		// Mode-specific reload wiring. adminReloadFn and registryStatusFn are
 		// captured by admin.Deps below; admin.New copies Deps by value, so
@@ -483,7 +488,7 @@ func runCmd(args []string) int {
 					return compositionsFromPipeline(swapper.Current())
 				},
 				Upstreams: func(ctx context.Context) []admin.UpstreamInfo {
-					return upstreamsFromPipeline(swapper.Current(), healthChecker, ctx)
+					return upstreamsFromPipeline(swapper.Current(), &healthChecker, ctx)
 				},
 				Requests: ring,
 				Stats:    stats,
@@ -656,13 +661,13 @@ func compositionsFromPipeline(p *Pipeline) []admin.CompositionInfo {
 	return result
 }
 
-func upstreamsFromPipeline(p *Pipeline, checker *upstream.Checker, ctx context.Context) []admin.UpstreamInfo {
+func upstreamsFromPipeline(p *Pipeline, checker *atomic.Pointer[upstream.Checker], ctx context.Context) []admin.UpstreamInfo {
 	if p == nil || p.Compiled == nil {
 		return nil
 	}
 	var healthMap map[string]upstream.HealthStatus
-	if checker != nil {
-		healthMap = checker.Check(ctx)
+	if chk := checker.Load(); chk != nil {
+		healthMap = chk.Check(ctx)
 	}
 	var result []admin.UpstreamInfo
 	for name, up := range p.Compiled.Config.Upstreams {

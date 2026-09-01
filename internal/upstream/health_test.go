@@ -63,3 +63,15 @@ func TestChecker_UnhealthyUpstream(t *testing.T) {
 		t.Errorf("expected unhealthy, got %q", result["bad"].Status)
 	}
 }
+
+// TestChecker_NilUpstream covers finding H3: a checker whose upstream map
+// lacks a name (for example during the window before a reload rebuilds it)
+// must report "unknown" instead of panicking.
+func TestChecker_NilUpstream(t *testing.T) {
+	checker := NewChecker(map[string]*Upstream{}, 1*time.Second)
+
+	got := checker.checkOne(context.Background(), "ghost")
+	if got.Status != "unknown" {
+		t.Errorf("status = %q, want unknown", got.Status)
+	}
+}
