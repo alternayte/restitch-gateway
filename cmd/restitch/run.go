@@ -286,7 +286,11 @@ func runCmd(args []string) int {
 			}
 		}()
 
-		handler.SetRecorder(&admin.MultiRecorder{Ring: ring, Stats: stats, Accumulator: acc, Storage: store})
+		// recorder is shared across reloads: the reload path must call
+		// SetRecorder on each new handler, or recording silently stops after
+		// the first hot reload (finding H2).
+		recorder := &admin.MultiRecorder{Ring: ring, Stats: stats, Accumulator: acc, Storage: store}
+		handler.SetRecorder(recorder)
 
 		router := server.NewRouter()
 		handler.RegisterRoutes(router)
@@ -366,6 +370,7 @@ func runCmd(args []string) int {
 				Executor: composition.NewExecutor(newCompiled),
 			}
 			newHandler := composition.NewHandler(newCompiled, newAuth)
+			newHandler.SetRecorder(recorder)
 			newRouter := server.NewRouter()
 			newHandler.RegisterRoutes(newRouter)
 			newRouter.Handle(http.MethodGet, "/health", server.HealthHandler(srv))

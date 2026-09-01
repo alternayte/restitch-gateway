@@ -1,0 +1,11 @@
+$ curl -s -H "X-Admin-Key: k3" "/admin/api/requests?limit=10"  # before reload
+count: 1
+$ curl -s -H "X-Admin-Key: k3" "/admin/api/requests?limit=10"  # after SIGHUP reload + 2 requests
+count: 3
+
+$ grep "config reloaded" gw.log
+3
+
+## go test -race ./cmd/restitch/... ./internal/composition/...
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	1.891s
+ok  	github.com/restitch/restitch-gateway/internal/composition	1.620s
