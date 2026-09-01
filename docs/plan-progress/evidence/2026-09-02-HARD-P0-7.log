@@ -1,0 +1,10 @@
+$ curl -X POST -H "Content-Type: application/json" -d "{\"name\": not-json}" http://127.0.0.1:18093/p
+{"error":"invalid JSON body"}
+ [400]
+$ curl -X POST -H "Content-Type: application/json" -d "{\"name\":\"alice\"}" http://127.0.0.1:18093/p
+[200]
+
+## go test -race -run TestHandler_RequestSchemaValidation ./internal/composition/...
+ok  	github.com/restitch/restitch-gateway/internal/composition	1.494s
+
+## negative check: test FAILs when json.Unmarshal error is swallowed (defect reproduced)
