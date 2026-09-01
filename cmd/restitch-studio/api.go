@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,6 +32,26 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // writeError writes a JSON error response of the form {"error": message}.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// maxRegistryBody bounds registry mutation and validation request bodies so
+// a large yaml_content field cannot cause unbounded allocation (finding H5).
+const maxRegistryBody = 10 << 20 // 10 MiB
+
+// decodeJSONBody bounds the request body, decodes JSON into dst, and writes
+// the error response. It reports whether the decode succeeded.
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRegistryBody)
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body exceeds 10MiB")
+			return false
+		}
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return false
+	}
+	return true
 }
 
 // isNotFound reports whether err is one of the store's string-based
@@ -67,8 +88,7 @@ func keyMatches(got, want string) bool {
 // handleCreateConfig handles POST /api/v1/configs.
 func (a *RegistryAPI) handleCreateConfig(w http.ResponseWriter, r *http.Request) {
 	var input registry.CreateConfigInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+	if !decodeJSONBody(w, r, &input) {
 		return
 	}
 
@@ -132,8 +152,7 @@ func (a *RegistryAPI) handleUpdateConfigContent(w http.ResponseWriter, r *http.R
 	id := r.PathValue("id")
 
 	var input registry.UpdateConfigInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+	if !decodeJSONBody(w, r, &input) {
 		return
 	}
 
@@ -161,8 +180,7 @@ func (a *RegistryAPI) handleUpdateConfigMetadata(w http.ResponseWriter, r *http.
 	id := r.PathValue("id")
 
 	var input registry.UpdateConfigMetadataInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+	if !decodeJSONBody(w, r, &input) {
 		return
 	}
 
@@ -260,8 +278,7 @@ type validateRequest struct {
 // response body.
 func (a *RegistryAPI) handleValidateConfig(w http.ResponseWriter, r *http.Request) {
 	var req validateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
