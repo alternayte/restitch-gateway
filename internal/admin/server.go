@@ -2,10 +2,11 @@ package admin
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -17,6 +18,7 @@ import (
 type Config struct {
 	Enabled        bool          `yaml:"enabled"`
 	Port           int           `yaml:"port"`
+	Bind           string        `yaml:"bind"`
 	APIKey         string        `yaml:"api_key"`
 	RequestLogSize int           `yaml:"request_log_size"`
 	Storage        StorageConfig `yaml:"storage"`
@@ -97,6 +99,14 @@ func New(cfg Config, deps Deps) *Server {
 	if cfg.Port == 0 {
 		cfg.Port = 9090
 	}
+	if cfg.Bind == "" {
+		cfg.Bind = "127.0.0.1"
+	}
+	if !isLoopback(cfg.Bind) {
+		slog.Warn("admin server bound to a non-loopback address",
+			"bind", cfg.Bind,
+			"hint", "the admin API exposes request logs and config data; use this only in a trusted network")
+	}
 	s := &Server{cfg: cfg, deps: deps, startTime: time.Now()}
 
 	mux := http.NewServeMux()
@@ -130,7 +140,7 @@ func New(cfg Config, deps Deps) *Server {
 	}
 
 	s.httpServer = &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		Addr:              net.JoinHostPort(cfg.Bind, strconv.Itoa(cfg.Port)),
 		Handler:           corsMiddleware(mux, cfg.APIKey),
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -139,6 +149,15 @@ func New(cfg Config, deps Deps) *Server {
 	}
 
 	return s
+}
+
+// isLoopback reports whether bind names the loopback interface.
+func isLoopback(bind string) bool {
+	switch bind {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
 }
 
 // Start starts the admin server in the background.
@@ -157,16 +176,26 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
+// requireKey rejects requests without a valid X-Admin-Key. The key is
+// required by default: with no configured key, no request can match and the
+// admin API stays locked. This covers findings C3 and M9.
 func (s *Server) requireKey(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.cfg.APIKey != "" {
-			if r.Header.Get("X-Admin-Key") != s.cfg.APIKey {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-				return
-			}
+		if s.cfg.APIKey == "" || !keyMatches(r.Header.Get("X-Admin-Key"), s.cfg.APIKey) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
 		}
 		next(w, r)
 	}
+}
+
+// keyMatches reports whether got equals want in constant time when the
+// lengths match. A length mismatch rejects immediately.
+func keyMatches(got, want string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
 func (s *Server) rateLimited(limiter *ratelimit.Limiter, next http.HandlerFunc) http.HandlerFunc {
@@ -409,20 +438,25 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// corsMiddleware adds CORS headers and answers preflight OPTIONS requests.
+// It requires a valid key on OPTIONS too, so a cross-site page cannot use a
+// keyless preflight to learn the API's capabilities or trigger mutations
+// (finding C4). Because the key is required on every request, reflecting the
+// Origin is safe: only authenticated clients receive CORS headers.
 func corsMiddleware(next http.Handler, apiKey string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if apiKey != "" {
-			origin := r.Header.Get("Origin")
-			if origin != "" {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Vary", "Origin")
-			}
-		} else {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodOptions && (apiKey == "" || !keyMatches(r.Header.Get("X-Admin-Key"), apiKey)) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Key")
-		if r.Method == "OPTIONS" {
+		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}

@@ -73,7 +73,8 @@ server:                          # all optional
 admin:
   enabled: true
   port: 9090
-  api_key: "${ADMIN_KEY}"
+  bind: "127.0.0.1"           # 0.0.0.0 only in a trusted network
+  api_key: "${ADMIN_KEY}"     # required; requests without a key are rejected
   request_log_size: 500
   storage:                       # optional; in-memory ring buffer if omitted
     type: sqlite                 # sqlite | postgres
@@ -264,7 +265,9 @@ Failed step references evaluate to `null` in templates (no 500).
 | `GET /metrics` | Prometheus metrics |
 | `GET /health` | Admin liveness |
 
-Protected by `admin.api_key` (via `X-Admin-Key` header) when configured.
+Protected by `admin.api_key` (via `X-Admin-Key` header). The key is required:
+with no key configured, every admin request is rejected. The admin server
+binds `127.0.0.1` by default; set `admin.bind` only for a trusted network.
 
 **Distributed Tracing**: OpenTelemetry support via OTLP HTTP exporter. Set
 `OTEL_EXPORTER_OTLP_ENDPOINT` to enable. Spans are created per composition

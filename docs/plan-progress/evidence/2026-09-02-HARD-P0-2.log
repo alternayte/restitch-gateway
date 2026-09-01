@@ -1,0 +1,25 @@
+===== A: no key -> key required by default =====
+$ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:19090/admin/api/info
+401
+$ lsof -nP -iTCP:19090 -sTCP:LISTEN
+restitch 38744 nathananderson-tennant   20u  IPv4 0x78dd9ffc25e892eb      0t0  TCP 127.0.0.1:19090 (LISTEN)
+$ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:19090/metrics
+200
+
+===== B: admin.enabled: false -> port closed =====
+$ curl -s --max-time 2 http://127.0.0.1:19091/admin/api/info
+(exit 7)
+log: admin server disabled by config","enabled":false
+
+===== C: keyed admin, C4 OPTIONS check =====
+$ curl -X OPTIONS -H "Origin: https://evil.example" /admin/api/reload (no key)
+401
+$ curl -X OPTIONS -H "Origin: https://good.example" -H "X-Admin-Key: admin-secret-1" (with key)
+204
+$ curl -H "X-Admin-Key: admin-secret-1" /admin/api/info
+200
+
+## go test -race ./internal/admin/... ./internal/gwconfig/... ./cmd/restitch/...
+ok  	github.com/restitch/restitch-gateway/internal/admin	1.695s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	1.388s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	1.505s

@@ -39,6 +39,7 @@ editing the YAML file:
 | `RESTITCH_LOG_FORMAT` | `server.log_format` |
 | `RESTITCH_LOG_LEVEL` | `server.log_level` |
 | `RESTITCH_ADMIN_PORT` | `admin.port` |
+| `RESTITCH_ADMIN_BIND` | `admin.bind` |
 | `RESTITCH_ADMIN_ENABLED` | `admin.enabled` |
 | `RESTITCH_ADMIN_API_KEY` | `admin.api_key` |
 
@@ -129,7 +130,8 @@ the data plane.
 |-------|------|---------|-------------|
 | `enabled` | bool | `true` | Enable the admin API server |
 | `port` | int | `9090` | Admin API listen port |
-| `api_key` | string | `""` | If set, all admin endpoints require an `X-Admin-Key` header with this value |
+| `bind` | string | `"127.0.0.1"` | Admin API bind address. Use `0.0.0.0` only in a trusted network |
+| `api_key` | string | `""` | Required. All admin endpoints (including `OPTIONS` preflights) reject requests without a matching `X-Admin-Key` header. With no key set, every request is rejected |
 | `request_log_size` | int | `500` | Number of entries in the request ring buffer |
 
 ```yaml
