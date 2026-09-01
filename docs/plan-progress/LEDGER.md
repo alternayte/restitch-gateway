@@ -300,3 +300,4 @@ Latest row per task ID wins. Never edit or delete existing rows.
 | 2026-07-28 | M25.unit | M25 | PASS | 2795d26d | evidence/2026-07-28-M25-2795d26d.log#M25.unit | auto (h_finish) |
 | 2026-07-28 | M25.gate | M25 | PENDING | 2795d26d | evidence/2026-07-28-M25-2795d26d.log#M25.gate | auto (h_finish) |
 | 2026-07-28 | M25.gate | M25 | MANUAL-VERIFIED | 2795d26d | evidence/2026-07-28-M25-2795d26d.log#M25.gate | User confirmed the live browser smoke on 2026-07-28: restitch_browser_id cookie present in DevTools, sidebar collapse and composition pin both persisted across a reload. Supersedes the PENDING row from the 2795d26d gate run |
+| 2026-09-02 | HARD.P0-1 | HARD | PASS | 807d44b3 | evidence/2026-09-02-HARD-P0-1.log | C1: registry API requires X-Admin-Key via constant-time compare; no key configured rejects all. C2: default bind 127.0.0.1, -bind flag, non-loopback warning. Live curl: 401/401/200/401, prefs 200, LISTEN 127.0.0.1 |

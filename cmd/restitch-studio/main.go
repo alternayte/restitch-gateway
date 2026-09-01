@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -23,8 +24,10 @@ var distFS embed.FS
 
 func main() {
 	port := flag.Int("port", 3080, "studio server port")
+	bind := flag.String("bind", "127.0.0.1", "bind address; use 0.0.0.0 only for deliberate remote access")
 	gatewayAdminURL := flag.String("gateway-admin-url", "http://localhost:9090", "gateway admin API URL")
 	adminKey := flag.String("admin-key", "", "admin API key (X-Admin-Key header)")
+	registryKey := flag.String("registry-key", "", "registry API key required from clients (X-Admin-Key header)")
 	dbPath := flag.String("db-path", "./studio.db", "SQLite database path")
 	noMigrate := flag.Bool("no-migrate", false, "skip auto-migration on startup")
 	flag.Parse()
@@ -32,11 +35,17 @@ func main() {
 	if v := os.Getenv("STUDIO_PORT"); v != "" {
 		_, _ = fmt.Sscanf(v, "%d", port)
 	}
+	if v := os.Getenv("STUDIO_BIND"); v != "" {
+		*bind = v
+	}
 	if v := os.Getenv("STUDIO_GATEWAY_ADMIN_URL"); v != "" {
 		*gatewayAdminURL = v
 	}
 	if v := os.Getenv("STUDIO_ADMIN_KEY"); v != "" {
 		*adminKey = v
+	}
+	if v := os.Getenv("STUDIO_REGISTRY_KEY"); v != "" {
+		*registryKey = v
 	}
 	if v := os.Getenv("STUDIO_DB_PATH"); v != "" {
 		*dbPath = v
@@ -66,14 +75,21 @@ func main() {
 	mux := buildMux(muxDeps{
 		gatewayAdminURL: *gatewayAdminURL,
 		adminKey:        *adminKey,
+		registryKey:     *registryKey,
 		registryAPI:     registryAPI,
 		prefsAPI:        prefsAPI,
 		sessionStore:    sessionStore,
 	})
 
-	addr := fmt.Sprintf(":%d", *port)
+	addr := net.JoinHostPort(*bind, fmt.Sprintf("%d", *port))
+	if !isLoopback(*bind) {
+		slog.Warn("studio bound to a non-loopback address",
+			"bind", *bind,
+			"hint", "the SPA and the gateway admin proxy are exposed to the network; use this only in a trusted network")
+	}
 	slog.Info("restitch-studio starting",
 		"port", *port,
+		"bind", *bind,
 		"gateway_admin_url", *gatewayAdminURL)
 
 	srv := &http.Server{
@@ -93,6 +109,7 @@ func main() {
 type muxDeps struct {
 	gatewayAdminURL string
 	adminKey        string
+	registryKey     string
 	registryAPI     *RegistryAPI
 	prefsAPI        *PreferencesAPI
 	sessionStore    *session.Store
@@ -122,18 +139,22 @@ func buildMux(d muxDeps) *http.ServeMux {
 
 	mux := http.NewServeMux()
 
-	// V1 routes (Studio-native) — registered before proxy catch-all.
+	// V1 routes (Studio-native) — registered before proxy catch-all. The
+	// registry API is machine-facing (the gateway poller and automation); it
+	// requires X-Admin-Key. Browser preferences are separate and stay
+	// cookie-bound.
 	if d.registryAPI != nil {
-		mux.HandleFunc("POST /api/v1/configs/validate", d.registryAPI.handleValidateConfig)
-		mux.HandleFunc("POST /api/v1/configs", d.registryAPI.handleCreateConfig)
-		mux.HandleFunc("GET /api/v1/configs", d.registryAPI.handleListConfigs)
-		mux.HandleFunc("GET /api/v1/configs/{id}", d.registryAPI.handleGetConfig)
-		mux.HandleFunc("PUT /api/v1/configs/{id}", d.registryAPI.handleUpdateConfigContent)
-		mux.HandleFunc("PATCH /api/v1/configs/{id}", d.registryAPI.handleUpdateConfigMetadata)
-		mux.HandleFunc("DELETE /api/v1/configs/{id}", d.registryAPI.handleDeleteConfig)
-		mux.HandleFunc("GET /api/v1/configs/{id}/versions", d.registryAPI.handleListVersions)
-		mux.HandleFunc("POST /api/v1/configs/{id}/versions/{version}/activate", d.registryAPI.handleActivateVersion)
-		mux.HandleFunc("GET /api/v1/registry/bundle", d.registryAPI.handleGetBundle)
+		regAuth := requireRegistryKey(d.registryKey)
+		mux.Handle("POST /api/v1/configs/validate", regAuth(http.HandlerFunc(d.registryAPI.handleValidateConfig)))
+		mux.Handle("POST /api/v1/configs", regAuth(http.HandlerFunc(d.registryAPI.handleCreateConfig)))
+		mux.Handle("GET /api/v1/configs", regAuth(http.HandlerFunc(d.registryAPI.handleListConfigs)))
+		mux.Handle("GET /api/v1/configs/{id}", regAuth(http.HandlerFunc(d.registryAPI.handleGetConfig)))
+		mux.Handle("PUT /api/v1/configs/{id}", regAuth(http.HandlerFunc(d.registryAPI.handleUpdateConfigContent)))
+		mux.Handle("PATCH /api/v1/configs/{id}", regAuth(http.HandlerFunc(d.registryAPI.handleUpdateConfigMetadata)))
+		mux.Handle("DELETE /api/v1/configs/{id}", regAuth(http.HandlerFunc(d.registryAPI.handleDeleteConfig)))
+		mux.Handle("GET /api/v1/configs/{id}/versions", regAuth(http.HandlerFunc(d.registryAPI.handleListVersions)))
+		mux.Handle("POST /api/v1/configs/{id}/versions/{version}/activate", regAuth(http.HandlerFunc(d.registryAPI.handleActivateVersion)))
+		mux.Handle("GET /api/v1/registry/bundle", regAuth(http.HandlerFunc(d.registryAPI.handleGetBundle)))
 	}
 
 	// Preferences routes always mint, so curl and other cookie-less clients work.
@@ -161,6 +182,16 @@ func buildMux(d muxDeps) *http.ServeMux {
 	mux.Handle("/", spaHandler)
 
 	return mux
+}
+
+// isLoopback reports whether bind names the loopback interface. "localhost"
+// counts, because it resolves to a loopback address on every supported host.
+func isLoopback(bind string) bool {
+	switch bind {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
 }
 
 // spaFileServer serves files from the embedded filesystem, falling back to

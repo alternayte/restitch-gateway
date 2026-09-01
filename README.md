@@ -311,8 +311,13 @@ Instead of a config file, the gateway can poll Studio's registry for its
 compositions:
 
 ```bash
-restitch run -registry-url http://localhost:3080 -poll-interval 30s
+restitch-studio -registry-key "$REGISTRY_KEY"
+restitch run -registry-url http://localhost:3080 -registry-key "$REGISTRY_KEY"
 ```
+
+The Studio registry API requires `X-Admin-Key`; the gateway's `-registry-key`
+must match the Studio's `-registry-key`, or the poll is rejected. Studio
+binds `127.0.0.1` by default.
 
 The poller uses ETag change detection, so an unchanged bundle costs a 304.
 Transient fetch failures back off exponentially and the gateway keeps serving
@@ -362,6 +367,8 @@ GET    /api/v1/registry/bundle                      Active configs as one YAML (
 ```
 
 Point a gateway at it with `restitch run -registry-url ...` (see Registry Mode).
+The registry API is protected by `-registry-key` (`X-Admin-Key`); Studio binds
+loopback by default and warns when told to bind elsewhere.
 
 #### Browser Preferences
 

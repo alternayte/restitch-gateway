@@ -54,6 +54,8 @@ upstreams:
 compositions: [this is not valid
 `
 
+const testRegistryKey = "test-registry-key-123"
+
 func testMux(t *testing.T) *http.ServeMux {
 	t.Helper()
 	db, err := sql.Open("sqlite", ":memory:")
@@ -67,7 +69,7 @@ func testMux(t *testing.T) *http.ServeMux {
 	}
 	store := registry.NewStore(db)
 	api := NewRegistryAPI(store)
-	return buildMux(muxDeps{gatewayAdminURL: "http://localhost:9999", registryAPI: api})
+	return buildMux(muxDeps{gatewayAdminURL: "http://localhost:9999", registryKey: testRegistryKey, registryAPI: api})
 }
 
 func doJSON(t *testing.T, mux *http.ServeMux, method, path string, body any) *httptest.ResponseRecorder {
@@ -84,6 +86,7 @@ func doJSON(t *testing.T, mux *http.ServeMux, method, path string, body any) *ht
 	}
 	req := httptest.NewRequest(method, path, reader)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Admin-Key", testRegistryKey)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	return rec
@@ -307,6 +310,7 @@ func TestAPI_Bundle(t *testing.T) {
 
 	// Conditional request with matching If-None-Match -> 304.
 	req := httptest.NewRequest("GET", "/api/v1/registry/bundle", nil)
+	req.Header.Set("X-Admin-Key", testRegistryKey)
 	req.Header.Set("If-None-Match", etag)
 	rec2 := httptest.NewRecorder()
 	mux.ServeHTTP(rec2, req)
@@ -391,4 +395,85 @@ compositions:
       body:
         result: "{{ steps.s1.body }}"
 `
+}
+
+// TestRegistryAPIRequiresKey covers finding C1: every /api/v1/* registry
+// handler must reject requests without a valid X-Admin-Key, including the
+// bundle endpoint.
+func TestRegistryAPIRequiresKey(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := registry.RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	store := registry.NewStore(db)
+	api := NewRegistryAPI(store)
+	mux := buildMux(muxDeps{gatewayAdminURL: "http://localhost:9999", registryKey: testRegistryKey, registryAPI: api})
+
+	endpoints := []struct {
+		method string
+		path   string
+	}{
+		{"GET", "/api/v1/configs"},
+		{"POST", "/api/v1/configs"},
+		{"POST", "/api/v1/configs/validate"},
+		{"GET", "/api/v1/registry/bundle"},
+	}
+
+	for _, ep := range endpoints {
+		t.Run(ep.method+" "+ep.path+" without key", func(t *testing.T) {
+			req := httptest.NewRequest(ep.method, ep.path, nil)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401", rec.Code)
+			}
+		})
+		t.Run(ep.method+" "+ep.path+" with wrong key", func(t *testing.T) {
+			req := httptest.NewRequest(ep.method, ep.path, nil)
+			req.Header.Set("X-Admin-Key", "wrong-key")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401", rec.Code)
+			}
+		})
+	}
+
+	t.Run("bundle with matching key", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/registry/bundle", nil)
+		req.Header.Set("X-Admin-Key", testRegistryKey)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestRegistryAPILockedWithoutConfiguredKey covers the default-required
+// stance: with no registry key configured, every registry request is
+// rejected because no request key can match an empty configured key.
+func TestRegistryAPILockedWithoutConfiguredKey(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := registry.RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	store := registry.NewStore(db)
+	api := NewRegistryAPI(store)
+	mux := buildMux(muxDeps{gatewayAdminURL: "http://localhost:9999", registryAPI: api})
+
+	req := httptest.NewRequest("GET", "/api/v1/configs", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401; body=%s", rec.Code, rec.Body.String())
+	}
 }

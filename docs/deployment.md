@@ -140,8 +140,14 @@ to the specified endpoint.
 | Variable | Flag | Default |
 |----------|------|---------|
 | `STUDIO_PORT` | `-port` | `3080` |
+| `STUDIO_BIND` | `-bind` | `127.0.0.1` |
 | `STUDIO_GATEWAY_ADMIN_URL` | `-gateway-admin-url` | `http://localhost:9090` |
 | `STUDIO_ADMIN_KEY` | `-admin-key` | (none) |
+| `STUDIO_REGISTRY_KEY` | `-registry-key` | (none) |
+
+The Studio binds loopback by default. Set `STUDIO_BIND` only for deliberate
+remote access. The registry API requires `STUDIO_REGISTRY_KEY`; give the
+gateway the same value via `-registry-key`.
 
 ### Config file `${VAR}` expansion
 

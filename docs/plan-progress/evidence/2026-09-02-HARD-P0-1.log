@@ -1,0 +1,31 @@
+$ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:13081/api/v1/configs  # no key
+401
+$ curl -s -o /dev/null -w "%{http_code}" -H "X-Admin-Key: wrong" http://127.0.0.1:13081/api/v1/configs
+401
+$ curl -s -o /dev/null -w "%{http_code}" -H "X-Admin-Key: sup3r-s3cret" http://127.0.0.1:13081/api/v1/configs
+200
+$ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:13081/api/v1/registry/bundle  # no key
+401
+$ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:13081/api/v1/preferences  # browser API, no key
+200
+$ lsof -nP -iTCP:13081 -sTCP:LISTEN
+restitch- 35908 nathananderson-tennant    6u  IPv4 0xa2e29700a8d4f118      0t0  TCP 127.0.0.1:13081 (LISTEN)
+
+## go test ./internal/... ./cmd/restitch-studio/...
+ok  	github.com/restitch/restitch-gateway/internal/admin	0.389s
+ok  	github.com/restitch/restitch-gateway/internal/auth	3.778s
+ok  	github.com/restitch/restitch-gateway/internal/composition	0.665s
+ok  	github.com/restitch/restitch-gateway/internal/devmode	3.375s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	0.978s
+ok  	github.com/restitch/restitch-gateway/internal/hotreload	4.597s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	1.275s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	1.573s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	1.811s
+ok  	github.com/restitch/restitch-gateway/internal/registry	2.146s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	1.965s
+ok  	github.com/restitch/restitch-gateway/internal/server	1.552s
+ok  	github.com/restitch/restitch-gateway/internal/session	1.681s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	2.356s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	1.773s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	2.057s
