@@ -1,0 +1,14 @@
+$ curl -s -H "X-Tenant: tenant-a" http://127.0.0.1:18089/t
+{"tenant":"tenant-a"}
+
+$ curl -s -H "X-Tenant: tenant-b" http://127.0.0.1:18089/t
+{"tenant":"tenant-b"}
+
+$ curl -s -H "X-Tenant: tenant-a" http://127.0.0.1:18089/t  (cache hit for same key)
+{"tenant":"tenant-a"}
+
+
+## go test -race -run TestStepCache ./internal/composition/...
+ok  	github.com/restitch/restitch-gateway/internal/composition	1.550s
+
+## unfixed-code negative check: both tests FAIL against git stash (defect reproduced)

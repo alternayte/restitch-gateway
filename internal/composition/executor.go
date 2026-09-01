@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -237,7 +239,10 @@ func (e *Executor) executeStepWithErrorHandling(
 		stepURL = strings.TrimRight(up.BaseURL, "/") + "/" + strings.TrimLeft(evalPath, "/")
 	}
 
-	// Build cache/coalesce key from evaluated URL + auth identity
+	// Build cache/coalesce key from evaluated URL + auth identity + evaluated
+	// step headers. Headers are part of the request semantics: two requests
+	// that differ only in a templated header (for example X-Tenant) must not
+	// share a cache entry (finding H1).
 	var cacheKey string
 	if step.Step.Cache != nil || step.Step.Coalesce {
 		evalPath, _ := step.PathPart.EvalString(env, EscapeNone)
@@ -247,7 +252,7 @@ func (e *Executor) executeStepWithErrorHandling(
 		}
 		fullURL := strings.TrimRight(up.BaseURL, "/") + "/" + strings.TrimLeft(evalPath, "/")
 		authID := auth.ClientAuthorization(ctx)
-		cacheKey = upstreampkg.CoalesceKey(step.Step.Method, fullURL, authID)
+		cacheKey = upstreampkg.CoalesceKey(step.Step.Method, fullURL, authID) + "|" + evaluatedHeadersFingerprint(step.Headers, env)
 	}
 
 	// Cache check (before coalesce and execute)
@@ -353,8 +358,8 @@ func (e *Executor) executeStepWithErrorHandling(
 			}
 	}
 
-	// Cache fill (status < 500, not error-rule-matched)
-	if step.Step.Cache != nil && step.Step.Method == "GET" && result.Status < 500 && !result.ErrorRuleMatched {
+	// Cache fill (status < 500, not error-rule-matched, not private)
+	if step.Step.Cache != nil && step.Step.Method == "GET" && result.Status < 500 && !result.ErrorRuleMatched && isCacheable(result.Headers) {
 		body := result.RawBody
 		if body == nil {
 			body, _ = json.Marshal(result.Body)
@@ -428,4 +433,51 @@ func countSteps(waves [][]string) int {
 		total += len(wave)
 	}
 	return total
+}
+
+// evaluatedHeadersFingerprint renders the evaluated step header values into
+// a deterministic string for cache keys. Evaluation errors render as a fixed
+// marker; the request would fail later with the real error anyway.
+func evaluatedHeadersFingerprint(headers map[string]*Template, env map[string]interface{}) string {
+	if len(headers) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var sb strings.Builder
+	for _, k := range keys {
+		v, err := headers[k].EvalString(env, EscapeNone)
+		if err != nil {
+			v = "<eval-error>"
+		}
+		sb.WriteString(k)
+		sb.WriteString("=")
+		sb.WriteString(v)
+		sb.WriteString("\x00")
+	}
+	return sb.String()
+}
+
+// isCacheable reports whether a step response may be stored in the shared
+// cache. A Set-Cookie header or a Cache-Control of private or no-store marks
+// the response as user-specific; serving it to another request leaks state
+// (finding H1).
+func isCacheable(headers http.Header) bool {
+	if headers == nil {
+		return true
+	}
+	if headers.Get("Set-Cookie") != "" {
+		return false
+	}
+	for _, part := range strings.Split(headers.Get("Cache-Control"), ",") {
+		switch strings.ToLower(strings.TrimSpace(part)) {
+		case "private", "no-store":
+			return false
+		}
+	}
+	return true
 }

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -466,4 +467,117 @@ upstreams:
 	}
 
 	return compiled
+}
+
+// TestStepCacheKeysOnEvaluatedHeaders covers finding H1: two requests that
+// differ only in a templated step header must not share a cache entry.
+func TestStepCacheKeysOnEvaluatedHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"tenant": r.Header.Get("X-Tenant"),
+		})
+	}))
+	defer server.Close()
+
+	config := createTestConfig(server.URL, `
+compositions:
+  test:
+    path: /test
+    steps:
+      - name: s1
+        upstream: test-upstream
+        path: /echo
+        headers: {X-Tenant: "{{ req.headers['X-Tenant'] }}"}
+        cache: {ttl: 30s}
+    response:
+      status: 200
+      body:
+        tenant: "{{ steps.s1.body.tenant }}"
+`)
+
+	executor := NewExecutor(config)
+	defer executor.Close()
+
+	exec := func(tenant string) string {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("X-Tenant", tenant)
+		rd := NewRequestData(req, nil, nil)
+		result, err := executor.Execute(context.Background(), "test", rd)
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+		body, _ := result.Steps["s1"].Body.(map[string]interface{})
+		return body["tenant"].(string)
+	}
+
+	// Warm the cache with tenant A, then request tenant B: it must hit the
+	// upstream, not the cached A response.
+	if got := exec("tenant-a"); got != "tenant-a" {
+		t.Fatalf("first execution returned %q, want tenant-a", got)
+	}
+	if got := exec("tenant-b"); got != "tenant-b" {
+		t.Fatalf("second execution returned %q, want tenant-b (cache key must include evaluated headers)", got)
+	}
+	// A request for tenant A again can be served from the cache.
+	if got := exec("tenant-a"); got != "tenant-a" {
+		t.Fatalf("third execution returned %q, want tenant-a", got)
+	}
+}
+
+// TestStepCacheSkipsPrivateResponses covers finding H1: responses that carry
+// Set-Cookie or Cache-Control: private/no-store must not be cached.
+func TestStepCacheSkipsPrivateResponses(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/cookie":
+			w.Header().Set("Set-Cookie", "sid=abc; HttpOnly")
+		case "/private":
+			w.Header().Set("Cache-Control", "private, max-age=60")
+		case "/nostore":
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+	}))
+	defer server.Close()
+
+	config := createTestConfig(server.URL, `
+compositions:
+  test:
+    path: /test
+    steps:
+      - name: c1
+        upstream: test-upstream
+        path: /cookie
+        cache: {ttl: 30s}
+      - name: c2
+        upstream: test-upstream
+        path: /private
+        cache: {ttl: 30s}
+      - name: c3
+        upstream: test-upstream
+        path: /nostore
+        cache: {ttl: 30s}
+    response:
+      status: 200
+      body:
+        ok: true
+`)
+
+	executor := NewExecutor(config)
+	defer executor.Close()
+
+	rd := NewRequestData(httptest.NewRequest("GET", "/test", nil), nil, nil)
+	for i := 0; i < 2; i++ {
+		if _, err := executor.Execute(context.Background(), "test", rd); err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+	}
+
+	if got := atomic.LoadInt32(&hits); got != 6 {
+		t.Errorf("upstream hits = %d, want 6 (3 steps x 2 executions; private responses must not be cached)", got)
+	}
 }
