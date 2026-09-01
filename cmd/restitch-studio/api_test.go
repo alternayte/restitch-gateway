@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (registers as "sqlite")
@@ -475,5 +476,35 @@ func TestRegistryAPILockedWithoutConfiguredKey(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestRegistryBodyLimit covers finding H5: oversized mutation and validation
+// bodies must be rejected with 413 instead of being decoded.
+func TestRegistryBodyLimit(t *testing.T) {
+	mux := testMux(t)
+
+	huge := strings.Repeat("a", maxRegistryBody)
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"create", "POST", "/api/v1/configs", `{"name":"x","yaml_content":"` + huge + `"}`},
+		{"update", "PUT", "/api/v1/configs/some-id", `{"yaml_content":"` + huge + `"}`},
+		{"validate", "POST", "/api/v1/configs/validate", `{"yaml_content":"` + huge + `"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-Admin-Key", testRegistryKey)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusRequestEntityTooLarge {
+				t.Fatalf("status = %d, want 413", rec.Code)
+			}
+		})
 	}
 }

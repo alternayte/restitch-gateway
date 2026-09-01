@@ -4,11 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/restitch/restitch-gateway/internal/upstream"
 )
+
+// maxBundleBytes bounds the registry bundle response body. A broken or
+// malicious registry cannot exhaust gateway memory (finding H4).
+const maxBundleBytes = 10 << 20 // 10 MiB
 
 type FetchResult struct {
 	YAML             []byte
@@ -79,7 +84,16 @@ func (c *RegistryClient) Fetch(ctx context.Context, lastETag string) (*FetchResu
 		CompositionCount int      `json:"composition_count"`
 		CompositionNames []string `json:"composition_names"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&bundle); err != nil {
+	// The bundle body is bounded so a broken or malicious registry cannot
+	// exhaust gateway memory with an unbounded yaml_content (finding H4).
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBundleBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read bundle: %w", err)
+	}
+	if len(body) > maxBundleBytes {
+		return nil, fmt.Errorf("bundle exceeds %d bytes", maxBundleBytes)
+	}
+	if err := json.Unmarshal(body, &bundle); err != nil {
 		return nil, fmt.Errorf("decode bundle: %w", err)
 	}
 

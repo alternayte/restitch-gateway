@@ -1,0 +1,11 @@
+gateway exit code: 1
+
+$ /Users/.../bin/restitch run -registry-url http://127.0.0.1:18091 (registry serves 11 MiB bundle)
+failed to fetch initial config from registry: bundle exceeds 10485760 bytes
+
+$ curl -X POST /api/v1/configs with 11 MiB yaml_content (studio, key auth)
+413
+
+## go test -race ./cmd/restitch-studio/... ./internal/hotreload/...
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	3.845s
+ok  	github.com/restitch/restitch-gateway/internal/hotreload	4.959s

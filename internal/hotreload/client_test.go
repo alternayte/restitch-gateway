@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -121,5 +122,24 @@ func TestRegistryClient_Fetch_ContextCanceled(t *testing.T) {
 	_, err := client.Fetch(ctx, "")
 	if err == nil {
 		t.Error("expected error on canceled context")
+	}
+}
+
+// TestRegistryClient_Fetch_OversizedBundle covers finding H4: a bundle
+// larger than the limit must be rejected, not decoded.
+func TestRegistryClient_Fetch_OversizedBundle(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"yaml_content": "` + strings.Repeat("a", maxBundleBytes) + `"}`))
+	}))
+	defer srv.Close()
+
+	client := NewRegistryClient(srv.URL)
+	_, err := client.Fetch(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error for oversized bundle")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Errorf("error = %v, want a size-limit error", err)
 	}
 }
