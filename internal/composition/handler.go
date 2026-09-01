@@ -136,7 +136,12 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 			}
 			// other read error; continue with nil body
 		} else if len(raw) > 0 && strings.Contains(r.Header.Get("Content-Type"), "json") {
-			_ = json.Unmarshal(raw, &body)
+			if err := json.Unmarshal(raw, &body); err != nil {
+				// Malformed JSON must not slip past schema validation with a
+				// nil body and execute with empty input (finding H11).
+				h.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+				return
+			}
 		}
 	}
 

@@ -858,6 +858,22 @@ compositions:
 	if w3.Code != http.StatusBadRequest {
 		t.Fatalf("wrong type: expected 400, got %d; body: %s", w3.Code, w3.Body.String())
 	}
+
+	// Malformed JSON must be rejected with 400, not skipped past schema
+	// validation (finding H11).
+	malformed := strings.NewReader(`{"name": not-json}`)
+	req4 := httptest.NewRequest("POST", "/validated", malformed)
+	req4.Header.Set("Content-Type", "application/json")
+	w4 := httptest.NewRecorder()
+	router.ServeHTTP(w4, req4)
+	if w4.Code != http.StatusBadRequest {
+		t.Fatalf("malformed JSON: expected 400, got %d; body: %s", w4.Code, w4.Body.String())
+	}
+	var malformedResp map[string]string
+	_ = json.NewDecoder(w4.Body).Decode(&malformedResp)
+	if malformedResp["error"] != "invalid JSON body" {
+		t.Errorf("error = %q, want \"invalid JSON body\"", malformedResp["error"])
+	}
 }
 
 func TestHandler_ErrorTaxonomy_NoInternalLeak(t *testing.T) {
