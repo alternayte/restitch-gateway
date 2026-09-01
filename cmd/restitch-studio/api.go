@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -36,6 +37,31 @@ func writeError(w http.ResponseWriter, status int, message string) {
 // "not found" errors (there is no sentinel error type).
 func isNotFound(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "not found")
+}
+
+// requireRegistryKey returns middleware that rejects requests without a
+// matching X-Admin-Key. With an empty expected key no request can match, so
+// the registry API stays locked until the operator configures a key. This is
+// the same default-required stance as the gateway admin API.
+func requireRegistryKey(expected string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if expected == "" || !keyMatches(r.Header.Get("X-Admin-Key"), expected) {
+				writeError(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// keyMatches reports whether got equals want in constant time when the
+// lengths match. A length mismatch rejects immediately.
+func keyMatches(got, want string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
 // handleCreateConfig handles POST /api/v1/configs.

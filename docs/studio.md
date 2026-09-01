@@ -60,16 +60,35 @@ Studio is available at `http://localhost:3080`.
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-port` | `3080` | Studio HTTP port |
+| `-bind` | `127.0.0.1` | Bind address. Use `0.0.0.0` only for deliberate remote access |
 | `-gateway-admin-url` | `http://localhost:9090` | Gateway admin API URL to proxy to |
 | `-admin-key` | (none) | Admin API key (attached to proxied requests) |
+| `-registry-key` | (none) | Registry API key. The gateway's `-registry-key` must match it, or the gateway cannot poll the bundle |
 
 ### Environment Variables
 
 | Variable | Overrides |
 |----------|-----------|
 | `STUDIO_PORT` | `-port` |
+| `STUDIO_BIND` | `-bind` |
 | `STUDIO_GATEWAY_ADMIN_URL` | `-gateway-admin-url` |
 | `STUDIO_ADMIN_KEY` | `-admin-key` |
+| `STUDIO_REGISTRY_KEY` | `-registry-key` |
+
+### Registry API Authentication
+
+Every `/api/v1/configs*` and `/api/v1/registry/bundle` handler requires an
+`X-Admin-Key` header that matches the configured `-registry-key`. With no key
+configured, the registry API rejects every request. Run the gateway with the
+same key:
+
+```bash
+restitch-studio -registry-key "$REGISTRY_KEY"
+restitch run -registry-url http://localhost:3080 -registry-key "$REGISTRY_KEY"
+```
+
+The browser preferences API (`/api/v1/preferences`) stays cookie-bound and
+needs no key.
 
 ## Pages
 
