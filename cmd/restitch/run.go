@@ -460,46 +460,52 @@ func runCmd(args []string) int {
 			adminReloadFn = rl.reload
 		}
 
-		// Admin server
-		adminSrv := admin.New(admin.Config{
-			Enabled: gwcfg.Admin.IsEnabled(),
-			Port:    gwcfg.Admin.Port,
-			APIKey:  gwcfg.Admin.APIKey,
-			Storage: adminCfg.Storage,
-		}, admin.Deps{
-			Metrics:    metrics.Handler(),
-			Version:    version,
-			ConfigPath: configPath,
-			ConfigHash: func() string { return swapper.Current().Hash },
-			Compositions: func() []admin.CompositionInfo {
-				return compositionsFromPipeline(swapper.Current())
-			},
-			Upstreams: func(ctx context.Context) []admin.UpstreamInfo {
-				return upstreamsFromPipeline(swapper.Current(), healthChecker, ctx)
-			},
-			Requests: ring,
-			Stats:    stats,
-			Storage:  store,
-			Validate: func(yamlBytes []byte) []string {
-				_, err := composition.ParseConfig(yamlBytes)
-				if err != nil {
-					return []string{err.Error()}
-				}
-				return nil
-			},
-			Reload:         adminReloadFn,
-			RegistryStatus: registryStatusFn,
-		})
-		if err := adminSrv.Start(); err != nil {
-			slog.Error("admin server failed to start", "error", err)
-		}
-		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := adminSrv.Shutdown(ctx); err != nil {
-				slog.Error("admin server shutdown error", "error", err)
+		// Admin server. The enabled flag is honored here: admin.New and
+		// admin.Start only run when admin.enabled is true (finding C3).
+		if gwcfg.Admin.IsEnabled() {
+			adminSrv := admin.New(admin.Config{
+				Enabled: gwcfg.Admin.IsEnabled(),
+				Port:    gwcfg.Admin.Port,
+				Bind:    gwcfg.Admin.Bind,
+				APIKey:  gwcfg.Admin.APIKey,
+				Storage: adminCfg.Storage,
+			}, admin.Deps{
+				Metrics:    metrics.Handler(),
+				Version:    version,
+				ConfigPath: configPath,
+				ConfigHash: func() string { return swapper.Current().Hash },
+				Compositions: func() []admin.CompositionInfo {
+					return compositionsFromPipeline(swapper.Current())
+				},
+				Upstreams: func(ctx context.Context) []admin.UpstreamInfo {
+					return upstreamsFromPipeline(swapper.Current(), healthChecker, ctx)
+				},
+				Requests: ring,
+				Stats:    stats,
+				Storage:  store,
+				Validate: func(yamlBytes []byte) []string {
+					_, err := composition.ParseConfig(yamlBytes)
+					if err != nil {
+						return []string{err.Error()}
+					}
+					return nil
+				},
+				Reload:         adminReloadFn,
+				RegistryStatus: registryStatusFn,
+			})
+			if err := adminSrv.Start(); err != nil {
+				slog.Error("admin server failed to start", "error", err)
 			}
-		}()
+			defer func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := adminSrv.Shutdown(ctx); err != nil {
+					slog.Error("admin server shutdown error", "error", err)
+				}
+			}()
+		} else {
+			slog.Info("admin server disabled by config", "enabled", false)
+		}
 		defer func() {
 			if err := store.Close(); err != nil {
 				slog.Error("failed to close storage", "error", err)

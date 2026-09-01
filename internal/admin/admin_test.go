@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -76,6 +77,23 @@ func testDeps() Deps {
 	}
 }
 
+// testServerConfig returns the config used by most handler tests: a port of
+// 0 (never actually bound) and a non-empty API key, because the key is
+// required by default since finding C3.
+func testServerConfig() Config {
+	return Config{Port: 0, APIKey: testAPIKey}
+}
+
+// testAPIKey is the shared admin key for handler tests.
+const testAPIKey = "test-admin-key-123"
+
+// keyedRequest builds a request with the admin key header set.
+func keyedRequest(method, path string, body io.Reader) *http.Request {
+	req := httptest.NewRequest(method, path, body)
+	req.Header.Set("X-Admin-Key", testAPIKey)
+	return req
+}
+
 func TestCompositionInfo_InferredDeps(t *testing.T) {
 	si := StepInfo{
 		Name:         "bonus",
@@ -146,7 +164,7 @@ func TestStats_Snapshot(t *testing.T) {
 }
 
 func TestServer_APIKeyAuth(t *testing.T) {
-	srv := New(Config{Port: 0, APIKey: "secret123"}, testDeps())
+	srv := New(testServerConfig(), testDeps())
 
 	handler := srv.httpServer.Handler
 
@@ -156,12 +174,73 @@ func TestServer_APIKeyAuth(t *testing.T) {
 		t.Errorf("without key: expected 401, got %d", rec.Code)
 	}
 
+	rec = httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/admin/api/info", nil)
-	req.Header.Set("X-Admin-Key", "secret123")
+	req.Header.Set("X-Admin-Key", "wrong-key")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("with wrong key: expected 401, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest("GET", "/admin/api/info", nil)
+	req.Header.Set("X-Admin-Key", testAPIKey)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Errorf("with key: expected 200, got %d", rec.Code)
+	}
+}
+
+// TestServer_KeyRequiredByDefault covers finding C3: with no configured key,
+// every admin API request is rejected because no request key can match.
+func TestServer_KeyRequiredByDefault(t *testing.T) {
+	srv := New(Config{Port: 0}, testDeps())
+
+	rec := httptest.NewRecorder()
+	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/info", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no configured key: expected 401, got %d", rec.Code)
+	}
+}
+
+// TestServer_BindDefaultsToLoopback covers finding C3: the admin server must
+// bind loopback by default and honor a configured bind address.
+func TestServer_BindDefaultsToLoopback(t *testing.T) {
+	srv := New(Config{Port: 0}, testDeps())
+	if want := "127.0.0.1:9090"; srv.httpServer.Addr != want {
+		t.Errorf("default addr = %q, want %q", srv.httpServer.Addr, want)
+	}
+
+	srv = New(Config{Port: 9999, Bind: "0.0.0.0"}, testDeps())
+	if want := "0.0.0.0:9999"; srv.httpServer.Addr != want {
+		t.Errorf("configured addr = %q, want %q", srv.httpServer.Addr, want)
+	}
+}
+
+// TestServer_OptionsRequiresKey covers finding C4: the CORS preflight must
+// not be answered before the key check.
+func TestServer_OptionsRequiresKey(t *testing.T) {
+	srv := New(testServerConfig(), testDeps())
+	handler := srv.httpServer.Handler
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/admin/api/reload", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("OPTIONS without key: expected 401, got %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodOptions, "/admin/api/reload", nil)
+	req.Header.Set("Origin", "https://good.example")
+	req.Header.Set("X-Admin-Key", testAPIKey)
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("OPTIONS with key: expected 204, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://good.example" {
+		t.Errorf("allow-origin = %q, want the request origin", got)
 	}
 }
 
@@ -170,10 +249,10 @@ func TestServer_Info(t *testing.T) {
 	deps.Version = "v2.0.0"
 	deps.ConfigPath = "/etc/restitch.yaml"
 	deps.ConfigHash = func() string { return "deadbeef" }
-	srv := New(Config{Port: 0}, deps)
+	srv := New(testServerConfig(), deps)
 
 	rec := httptest.NewRecorder()
-	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/info", nil))
+	srv.httpServer.Handler.ServeHTTP(rec, keyedRequest("GET", "/admin/api/info", nil))
 
 	var info map[string]any
 	_ = json.NewDecoder(rec.Body).Decode(&info)
@@ -200,10 +279,10 @@ func TestServer_Validate(t *testing.T) {
 		}
 		return nil
 	}
-	srv := New(Config{Port: 0}, deps)
+	srv := New(testServerConfig(), deps)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/admin/api/validate", strings.NewReader("good config"))
+	req := keyedRequest("POST", "/admin/api/validate", strings.NewReader("good config"))
 	srv.httpServer.Handler.ServeHTTP(rec, req)
 
 	var result map[string]any
@@ -213,7 +292,7 @@ func TestServer_Validate(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	req = httptest.NewRequest("POST", "/admin/api/validate", strings.NewReader("bad config"))
+	req = keyedRequest("POST", "/admin/api/validate", strings.NewReader("bad config"))
 	srv.httpServer.Handler.ServeHTTP(rec, req)
 
 	result = map[string]any{}
@@ -224,10 +303,10 @@ func TestServer_Validate(t *testing.T) {
 }
 
 func TestServer_Compositions(t *testing.T) {
-	srv := New(Config{Port: 0}, testDeps())
+	srv := New(testServerConfig(), testDeps())
 
 	rec := httptest.NewRecorder()
-	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/compositions", nil))
+	srv.httpServer.Handler.ServeHTTP(rec, keyedRequest("GET", "/admin/api/compositions", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -260,12 +339,12 @@ func TestServer_Compositions(t *testing.T) {
 }
 
 func TestServer_CompositionByName(t *testing.T) {
-	srv := New(Config{Port: 0}, testDeps())
+	srv := New(testServerConfig(), testDeps())
 	h := srv.httpServer.Handler
 
 	// Found
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/compositions/user-dashboard", nil))
+	h.ServeHTTP(rec, keyedRequest("GET", "/admin/api/compositions/user-dashboard", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
@@ -277,17 +356,17 @@ func TestServer_CompositionByName(t *testing.T) {
 
 	// Not found
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/compositions/nonexistent", nil))
+	h.ServeHTTP(rec, keyedRequest("GET", "/admin/api/compositions/nonexistent", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
 	}
 }
 
 func TestServer_Upstreams(t *testing.T) {
-	srv := New(Config{Port: 0}, testDeps())
+	srv := New(testServerConfig(), testDeps())
 
 	rec := httptest.NewRecorder()
-	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/upstreams", nil))
+	srv.httpServer.Handler.ServeHTTP(rec, keyedRequest("GET", "/admin/api/upstreams", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -333,17 +412,17 @@ func TestServer_Compositions_NilDeps(t *testing.T) {
 	deps := testDeps()
 	deps.Compositions = nil
 	deps.Upstreams = nil
-	srv := New(Config{Port: 0}, deps)
+	srv := New(testServerConfig(), deps)
 	h := srv.httpServer.Handler
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/compositions", nil))
+	h.ServeHTTP(rec, keyedRequest("GET", "/admin/api/compositions", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/upstreams", nil))
+	h.ServeHTTP(rec, keyedRequest("GET", "/admin/api/upstreams", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
@@ -366,10 +445,10 @@ func TestRegistryStatusEndpoint(t *testing.T) {
 			"consecutive_errors":    0,
 		}
 	}
-	srv := New(Config{Port: 0}, deps)
+	srv := New(testServerConfig(), deps)
 
 	rec := httptest.NewRecorder()
-	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/registry/status", nil))
+	srv.httpServer.Handler.ServeHTTP(rec, keyedRequest("GET", "/admin/api/registry/status", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
@@ -393,10 +472,10 @@ func TestRegistryStatusEndpoint(t *testing.T) {
 func TestRegistryStatusEndpoint_NotRegistered(t *testing.T) {
 	deps := testDeps()
 	deps.RegistryStatus = nil
-	srv := New(Config{Port: 0}, deps)
+	srv := New(testServerConfig(), deps)
 
 	rec := httptest.NewRecorder()
-	srv.httpServer.Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/admin/api/registry/status", nil))
+	srv.httpServer.Handler.ServeHTTP(rec, keyedRequest("GET", "/admin/api/registry/status", nil))
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -404,14 +483,14 @@ func TestRegistryStatusEndpoint_NotRegistered(t *testing.T) {
 }
 
 func TestServer_MutationRateLimit(t *testing.T) {
-	srv := New(Config{Port: 0}, testDeps())
+	srv := New(testServerConfig(), testDeps())
 	h := srv.httpServer.Handler
 
 	// The mutation limiter is configured with burst=5, so the first 5
 	// requests should succeed. The 6th should be rate-limited.
 	for i := 0; i < 5; i++ {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest("POST", "/admin/api/reload", strings.NewReader(""))
+		req := keyedRequest("POST", "/admin/api/reload", strings.NewReader(""))
 		req.RemoteAddr = "10.0.0.99:1234"
 		h.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -421,7 +500,7 @@ func TestServer_MutationRateLimit(t *testing.T) {
 
 	// 6th request should be rate limited
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/admin/api/reload", strings.NewReader(""))
+	req := keyedRequest("POST", "/admin/api/reload", strings.NewReader(""))
 	req.RemoteAddr = "10.0.0.99:1234"
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusTooManyRequests {
@@ -436,7 +515,7 @@ func TestServer_MutationRateLimit(t *testing.T) {
 
 	// A different IP should still be allowed
 	rec2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest("POST", "/admin/api/reload", strings.NewReader(""))
+	req2 := keyedRequest("POST", "/admin/api/reload", strings.NewReader(""))
 	req2.RemoteAddr = "10.0.0.100:1234"
 	h.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusOK {
@@ -445,7 +524,7 @@ func TestServer_MutationRateLimit(t *testing.T) {
 
 	// GET endpoints should not be rate limited even from the exhausted IP
 	rec3 := httptest.NewRecorder()
-	req3 := httptest.NewRequest("GET", "/admin/api/info", nil)
+	req3 := keyedRequest("GET", "/admin/api/info", nil)
 	req3.RemoteAddr = "10.0.0.99:1234"
 	h.ServeHTTP(rec3, req3)
 	if rec3.Code != http.StatusOK {

@@ -125,8 +125,9 @@ config file:
 | `RESTITCH_LOG_FORMAT` | `server.log_format` | `json` |
 | `RESTITCH_LOG_LEVEL` | `server.log_level` | `info` |
 | `RESTITCH_ADMIN_PORT` | `admin.port` | `9090` |
+| `RESTITCH_ADMIN_BIND` | `admin.bind` | `127.0.0.1` |
 | `RESTITCH_ADMIN_ENABLED` | `admin.enabled` | `true` |
-| `RESTITCH_ADMIN_API_KEY` | `admin.api_key` | (none) |
+| `RESTITCH_ADMIN_API_KEY` | `admin.api_key` | (none; required — requests without a key are rejected) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector URL | (none) |
 
 Precedence: CLI flags > `RESTITCH_*` env > YAML file > defaults.

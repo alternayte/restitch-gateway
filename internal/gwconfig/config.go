@@ -55,23 +55,23 @@ type RateLimitConfig struct {
 
 // ServerConfig holds gateway server settings.
 type ServerConfig struct {
-	Port            int               `yaml:"port"`
-	TLSPort         int               `yaml:"tls_port"`
-	TLSCert         string            `yaml:"tls_cert"`
-	TLSKey          string            `yaml:"tls_key"`
-	ReadTimeout     Duration          `yaml:"read_timeout"`
-	WriteTimeout    Duration          `yaml:"write_timeout"`
-	ShutdownTimeout Duration          `yaml:"shutdown_timeout"`
-	LogFormat       string            `yaml:"log_format"`
-	LogLevel        string            `yaml:"log_level"`
+	Port            int                `yaml:"port"`
+	TLSPort         int                `yaml:"tls_port"`
+	TLSCert         string             `yaml:"tls_cert"`
+	TLSKey          string             `yaml:"tls_key"`
+	ReadTimeout     Duration           `yaml:"read_timeout"`
+	WriteTimeout    Duration           `yaml:"write_timeout"`
+	ShutdownTimeout Duration           `yaml:"shutdown_timeout"`
+	LogFormat       string             `yaml:"log_format"`
+	LogLevel        string             `yaml:"log_level"`
 	Auth            *InboundAuthConfig `yaml:"auth"`
 	RateLimit       *RateLimitConfig   `yaml:"rate_limit"`
 }
 
 // InboundAuthConfig configures gateway-level authentication.
 type InboundAuthConfig struct {
-	APIKeys []string       `yaml:"api_keys"`
-	JWT     *JWTConfig     `yaml:"jwt"`
+	APIKeys []string   `yaml:"api_keys"`
+	JWT     *JWTConfig `yaml:"jwt"`
 }
 
 // JWTConfig configures JWT validation via JWKS.
@@ -85,6 +85,7 @@ type JWTConfig struct {
 type AdminConfig struct {
 	Enabled        *bool               `yaml:"enabled"`
 	Port           int                 `yaml:"port"`
+	Bind           string              `yaml:"bind"`
 	APIKey         string              `yaml:"api_key"`
 	RequestLogSize int                 `yaml:"request_log_size"`
 	Storage        admin.StorageConfig `yaml:"storage"`
@@ -163,6 +164,9 @@ func applyDefaults(f *File) {
 	}
 	if f.Admin.Port == 0 {
 		f.Admin.Port = 9090
+	}
+	if f.Admin.Bind == "" {
+		f.Admin.Bind = "127.0.0.1"
 	}
 	if f.Admin.RequestLogSize == 0 {
 		f.Admin.RequestLogSize = 500
@@ -253,6 +257,9 @@ func ApplyEnvOverrides(f *File) {
 		if n, err := strconv.Atoi(v); err == nil {
 			f.Admin.Port = n
 		}
+	}
+	if v := os.Getenv("RESTITCH_ADMIN_BIND"); v != "" {
+		f.Admin.Bind = v
 	}
 	if v := os.Getenv("RESTITCH_ADMIN_ENABLED"); v != "" {
 		b := strings.ToLower(v) == "true" || v == "1"
