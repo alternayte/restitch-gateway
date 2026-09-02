@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -174,11 +175,16 @@ func isLoopback(bind string) bool {
 	return false
 }
 
-// Start starts the admin server in the background.
+// Start starts the admin server in the background. Bind failures are
+// returned instead of silently disabling the admin API (finding L18).
 func (s *Server) Start() error {
-	slog.Info("admin server starting", "port", s.cfg.Port)
+	slog.Info("admin server starting", "port", s.cfg.Port, "bind", s.cfg.Bind)
+	ln, err := net.Listen("tcp", s.httpServer.Addr)
+	if err != nil {
+		return fmt.Errorf("admin server listen on %s: %w", s.httpServer.Addr, err)
+	}
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
 			slog.Error("admin server error", "error", err)
 		}
 	}()
@@ -303,7 +309,7 @@ func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request) {
 		}
 		records, err := s.deps.Storage.QueryRequests(r.Context(), opts)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			s.internalError(w, "query requests", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, records)
@@ -328,7 +334,7 @@ func (s *Server) handleTimeSeries(w http.ResponseWriter, r *http.Request) {
 
 	buckets, err := s.deps.Storage.QueryTimeSeries(r.Context(), from, to, resolution, composition)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.internalError(w, "query timeseries", err)
 		return
 	}
 	if buckets == nil {
@@ -355,7 +361,7 @@ func (s *Server) handleStepMetrics(w http.ResponseWriter, r *http.Request) {
 
 	metrics, err := s.deps.Storage.QueryStepMetrics(r.Context(), composition, from, to)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.internalError(w, "query step metrics", err)
 		return
 	}
 	if metrics == nil {
@@ -373,7 +379,7 @@ func (s *Server) handleRequestByID(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	rec, err := s.deps.Storage.GetRequestByID(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.internalError(w, "get request by id", err)
 		return
 	}
 	if rec == nil {
@@ -450,6 +456,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// internalError logs err and returns a generic 500: raw driver strings (file
+// paths, storage details) must not leak to clients (finding L15).
+func (s *Server) internalError(w http.ResponseWriter, op string, err error) {
+	slog.Error("admin storage error", "op", op, "error", err)
+	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 }
 
 // corsMiddleware adds CORS headers and answers preflight OPTIONS requests.

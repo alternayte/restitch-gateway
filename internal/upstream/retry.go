@@ -204,6 +204,12 @@ func shouldRetry(ctx context.Context, attempt int, cfg RetryConfig, resp *http.R
 }
 
 func retryBackoff(attempt int, cfg RetryConfig) time.Duration {
+	// Saturate the exponent: math.Pow(2, attempt) overflows to +Inf for
+	// large attempt counts (finding L13). 20 doublings from a 250ms base
+	// already exceeds any plausible MaxBackoff.
+	if attempt > 20 {
+		attempt = 20
+	}
 	base := float64(cfg.Interval) * math.Pow(2, float64(attempt))
 	jitter := 0.8 + 0.4*rand.Float64()
 	d := time.Duration(base * jitter)

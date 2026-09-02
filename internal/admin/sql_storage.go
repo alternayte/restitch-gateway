@@ -27,10 +27,10 @@ import (
 	"github.com/alternayte/restitch-gateway/internal/reqlog"
 )
 
-// SQLStorage is a Storage implementation backed by SQLite (or Turso, which
-// speaks the same SQL over libSQL). It uses database/sql with the pure-Go
-// modernc.org/sqlite driver, storing Bucket and reqlog.Record values as JSON
-// blobs in TEXT columns for simplicity.
+// SQLStorage is a Storage implementation backed by SQLite. It uses
+// database/sql with the pure-Go modernc.org/sqlite driver, storing Bucket and
+// reqlog.Record values as JSON blobs in TEXT columns for simplicity. Turso
+// DSNs are rejected at config validation (finding L8).
 type SQLStorage struct {
 	db        *sql.DB
 	retention time.Duration

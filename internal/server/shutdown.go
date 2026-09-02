@@ -36,6 +36,10 @@ func (s *Server) WaitForShutdownSignal() <-chan struct{} {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
+		// Stop notifying after the first signal so a second SIGINT/SIGTERM
+		// falls through to the default handler and force-exits the process
+		// (finding L1).
+		defer signal.Stop(quit)
 		sig := <-quit
 		fmt.Printf("shutdown signal received (%s), draining connections...\n", sig)
 		s.SetReady(false)

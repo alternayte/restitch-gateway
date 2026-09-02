@@ -32,9 +32,12 @@ func NewCoalescer() *Coalescer {
 }
 
 // CoalesceKey builds a cache/coalesce key from method, URL, and auth identity.
+// The identity hash uses the full SHA-256 digest; truncating to 8 bytes
+// gives a 50 percent collision chance at roughly 77k distinct identities
+// (finding L4).
 func CoalesceKey(method, url, authIdentity string) string {
 	h := sha256.Sum256([]byte(authIdentity))
-	return fmt.Sprintf("%s %s %x", method, url, h[:8])
+	return fmt.Sprintf("%s %s %x", method, url, h[:])
 }
 
 // Do executes fn once per key among concurrent callers.

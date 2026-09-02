@@ -120,7 +120,14 @@ func runCmd(args []string) int {
 	// Parse server/admin config from YAML (or use defaults if no file)
 	var gwcfg *gwconfig.File
 	if noConfigFile {
-		gwcfg = &gwconfig.File{}
+		// LoadBytes applies defaults and validates, so the no-config path
+		// gets the same treatment as a file path (finding L7).
+		var err error
+		gwcfg, err = gwconfig.LoadBytes([]byte{}, []byte{})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config error: %v\n", err)
+			return 1
+		}
 	} else {
 		var err error
 		gwcfg, err = gwconfig.LoadBytes(expanded, raw)
@@ -149,6 +156,14 @@ func runCmd(args []string) int {
 	}
 	if isFlagSet(flags, "key") {
 		gwcfg.Server.TLSKey = *keyFile
+	}
+
+	// Env and flag overrides land after the initial validation, so validate
+	// again: an invalid RESTITCH_PORT must fail here, not at bind time
+	// (finding L7).
+	if err := gwcfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
+		return 1
 	}
 
 	if err := observability.Setup(gwcfg.Server.LogFormat, gwcfg.Server.LogLevel); err != nil {
@@ -319,7 +334,7 @@ func runCmd(args []string) int {
 		router.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
 		router.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
 		router.Finalize()
-		pipe.Handler = router
+		pipe.Handler = pipelineRateLimit(router, gwcfg.Server.RateLimit)
 
 		swapper := newSwapper(pipe)
 
@@ -327,21 +342,6 @@ func runCmd(args []string) int {
 			observability.RequestIDMiddleware,
 			server.NewLoggingMiddleware(),
 			recoveryMiddleware,
-		}
-
-		// Global gateway rate limiter
-		if gwcfg.Server.RateLimit != nil {
-			rl := gwcfg.Server.RateLimit
-			globalLimiter := ratelimit.New(ratelimit.Config{
-				RequestsPerSecond: rl.RequestsPerSecond,
-				Burst:             rl.Burst,
-				Key:               rl.Key,
-			})
-			middlewares = append(middlewares, globalLimiter.Middleware)
-			slog.Info("global rate limit enabled",
-				"rps", rl.RequestsPerSecond,
-				"burst", rl.Burst,
-				"key", rl.Key)
 		}
 
 		wrapped := applyMiddleware(swapper, middlewares...)
@@ -405,7 +405,7 @@ func runCmd(args []string) int {
 			newRouter.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
 			newRouter.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
 			newRouter.Finalize()
-			newPipe.Handler = newRouter
+			newPipe.Handler = pipelineRateLimit(newRouter, newGwcfg.Server.RateLimit)
 
 			old := swapper.Swap(newPipe)
 			if old != nil {
@@ -525,7 +525,11 @@ func runCmd(args []string) int {
 				RegistryStatus: registryStatusFn,
 			})
 			if err := adminSrv.Start(); err != nil {
+				// An admin server that cannot bind its port is a deployment
+				// error, not a reason to run without the control plane
+				// (finding L18).
 				slog.Error("admin server failed to start", "error", err)
+				return 1
 			}
 			defer func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -573,7 +577,9 @@ func runCmd(args []string) int {
 		slog.Error("server error", "error", err)
 		return 1
 	case <-srv.WaitForShutdownSignal():
-		ctx, cancel := context.WithTimeout(context.Background(), server.ShutdownTimeout)
+		// The configured server.shutdown_timeout governs the drain window
+		// (default 30s); it was parsed but unused (finding L6).
+		ctx, cancel := context.WithTimeout(context.Background(), gwcfg.Server.ShutdownTimeout.Duration)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {
 			slog.Error("shutdown error", "error", err)
@@ -607,6 +613,26 @@ func applyMiddleware(h http.Handler, mws ...func(http.Handler) http.Handler) htt
 		h = mws[i](h)
 	}
 	return h
+}
+
+// pipelineRateLimit wraps h with the global rate limiter described by cfg,
+// or returns h unchanged when cfg is nil. It is applied to each pipeline as
+// it is built, so a reload that changes server.rate_limit takes effect
+// instead of being frozen at startup (finding L11).
+func pipelineRateLimit(h http.Handler, cfg *gwconfig.RateLimitConfig) http.Handler {
+	if cfg == nil {
+		return h
+	}
+	rl := ratelimit.New(ratelimit.Config{
+		RequestsPerSecond: cfg.RequestsPerSecond,
+		Burst:             cfg.Burst,
+		Key:               cfg.Key,
+	})
+	slog.Info("global rate limit enabled",
+		"rps", cfg.RequestsPerSecond,
+		"burst", cfg.Burst,
+		"key", cfg.Key)
+	return rl.Middleware(h)
 }
 
 func recoveryMiddleware(next http.Handler) http.Handler {

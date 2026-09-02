@@ -151,7 +151,7 @@ func (e *Executor) Execute(ctx context.Context, compositionName string, rd *Requ
 
 			for _, stepErr := range waveErrors {
 				if !stepErr.optional {
-					slog.ErrorContext(ctx, "required step failed in wave", "wave", waveIdx, "step", stepErr.stepName, "error", stepErr.err)
+					slog.ErrorContext(ctx, "required step failed in wave", "wave", waveIdx, "step", stepErr.stepName, "error", RedactURLQuery(stepErr.err.Error()))
 					return nil, &RequiredStepError{Step: stepErr.stepName, Err: stepErr.err}
 				}
 			}
@@ -234,7 +234,7 @@ func (e *Executor) executeStepWithErrorHandling(
 	env := buildRequestEnv(ctx, rd, results)
 	resultsMutex.Unlock()
 
-	slog.InfoContext(ctx, "step starting",
+	slog.DebugContext(ctx, "step starting",
 		"composition", compositionName,
 		"step", stepName,
 		"wave", waveNum,
@@ -289,7 +289,7 @@ func (e *Executor) executeStepWithErrorHandling(
 			resultsMutex.Lock()
 			results[stepName] = result
 			resultsMutex.Unlock()
-			slog.InfoContext(ctx, "step complete (cached)",
+			slog.DebugContext(ctx, "step complete (cached)",
 				"composition", compositionName,
 				"step", stepName,
 				"wave", waveNum,
@@ -352,7 +352,7 @@ func (e *Executor) executeStepWithErrorHandling(
 			"wave", waveNum,
 			"optional", step.Optional,
 			"duration_ms", durationMS,
-			"error", err)
+			"error", RedactURLQuery(err.Error()))
 
 		resultsMutex.Lock()
 		results[stepName] = nil
@@ -391,7 +391,7 @@ func (e *Executor) executeStepWithErrorHandling(
 
 	stepSpan.SetStatus(codes.Ok, "")
 
-	slog.InfoContext(ctx, "step complete",
+	slog.DebugContext(ctx, "step complete",
 		"composition", compositionName,
 		"step", stepName,
 		"wave", waveNum,

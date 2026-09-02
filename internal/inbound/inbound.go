@@ -105,9 +105,11 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			}
 		}
 
-		// Try JWT bearer token
-		if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
-			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		// Try JWT bearer token. RFC 6750 permits any casing of the scheme,
+		// so the prefix check is case-insensitive (finding L2).
+		authHeader := r.Header.Get("Authorization")
+		scheme, tokenStr, found := strings.Cut(authHeader, " ")
+		if found && strings.EqualFold(scheme, "Bearer") {
 			claims, ok := a.validateJWT(tokenStr)
 			if ok {
 				ctx := WithClaims(r.Context(), claims)

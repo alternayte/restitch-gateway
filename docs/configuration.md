@@ -149,9 +149,9 @@ data is kept in memory only and lost on restart.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `type` | string | `"memory"` | Storage backend: `memory`, `sqlite`, or `turso` |
-| `url` | string | `""` | Database URL (required for `sqlite` and `turso`) |
-| `auth_token` | string | `""` | Auth token (required for `turso`) |
+| `type` | string | `"memory"` | Storage backend: `memory` or `sqlite`. `turso` is rejected (not supported by this build) |
+| `url` | string | `""` | Database URL (required for `sqlite`) |
+| `auth_token` | string | `""` | Reserved; unused by the sqlite backend |
 | `retention` | duration | `"168h"` | How long to retain request records |
 
 ```yaml

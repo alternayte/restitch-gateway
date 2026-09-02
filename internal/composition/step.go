@@ -23,6 +23,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -126,6 +127,12 @@ func ExecuteStepWithTimeout(
 		if err != nil {
 			return nil, fmt.Errorf("failed to evaluate header %s: %w", key, err)
 		}
+		// A CRLF (or any control character) smuggled through a header value
+		// fails at write time with a confusing transport error; reject it
+		// here with a clear step error (finding L5).
+		if containsControl(val) {
+			return nil, fmt.Errorf("header %s: value contains control characters", key)
+		}
 		req.Header.Set(key, val)
 	}
 
@@ -183,6 +190,28 @@ func convertHeaders(headers http.Header) map[string]string {
 		}
 	}
 	return result
+}
+
+// containsControl reports whether s contains any C0 control character
+// (including CR and LF), which HTTP header values must not carry.
+func containsControl(s string) bool {
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+// queryValuePattern matches key=value pairs inside a query string so log
+// output can mask the values (finding L3): templated query values can carry
+// tokens that must not land in logs.
+var queryValuePattern = regexp.MustCompile(`([?&][^=&\s"]+)=([^&\s"]*)`)
+
+// RedactURLQuery masks query-string values in arbitrary text (for example an
+// error message embedding a request URL), preserving keys and the URL path.
+func RedactURLQuery(s string) string {
+	return queryValuePattern.ReplaceAllString(s, `${1}=***`)
 }
 
 // parseJSONBody parses response body as JSON.

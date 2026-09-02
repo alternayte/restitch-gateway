@@ -65,7 +65,10 @@ func (pw *PrefixWriter) Write(p []byte) (int, error) {
 		tag = fmt.Sprintf("%s[%s]%s", pw.colorCode, pw.prefix, ColorReset)
 	}
 
+	// The 64 KiB default scanner buffer turns one long log line into a scan
+	// error, which kills the child process the writer serves (finding L14).
 	scanner := bufio.NewScanner(bytes.NewReader(p))
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
 		fmt.Fprintf(pw.dest, "%s %s\n", tag, scanner.Text())
 	}

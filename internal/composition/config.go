@@ -38,8 +38,12 @@ import (
 // Config represents the complete composition configuration loaded from YAML.
 // It defines all upstreams and compositions available to the gateway.
 type Config struct {
-	Upstreams    map[string]Upstream    `yaml:"upstreams"`
-	Compositions map[string]Composition `yaml:"compositions"`
+	// BlockPrivateUpstreams rejects upstream URLs whose host is a literal
+	// private, loopback, or link-local IP address (SSRF guard option,
+	// finding L16). Hostnames are not resolved at parse time and pass.
+	BlockPrivateUpstreams bool                   `yaml:"block_private_upstreams"`
+	Upstreams             map[string]Upstream    `yaml:"upstreams"`
+	Compositions          map[string]Composition `yaml:"compositions"`
 }
 
 // Upstream represents a named backend service that steps can call.

@@ -77,7 +77,7 @@ admin:
   api_key: "${ADMIN_KEY}"     # required; requests without a key are rejected
   request_log_size: 500
   storage:                       # optional; in-memory ring buffer if omitted
-    type: sqlite                 # memory | sqlite | turso
+    type: sqlite                 # memory | sqlite (turso is rejected)
     url: "file:studio.db"
     auth_token: ""
     retention: 168h
