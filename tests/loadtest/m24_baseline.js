@@ -13,6 +13,7 @@ import { check } from 'k6';
 
 const GW_URL = __ENV.GW_URL;
 const STUDIO_URL = __ENV.STUDIO_URL;
+const STUDIO_KEY = __ENV.STUDIO_KEY || '';
 const DURATION = __ENV.DURATION || '60s';
 
 if (!GW_URL) {
@@ -76,7 +77,11 @@ export function composition() {
 }
 
 export function studio() {
-  const res = http.get(STUDIO_URL);
+  // The registry API requires the admin key (hardening C1). When the gate
+  // passes STUDIO_KEY, the request authenticates; without it the scenario
+  // is used only against endpoints that need no key.
+  const params = STUDIO_KEY ? { headers: { 'X-Admin-Key': STUDIO_KEY } } : {};
+  const res = http.get(STUDIO_URL, params);
   check(res, { 'studio 200': (r) => r.status === 200 });
 }
 
