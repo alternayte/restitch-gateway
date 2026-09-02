@@ -64,7 +64,7 @@ export default function Builder() {
           {/* Upstreams */}
           <Section title="Upstreams">
             {state.upstreams.map((u, i) => (
-              <div key={i} className="grid grid-cols-[1fr_2fr_auto] gap-3 mb-2">
+              <div key={u.name ?? i} className="grid grid-cols-[1fr_2fr_auto] gap-3 mb-2">
                 <Input label="" value={u.name} placeholder="name" onChange={(v) => {
                   const ups = [...state.upstreams]; ups[i] = { ...u, name: v }; update("upstreams", ups)
                 }} />
@@ -84,7 +84,7 @@ export default function Builder() {
           {/* Steps */}
           <Section title="Steps">
             {state.steps.map((s, i) => (
-              <div key={i} className="bg-surface-2 rounded-xl border border-hairline p-4 mb-3">
+              <div key={s.name ?? i} className="bg-surface-2 rounded-xl border border-hairline p-4 mb-3">
                 <div className="grid grid-cols-[1fr_1fr_auto] gap-3 mb-2">
                   <Input label="Name" value={s.name} onChange={(v) => {
                     const steps = [...state.steps]; steps[i] = { ...s, name: v }; update("steps", steps)

@@ -4,7 +4,7 @@ import type { TimeSeriesBucket } from "../../lib/api"
 
 export function StepComparisonChart({ data, stepNames }: { data: TimeSeriesBucket[]; stepNames: string[] }) {
   const chartData = data.map((b) => {
-    const point: Record<string, any> = {
+    const point: Record<string, number | string> = {
       time: new Date(b.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     }
     for (const name of stepNames) {

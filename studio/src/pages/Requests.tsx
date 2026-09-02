@@ -173,8 +173,17 @@ function RequestRow({
     <>
       <tr
         onClick={onToggle}
-        className={`border-t border-hairline-soft cursor-pointer transition-colors ${
-          isExpanded ? "bg-surface-2" : "hover:bg-surface-2"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            onToggle()
+          }
+        }}
+        tabIndex={0}
+        role="button"
+        aria-expanded={isExpanded}
+        className={`border-t border-hairline-soft cursor-pointer transition-colors outline-none ${
+          isExpanded ? "bg-surface-2" : "hover:bg-surface-2 focus:bg-surface-2"
         }`}
       >
         <td className="pl-3 py-2.5">

@@ -130,7 +130,16 @@ export default function Dashboard() {
                   <tr
                     key={name}
                     onClick={() => navigate(`/compositions/${name}`)}
-                    className="border-t border-hairline-soft hover:bg-surface-2 transition-colors cursor-pointer"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        navigate(`/compositions/${name}`)
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open ${name}`}
+                    className="border-t border-hairline-soft hover:bg-surface-2 focus:bg-surface-2 transition-colors cursor-pointer outline-none"
                   >
                     <td className="px-4 py-2.5 font-medium text-ink">{name}</td>
                     <td className="px-4 py-2.5 text-right text-ink-muted tabular-nums">{s.count}</td>

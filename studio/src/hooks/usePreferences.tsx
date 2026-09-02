@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { api, type PreferencesPayload, type PreferencesResponse } from "@/lib/api"
-import type { TimeRange } from "@/components/charts/TimeRangeSelector"
+import { type TimeRange, isTimeRange } from "@/components/charts/TimeRangeSelector"
 
 export const PREFS_STORAGE_KEY = "restitch.prefs"
 
@@ -30,7 +30,9 @@ function fromResponse(r: PreferencesResponse): Preferences {
   return {
     pinnedCompositions: r.pinned_compositions ?? [],
     sidebarCollapsed: r.sidebar_collapsed ?? false,
-    defaultTimeRange: (r.default_time_range as TimeRange) ?? "1h",
+    // Validate instead of casting: a future server version may send a range
+    // this build does not know (finding L22).
+    defaultTimeRange: isTimeRange(r.default_time_range) ? r.default_time_range : "1h",
   }
 }
 
