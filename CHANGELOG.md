@@ -1,12 +1,13 @@
 # Changelog
 
-## Unreleased — hardening for public release (2026-09-02)
+## v2.0.0 — 2026-09-02
 
-Security and trust-boundary hardening, ahead of the first public release
-tag. Changes grouped by area; the open-source hardening review is recorded
-in the repo's plan ledger.
+First public release. Everything below this entry — the composition-engine
+rewrite, the Studio, milestones M17-M25, and the open-source hardening pass —
+shipped together in this tag. The hardening review is recorded in the repo's
+plan ledger.
 
-### Security
+### Hardening (Security)
 
 - **Studio registry API authenticated** (C1): every `/api/v1/configs*` and
   `/api/v1/registry/bundle` handler requires `X-Admin-Key`, compared in
@@ -32,7 +33,7 @@ in the repo's plan ledger.
   (M7); session cookies honor `X-Forwarded-Proto` for `Secure` (M8); the
   oauth2 validate-only strategy fails cleanly instead of panicking (M10).
 
-### Containers and operations
+### Hardening (Containers and operations)
 
 - Docker image runs as the distroless non-root user, built on `node:24`
   (H7, M16); `.dockerignore` keeps the build context small.
@@ -41,7 +42,7 @@ in the repo's plan ledger.
 - The docker-compose quickstart works again: `/mockupstream` is in the image
   and services select their binary with `entrypoint` (H12).
 
-### Verification integrity
+### Hardening (Verification integrity)
 
 - Four gate scripts no longer record PASS vacuously (H8).
 - The CI coverage gate uses `awk` instead of `bc` (H6); actions are pinned to
@@ -51,9 +52,10 @@ in the repo's plan ledger.
 - Frontend: TypeScript `strict` + `noUncheckedIndexedAccess` (M13), a
   top-level error boundary (M14), and fetch error states with retry (M15).
 
-## v2.0.0
+### Rewrite overview
 
-Complete rewrite of the composition engine and addition of Restitch Studio.
+Complete rewrite of the composition engine and addition of Restitch Studio
+(originally drafted as the v2.0.0 section below).
 
 ### Features
 
