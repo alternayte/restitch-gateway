@@ -47,7 +47,21 @@ services:
     ports:
       - "3080:3080"
     depends_on:
-      - restitch
+      restitch:
+        condition: service_started
+      studio-data-init:
+        condition: service_completed_successfully
+
+  # The image runs as the distroless nonroot user (finding H7). Docker
+  # initializes a fresh named volume with a root-owned 0755 root directory,
+  # which that user cannot write; this one-shot step fixes the ownership
+  # before the studio opens its database.
+  studio-data-init:
+    image: alpine:3.20
+    command: ["chown", "-R", "65532:65532", "/data"]
+    volumes:
+      - studio-data:/data
+    restart: "no"
 
 volumes:
   studio-data:

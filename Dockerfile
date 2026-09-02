@@ -21,10 +21,12 @@ RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${VERSION}" -o /resti
 # (finding H12); the image had no /mockupstream, so the stack was dead on
 # arrival.
 RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${VERSION}" -o /mockupstream ./cmd/mockupstream
-# Studio database directory for the runtime image (finding H7). Owned by the
-# distroless nonroot user (65532) so a fresh named volume mounted at /data
-# inherits writable ownership.
-RUN mkdir -p /data && chown 65532:65532 /data
+# Studio database directory for the runtime image (finding H7). The distroless
+# nonroot user (65532) writes here. Docker initializes a fresh named volume
+# from this directory but keeps the volume ROOT owned by root, so the
+# directory itself must be world-writable; the .keep file additionally copies
+# the nonroot ownership into the volume for anything that checks it.
+RUN mkdir -p /data && touch /data/.keep && chmod 777 /data && chown -R 65532:65532 /data
 
 # Stage 3: Runtime
 FROM gcr.io/distroless/static-debian12

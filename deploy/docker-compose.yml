@@ -32,12 +32,17 @@ services:
       - studio-data:/data
     ports:
       - "${STUDIO_PORT:-3080}:3080"
+    depends_on:
+      studio-data-init:
+        condition: service_completed_successfully
+    # Real HTTP probe (finding M17): the old `-h` probe always exited 0. The
+    # SPA root answers 200 only when the studio is actually serving.
     healthcheck:
-      test: ["CMD", "/restitch-studio", "-h"]
-      interval: 5s
+      test: ["CMD", "/restitch-studio", "-healthcheck", "http://localhost:3080/"]
+      interval: 10s
       timeout: 3s
-      retries: 10
-      start_period: 5s
+      retries: 5
+      start_period: 10s
 
   gateway:
     build:
@@ -74,10 +79,28 @@ services:
       - "${GATEWAY_ADMIN_PORT:-9090}:9090"
     depends_on:
       studio:
-        condition: service_started
+        condition: service_healthy
     # The initial registry fetch is fatal if the studio is not yet listening
     # (a startup race), so the gateway retries until it succeeds.
     restart: on-failure
+    # Real HTTP probe (finding M17): the gateway had no probe at all.
+    healthcheck:
+      test: ["CMD", "/restitch", "healthcheck", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # The image runs as the distroless nonroot user (finding H7). Docker
+  # initializes a fresh named volume with a root-owned 0755 root directory,
+  # which that user cannot write; this one-shot step fixes the ownership
+  # before the studio opens its database.
+  studio-data-init:
+    image: alpine:3.20
+    command: ["chown", "-R", "65532:65532", "/data"]
+    volumes:
+      - studio-data:/data
+    restart: "no"
 
   prometheus:
     image: prom/prometheus:${PROMETHEUS_VERSION}
