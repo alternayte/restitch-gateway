@@ -26,8 +26,9 @@ curl -s http://localhost:8080/api/users/42/dashboard | python3 -m json.tool
 # Check metrics
 curl -s http://localhost:9090/metrics | grep restitch_requests_total
 
-# View recent requests
-curl -s http://localhost:9090/admin/api/requests | python3 -m json.tool
+# View recent requests (admin key required since hardening C3)
+curl -s -H "X-Admin-Key: restitch-dev" http://localhost:9090/admin/api/requests \
+    | python3 -m json.tool
 
 # Open Studio
 open http://localhost:3080
@@ -40,5 +41,5 @@ file and reloads automatically, or trigger a reload via Studio or the admin
 API:
 
 ```bash
-curl -X POST http://localhost:9090/admin/api/reload
+curl -X POST -H "X-Admin-Key: restitch-dev" http://localhost:9090/admin/api/reload
 ```

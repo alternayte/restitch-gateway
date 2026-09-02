@@ -3,7 +3,8 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-    command: ["/mockupstream", "-port", "8081"]
+    entrypoint: ["/mockupstream"]
+    command: ["-port", "8081"]
     ports:
       - "8081:8081"
 
@@ -11,7 +12,14 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-    command: ["/restitch", "run", "-config", "/etc/restitch/restitch.yaml"]
+    command: ["run", "-config", "/etc/restitch/restitch.yaml"]
+    environment:
+      # The gateway admin server defaults to loopback (hardening C3); inside
+      # a container that makes :9090 unreachable from the host and the Studio
+      # proxy. The admin key is required, so the Studio proxy gets the same
+      # value via STUDIO_ADMIN_KEY.
+      RESTITCH_ADMIN_BIND: "0.0.0.0"
+      RESTITCH_ADMIN_API_KEY: "restitch-dev"
     ports:
       - "8080:8080"
       - "9090:9090"
@@ -24,10 +32,15 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-    command: ["/restitch-studio"]
+    entrypoint: ["/restitch-studio"]
+    command:
+      - "-port=3080"
+      - "-gateway-admin-url=http://restitch:9090"
+      - "-admin-key=restitch-dev"
     environment:
-      STUDIO_GATEWAY_ADMIN_URL: "http://restitch:9090"
-      STUDIO_PORT: "3080"
+      # The Studio defaults to loopback (hardening C2); inside a container
+      # that makes the SPA unreachable from the host.
+      STUDIO_BIND: "0.0.0.0"
     ports:
       - "3080:3080"
     depends_on:

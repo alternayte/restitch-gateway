@@ -1,0 +1,33 @@
+# HARD.P0-12 — H12: fix the docker-compose quickstart
+
+## Fixes
+
+- Dockerfile: the runtime image now builds and carries /mockupstream (the
+  compose mockupstream service referenced a binary the image did not have).
+- examples/docker-compose/docker-compose.yml: every service used `command:`
+  against an image whose ENTRYPOINT is /restitch, so docker ran
+  `/restitch /mockupstream ...`, `/restitch run ...` with a doubled prefix
+  and `/restitch /restitch-studio ...` — all three exited 2. Per-service
+  `entrypoint:` now selects the right binary (the deploy-stack pattern).
+- C2/C3 consequences in the same file: gateway admin binds 0.0.0.0 with a
+  required key (RESTITCH_ADMIN_BIND/RESTITCH_ADMIN_API_KEY); Studio binds
+  0.0.0.0 (STUDIO_BIND) and proxies with STUDIO_ADMIN_KEY.
+- examples/docker-compose/README.md admin curls now send X-Admin-Key.
+
+## Verification (docker compose -f examples/docker-compose/docker-compose.yml up)
+
+docker-compose-mockupstream-1   "/mockupstream -port…"   Up
+docker-compose-restitch-1       "/restitch run -conf…"   Up
+docker-compose-restitch-studio-1 "/restitch-studio -p…"  Up
+
+$ curl -s "http://localhost:8080/api/users/42/dashboard" | python3 -m json.tool
+{
+    "orders": [...],
+    "user": {...}
+}  -> 200 composed response
+
+metrics: 43 restitch_ families on http://localhost:9090/metrics
+admin keyed:   200
+admin no key:  401
+studio SPA:    200
+stack torn down cleanly afterwards (docker compose down -v)

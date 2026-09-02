@@ -1,0 +1,16 @@
+# HARD.P0-11 — H10: delete DESIGN.md
+
+DESIGN.md (312 lines, 20 KB) was a HashiCorp marketing design-system spec:
+near-black canvas, per-product accent colors, pricing-card components, and
+"do not ship a light-mode marketing page". Its first line was the truncated
+word "verview". Nothing in the repo referenced it, and it embedded another
+company's proprietary brand spec — a legal liability for an open-source repo.
+
+Fix per hardening-doc H10: delete the file. If the project needs a design
+doc, write one.
+
+$ git rm DESIGN.md
+delete mode 100644 DESIGN.md
+
+$ git show --stat HEAD | tail -3
+1 file changed, 312 deletions(-)
