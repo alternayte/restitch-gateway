@@ -20,26 +20,36 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/heads/release/') && !startsWith(github.ref, 'refs/tags/') }}
 
+# Least privilege (finding M23): no job needs write access.
+permissions:
+  contents: read
+
 jobs:
   go:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
       - run: go vet ./...
 
-      - uses: golangci/golangci-lint-action@v9
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
 
-      - run: go test -race ./...
+      - name: Test
+        run: go test -race -json ./... > test-results.json || { cat test-results.json; exit 1; }
 
       - run: go build ./...
 
       - name: Coverage check
         run: |
+          # Deliberate scope (finding M19): ./internal/... only. The cmd/
+          # packages are thin CLI glue and pull the whole-tree number below
+          # the 70% bar (measured 64.6% on 2026-09-02); the threshold exists
+          # to guard the data-plane logic, which lives in internal/.
           go test -coverprofile=coverage.out ./internal/...
           TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
           echo "Total coverage: ${TOTAL}%"
@@ -52,12 +62,24 @@ jobs:
             exit 1
           fi
 
+      # Coverage was computed and then discarded (finding M24). Upload the
+      # profile and the test results so failures can be inspected.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: go-test-results
+          path: test-results.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage
+          path: coverage.out
+
   studio:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           # Node 20 reached end of life in April 2026. 24 is the active LTS and
           # is much closer to what this project is developed on, which matters:
@@ -81,20 +103,24 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Build Docker image
         run: docker build -t restitch:ci .
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-      - run: go test -tags e2e ./tests/... -count=1 -v
+      # Race detector and an explicit timeout (finding M22): the old job ran
+      # bare, so a deadlock could hang the job until GitHub's global cap.
+      - run: go test -race -tags e2e ./tests/... -count=1 -v -timeout 10m
 
   loadtest:
     # Release branches and tags only. A hard latency threshold on every push
@@ -105,14 +131,15 @@ jobs:
       startsWith(github.ref, 'refs/heads/release/') ||
       startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
-      - uses: grafana/setup-k6-action@v1
+      - uses: grafana/setup-k6-action@db07bd9765aac508ef18982e52ab937fe633a065 # v1
 
       - name: Build binaries
         run: |
@@ -177,7 +204,7 @@ jobs:
         if: always()
         run: cat /tmp/m24_ci_summary.json || echo "no summary produced"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: k6-summary
