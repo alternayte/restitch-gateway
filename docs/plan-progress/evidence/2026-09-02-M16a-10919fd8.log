@@ -1,0 +1,90 @@
+=== GATE M16a (commit 10919fd8, 2026-09-02) ===
+
+
+##[T16.1]
+$ grep -q ReadHeaderTimeout /Users/nathananderson-tennant/Development/restitch/internal/admin/server.go
+
+exit_code=0
+PASS T16.1 ReadHeaderTimeout in admin server
+
+##[T16.2]
+$ grep -q ReadHeaderTimeout /Users/nathananderson-tennant/Development/restitch/internal/server/server.go
+
+exit_code=0
+PASS T16.2 ReadHeaderTimeout in gateway server
+
+##[T16.3]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 58939...
+# Starting gateway on port 58937 (admin 58938)...
+CORS header with evil origin: Access-Control-Allow-Origin: https://evil.example
+PASS T16.3 CORS header present and not wildcard (Access-Control-Allow-Origin: https://evil.example)
+
+##[T16.4]
+$ grep -q LIMIT /Users/nathananderson-tennant/Development/restitch/internal/admin/sql_storage.go
+
+exit_code=0
+PASS T16.4 LIMIT in SQL query
+
+##[T16.5]
+$ grep -q Flush /Users/nathananderson-tennant/Development/restitch/cmd/restitch/run.go
+
+exit_code=0
+PASS T16.5 flush in shutdown path
+
+##[T16.6]
+$ grep -rq url\.Parse /Users/nathananderson-tennant/Development/restitch/internal/composition/parser.go
+
+exit_code=0
+PASS T16.6 url.Parse in validation
+
+##[T16.7]
+$ grep -q LimitReader\|ReadAll /Users/nathananderson-tennant/Development/restitch/internal/admin/server.go
+
+exit_code=0
+PASS T16.7 LimitReader in handleValidate
+
+##[T16.8]
+$ grep -rq Storage\|storage /Users/nathananderson-tennant/Development/restitch/internal/gwconfig/config.go
+
+exit_code=0
+PASS T16.8 storage validation in gwconfig
+
+##[T16.9]
+$ grep -rq InsecureSkipVerify /Users/nathananderson-tennant/Development/restitch/internal/upstream/client.go
+
+exit_code=0
+PASS T16.9 InsecureSkipVerify warning
+
+##[T16.10]
+$ grep -q reqlog /Users/nathananderson-tennant/Development/restitch/PLAN.md
+
+exit_code=0
+PASS T16.10 reqlog in package map
+
+##[M16a.gate]
+$ bash -c cd '/Users/nathananderson-tennant/Development/restitch' && go build ./... && go vet ./... && go test -count=1 ./...
+?   	github.com/alternayte/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch	0.398s
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	1.080s
+ok  	github.com/alternayte/restitch-gateway/internal/admin	1.172s
+ok  	github.com/alternayte/restitch-gateway/internal/auth	3.686s
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.433s
+ok  	github.com/alternayte/restitch-gateway/internal/devmode	3.985s
+ok  	github.com/alternayte/restitch-gateway/internal/gwconfig	1.705s
+ok  	github.com/alternayte/restitch-gateway/internal/hotreload	5.554s
+ok  	github.com/alternayte/restitch-gateway/internal/inbound	2.442s
+?   	github.com/alternayte/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/internal/observability	1.986s
+ok  	github.com/alternayte/restitch-gateway/internal/ratelimit	2.204s
+ok  	github.com/alternayte/restitch-gateway/internal/registry	2.204s
+ok  	github.com/alternayte/restitch-gateway/internal/reqlog	2.000s
+ok  	github.com/alternayte/restitch-gateway/internal/server	1.334s
+ok  	github.com/alternayte/restitch-gateway/internal/session	1.582s
+ok  	github.com/alternayte/restitch-gateway/internal/testenv	2.246s
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.706s
+exit_code=0
+PASS M16a.gate build + vet + tests
+
+RESULT M16a: PASS (11 pass, 0 fail, 0 manual, 0 skip)

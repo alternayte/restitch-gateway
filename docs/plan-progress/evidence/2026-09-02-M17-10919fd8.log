@@ -1,0 +1,40 @@
+=== GATE M17 (commit 10919fd8, 2026-09-02) ===
+
+
+##[T17.1]
+$ bash -c test -d '/Users/nathananderson-tennant/Development/restitch/internal/ratelimit' || grep -rq 'rate_limit\|ratelimit' '/Users/nathananderson-tennant/Development/restitch/internal/composition/'
+
+exit_code=0
+PASS T17.1 ratelimit package exists
+
+##[T17.2]
+$ grep -rq RateLimit\|rate_limit /Users/nathananderson-tennant/Development/restitch/internal/gwconfig/
+
+exit_code=0
+PASS T17.2 global rate limit in config
+
+##[T17.3]
+$ grep -rq MaxRequestBytes\|max_request_bytes /Users/nathananderson-tennant/Development/restitch/internal/
+
+exit_code=0
+PASS T17.3 max_request_bytes config
+
+##[T17.4]
+$ grep -q jsonschema /Users/nathananderson-tennant/Development/restitch/go.mod
+
+exit_code=0
+PASS T17.4 jsonschema dependency
+
+##[T17.5]
+
+##[M17.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 59163...
+# Starting gateway on port 59161 (admin 59162)...
+429 seen: true
+PASS M17.gate rate limiter returns 429
+Retry-After: Retry-After: 1
+PASS M17.gate 429 includes Retry-After header
+
+RESULT M17: PASS (6 pass, 0 fail, 0 manual, 0 skip)

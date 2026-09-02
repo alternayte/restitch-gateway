@@ -1,0 +1,64 @@
+=== GATE M4 (commit 10919fd8, 2026-09-02) ===
+
+
+##[T4.1]
+$ go test -count=1 -race ./internal/server/ -run TestRouter
+ok  	github.com/alternayte/restitch-gateway/internal/server	1.237s
+exit_code=0
+PASS T4.1 router tests
+
+##[T4.2]
+$ grep matchComposition|routeKey handler.go
+  (no matches)
+PASS T4.2 matchComposition/routeKey deleted from handler
+$ grep -q func.*RegisterRoutes /Users/nathananderson-tennant/Development/restitch/internal/composition/handler.go
+
+exit_code=0
+PASS T4.2 RegisterRoutes exists
+
+##[T4.3]
+$ go test -count=1 ./internal/server/
+ok  	github.com/alternayte/restitch-gateway/internal/server	0.319s
+exit_code=0
+PASS T4.3 server package tests
+
+##[M4.gate]
+$ go test -count=1 -race ./...
+?   	github.com/alternayte/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch	2.141s
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	3.638s
+ok  	github.com/alternayte/restitch-gateway/internal/admin	2.441s
+ok  	github.com/alternayte/restitch-gateway/internal/auth	4.745s
+ok  	github.com/alternayte/restitch-gateway/internal/composition	2.850s
+ok  	github.com/alternayte/restitch-gateway/internal/devmode	5.313s
+ok  	github.com/alternayte/restitch-gateway/internal/gwconfig	3.012s
+ok  	github.com/alternayte/restitch-gateway/internal/hotreload	6.840s
+ok  	github.com/alternayte/restitch-gateway/internal/inbound	1.812s
+?   	github.com/alternayte/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/internal/observability	1.712s
+ok  	github.com/alternayte/restitch-gateway/internal/ratelimit	1.504s
+ok  	github.com/alternayte/restitch-gateway/internal/registry	1.633s
+ok  	github.com/alternayte/restitch-gateway/internal/reqlog	1.285s
+ok  	github.com/alternayte/restitch-gateway/internal/server	1.214s
+ok  	github.com/alternayte/restitch-gateway/internal/session	1.621s
+ok  	github.com/alternayte/restitch-gateway/internal/testenv	2.146s
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.603s
+exit_code=0
+PASS M4.gate full tests (race)
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 57503...
+# Starting gateway on port 57501 (admin 57502)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:57501/api/users/42
+status=200
+body={"user":{"active":true,"id":"42","name":"user-42"}}
+PASS M4.gate path param request returns 200
+body={"user":{"active":true,"id":"42","name":"user-42"}}
+assert: "user" in data and data["user"].get("id") == "42"
+PASS M4.gate user-42 payload via path param
+$ curl -X POST /api/users/42 → 405
+PASS M4.gate POST returns 405
+$ curl -I /api/users/42 → 200
+PASS M4.gate HEAD returns 200
+
+RESULT M4: PASS (9 pass, 0 fail, 0 manual, 0 skip)

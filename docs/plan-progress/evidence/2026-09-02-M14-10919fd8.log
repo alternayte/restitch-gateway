@@ -1,0 +1,120 @@
+=== GATE M14 (commit 10919fd8, 2026-09-02) ===
+
+
+##[T14.1]
+$ test -f /Users/nathananderson-tennant/Development/restitch/tests/binary_test.go
+
+exit_code=0
+PASS T14.1 tests/binary_test.go exists
+$ test -d /Users/nathananderson-tennant/Development/restitch/tests/specs
+
+exit_code=0
+PASS T14.1 golden specs exist
+
+##[T14.2]
+$ grep -q e2e /Users/nathananderson-tennant/Development/restitch/.github/workflows/ci.yml
+
+exit_code=0
+PASS T14.2 e2e CI job in ci.yml
+
+##[T14.3]
+$ bash -c test -n "$(find '/Users/nathananderson-tennant/Development/restitch/internal' -name '*_test.go' | head -1)"
+
+exit_code=0
+PASS T14.3 tests exist for key packages
+
+##[M14.gate]
+$ go test -count=1 -race ./...
+?   	github.com/alternayte/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch	1.541s
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	4.930s
+ok  	github.com/alternayte/restitch-gateway/internal/admin	1.941s
+ok  	github.com/alternayte/restitch-gateway/internal/auth	5.260s
+ok  	github.com/alternayte/restitch-gateway/internal/composition	3.107s
+ok  	github.com/alternayte/restitch-gateway/internal/devmode	5.503s
+ok  	github.com/alternayte/restitch-gateway/internal/gwconfig	3.483s
+ok  	github.com/alternayte/restitch-gateway/internal/hotreload	7.311s
+ok  	github.com/alternayte/restitch-gateway/internal/inbound	3.237s
+?   	github.com/alternayte/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/internal/observability	3.106s
+ok  	github.com/alternayte/restitch-gateway/internal/ratelimit	2.156s
+ok  	github.com/alternayte/restitch-gateway/internal/registry	2.193s
+ok  	github.com/alternayte/restitch-gateway/internal/reqlog	1.356s
+ok  	github.com/alternayte/restitch-gateway/internal/server	1.510s
+ok  	github.com/alternayte/restitch-gateway/internal/session	1.990s
+ok  	github.com/alternayte/restitch-gateway/internal/testenv	2.655s
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	2.323s
+exit_code=0
+PASS M14.gate full tests (race)
+$ make -C /Users/nathananderson-tennant/Development/restitch e2e
+go test -tags e2e ./tests/ -count=1 -v
+=== RUN   TestSpecs
+2026/09/02 16:35:43 INFO registered composition route composition=user method=GET path=/api/users/{id} public=false
+2026/09/02 16:35:43 INFO registered composition route composition=partial method=GET path=/partial public=false
+2026/09/02 16:35:43 INFO registered composition route composition=timeout method=GET path=/timeout public=false
+2026/09/02 16:35:43 INFO registered composition route composition=echo method=GET path=/echo public=false
+=== RUN   TestSpecs/happy_path_-_user_lookup
+2026/09/02 16:35:43 INFO executing composition composition=user method=GET path=/api/users/42
+2026/09/02 16:35:43 INFO executing composition composition=user waves=1 total_steps=1 execution_order=[[user]]
+2026/09/02 16:35:43 INFO step starting composition=user step=user wave=1 upstream=http://127.0.0.1:58904 optional=false
+2026/09/02 16:35:43 INFO step complete composition=user step=user wave=1 status=200 duration_ms=0.768
+2026/09/02 16:35:43 INFO composition complete composition=user status=200 partial=false errors=0 step_timings=map[user:0.768] total_steps=1 slowest_step="map[duration_ms:0.768 name:user]" gateway_overhead_ms=0.052000000000000046
+=== RUN   TestSpecs/method_not_allowed_-_POST_to_GET-only_route
+=== RUN   TestSpecs/not_found_-_unknown_route
+=== RUN   TestSpecs/partial_response_-_optional_step_failure
+2026/09/02 16:35:43 INFO executing composition composition=partial method=GET path=/partial
+2026/09/02 16:35:43 INFO executing composition composition=partial waves=1 total_steps=2 execution_order="[[main failing]]"
+2026/09/02 16:35:43 INFO step starting composition=partial step=failing wave=1 upstream=http://127.0.0.1:1 optional=true
+2026/09/02 16:35:43 INFO step starting composition=partial step=main wave=1 upstream=http://127.0.0.1:58904 optional=false
+2026/09/02 16:35:43 INFO step complete composition=partial step=main wave=1 status=200 duration_ms=0.144
+2026/09/02 16:35:43 WARN step failed composition=partial step=failing wave=1 optional=true duration_ms=0.581 error="request failed: Get \"http://127.0.0.1:1/unreachable\": dial tcp 127.0.0.1:1: connect: connection refused"
+2026/09/02 16:35:43 INFO composition complete composition=partial status=200 partial=true errors=1 step_timings="map[failing:0.581 main:0.144]" total_steps=2 slowest_step="map[duration_ms:0.581 name:failing]" gateway_overhead_ms=0.10766699999999996
+=== RUN   TestSpecs/path_parameters_-_id_passed_through_to_upstream
+2026/09/02 16:35:43 INFO executing composition composition=user method=GET path=/api/users/99
+2026/09/02 16:35:43 INFO executing composition composition=user waves=1 total_steps=1 execution_order=[[user]]
+2026/09/02 16:35:43 INFO step starting composition=user step=user wave=1 upstream=http://127.0.0.1:58904 optional=false
+2026/09/02 16:35:43 INFO step complete composition=user step=user wave=1 status=200 duration_ms=0.134
+2026/09/02 16:35:43 INFO composition complete composition=user status=200 partial=false errors=0 step_timings=map[user:0.134] total_steps=1 slowest_step="map[duration_ms:0.134 name:user]" gateway_overhead_ms=0.013666999999999985
+=== RUN   TestSpecs/timeout_-_required_step_timeout_returns_504
+2026/09/02 16:35:43 INFO executing composition composition=timeout method=GET path=/timeout
+2026/09/02 16:35:43 INFO executing composition composition=timeout waves=1 total_steps=1 execution_order=[[slow]]
+2026/09/02 16:35:43 INFO step starting composition=timeout step=slow wave=1 upstream=http://127.0.0.1:58904 optional=false
+2026/09/02 16:35:43 WARN step failed composition=timeout step=slow wave=1 optional=false duration_ms=52.18 error="timeout after 50ms: Get \"http://127.0.0.1:58904/slow?ms=5000\": context deadline exceeded"
+2026/09/02 16:35:43 ERROR required step failed in wave wave=0 step=slow error="timeout after 50ms: Get \"http://127.0.0.1:58904/slow?ms=5000\": context deadline exceeded"
+2026/09/02 16:35:43 ERROR composition execution failed composition=timeout error="required step \"slow\" failed: timeout after 50ms: Get \"http://127.0.0.1:58904/slow?ms=5000\": context deadline exceeded"
+--- PASS: TestSpecs (5.01s)
+    --- PASS: TestSpecs/happy_path_-_user_lookup (0.00s)
+    --- PASS: TestSpecs/method_not_allowed_-_POST_to_GET-only_route (0.00s)
+    --- PASS: TestSpecs/not_found_-_unknown_route (0.00s)
+    --- PASS: TestSpecs/partial_response_-_optional_step_failure (0.00s)
+    --- PASS: TestSpecs/path_parameters_-_id_passed_through_to_upstream (0.00s)
+    --- PASS: TestSpecs/timeout_-_required_step_timeout_returns_504 (0.05s)
+=== RUN   TestExampleConfigs
+=== RUN   TestExampleConfigs/examples/auth/restitch.yaml
+=== RUN   TestExampleConfigs/examples/docker-compose/restitch.yaml
+=== RUN   TestExampleConfigs/examples/quickstart/restitch.yaml
+=== RUN   TestExampleConfigs/examples/resilience/restitch.yaml
+--- PASS: TestExampleConfigs (0.00s)
+    --- PASS: TestExampleConfigs/examples/auth/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/docker-compose/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/quickstart/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/resilience/restitch.yaml (0.00s)
+=== RUN   TestReadmeYAMLBlocks
+=== RUN   TestReadmeYAMLBlocks/block_0
+--- PASS: TestReadmeYAMLBlocks (0.00s)
+    --- PASS: TestReadmeYAMLBlocks/block_0 (0.00s)
+PASS
+ok  	github.com/alternayte/restitch-gateway/tests	5.477s
+exit_code=0
+PASS M14.gate make e2e
+$ go test -coverprofile
+ok  	github.com/alternayte/restitch-gateway/internal/reqlog	(cached)	coverage: [no statements]
+ok  	github.com/alternayte/restitch-gateway/internal/server	(cached)	coverage: 53.5% of statements
+ok  	github.com/alternayte/restitch-gateway/internal/session	(cached)	coverage: 80.2% of statements
+ok  	github.com/alternayte/restitch-gateway/internal/testenv	(cached)	coverage: 86.7% of statements
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	(cached)	coverage: 77.5% of statements
+Total coverage: 76.9%
+PASS M14.gate coverage >= 70% (76.9%)
+MANUAL M14 CI: verify all jobs green on GitHub
+
+RESULT M14: PASS (7 pass, 0 fail, 1 manual, 0 skip)

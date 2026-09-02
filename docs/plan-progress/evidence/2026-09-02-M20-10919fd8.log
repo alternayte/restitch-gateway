@@ -1,0 +1,110 @@
+=== GATE M20 (commit 10919fd8, 2026-09-02) ===
+
+
+##[T20.1]
+$ test -f /Users/nathananderson-tennant/Development/restitch/internal/registry/types.go
+
+exit_code=0
+PASS T20.1 registry types file exists
+$ bash -c test -n "$(find '/Users/nathananderson-tennant/Development/restitch/internal/registry' -maxdepth 1 -name '*_test.go' 2>/dev/null | head -1)"
+
+exit_code=0
+PASS T20.1 registry package has tests
+
+##[T20.2]
+$ test -f /Users/nathananderson-tennant/Development/restitch/internal/registry/store.go
+
+exit_code=0
+PASS T20.2 registry store file exists
+$ test -f /Users/nathananderson-tennant/Development/restitch/internal/registry/store_test.go
+
+exit_code=0
+PASS T20.2 registry store has tests
+
+##[T20.3]
+$ test -f /Users/nathananderson-tennant/Development/restitch/internal/registry/validator.go
+
+exit_code=0
+PASS T20.3 registry validator file exists
+$ test -f /Users/nathananderson-tennant/Development/restitch/internal/registry/validator_test.go
+
+exit_code=0
+PASS T20.3 registry validator has tests
+
+##[T20.4]
+$ grep -q GetBundledConfig /Users/nathananderson-tennant/Development/restitch/internal/registry/store.go
+
+exit_code=0
+PASS T20.4 store has GetBundledConfig
+
+##[T20.5]
+$ test -f /Users/nathananderson-tennant/Development/restitch/cmd/restitch-studio/api.go
+
+exit_code=0
+PASS T20.5 studio API handler file exists
+
+##[T20.6]
+$ bash -c find '/Users/nathananderson-tennant/Development/restitch/internal/registry' -ipath '*migrat*' 2>/dev/null | grep -q .
+
+exit_code=0
+PASS T20.6 registry migration file(s) exist
+
+##[M20.unit]
+$ go vet ./internal/registry/...
+
+exit_code=0
+PASS M20.unit go vet internal/registry
+$ go test ./internal/registry/... -count=1 -race
+ok  	github.com/alternayte/restitch-gateway/internal/registry	1.659s
+exit_code=0
+PASS M20.unit internal/registry tests (race)
+$ go test ./cmd/restitch-studio/... -count=1
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	0.487s
+exit_code=0
+PASS M20.unit cmd/restitch-studio tests
+
+##[M20.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 59249...
+# Starting gateway on port 59247 (admin 59248)...
+# Starting studio on port 59250 with registry db /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.FvRC0Q3IAu/test.db...
+# Starting studio on port 59250...
+$ curl -X POST http://127.0.0.1:59250/api/v1/configs
+payload={"name": "test-comp", "yaml_content": "upstreams:\n  mock:\n    url: \"http://localhost:8081\"\ncompositions:\n  test-comp:\n    path: \"/test\"\n    method: GET\n    steps:\n      - name: s1\n        upstream: mock\n        path: \"/users/1\"\n    response:\n      body:\n        result: \"{{ steps.s1.body }}\"\n"}
+status=201
+body={"id":"01M1H8T8PBBMTGAB8Z5NQW5T15","name":"test-comp","description":"","tags":[],"active_version_id":1,"active_version":1,"created_at":"2026-09-02T14:36:51Z","updated_at":"2026-09-02T14:36:51Z","yaml_content":"upstreams:\n  mock:\n    url: \"http://localhost:8081\"\ncompositions:\n  test-comp:\n    path: \"/test\"\n    method: GET\n    steps:\n      - name: s1\n        upstream: mock\n        path: \"/users/1\"\n    response:\n      body:\n        result: \"{{ steps.s1.body }}\"\n","version_number":1}
+PASS M20.gate create config returns 201
+$ curl http://127.0.0.1:59250/api/v1/configs
+status=200
+PASS M20.gate list configs returns 200
+PASS M20.gate list contains created config
+$ curl -sD - http://127.0.0.1:59250/api/v1/registry/bundle
+--- headers ---
+HTTP/1.1 200 OK
+Content-Type: application/json
+Etag: 63108b8b80751690
+Date: Wed, 02 Sep 2026 14:36:51 GMT
+Content-Length: 1047
+
+--- body ---
+{"yaml_content":"upstreams:\n    mock:\n        url: http://localhost:8081\n        auth: null\n        timeout: 0s\n        health_path: \"\"\n        max_response_bytes: 0\n        transport: null\n        retry: null\n        circuit_breaker: null\ncompositions:\n    test-comp:\n        path: /test\n        method: GET\n        public: false\n        steps:\n            - name: s1\n              upstream: mock\n              path: /users/1\n              method: \"\"\n              headers: {}\n              body: \"\"\n              depends_on: []\n              optional: false\n              timeout: null\n              error_rules: []\n              retry: null\n              cache: null\n              coalesce: false\n        response:\n            status: null\n            content_type: \"\"\n            body:\n                result: '{{ steps.s1.body }}'\n        rate_limit: null\n        max_request_bytes: 0\n        request_schema: {}\n","etag":"63108b8b80751690","composition_count":1,"composition_names":["test-comp"]}
+PASS M20.gate bundle contains composition name
+PASS M20.gate bundle response has ETag header (63108b8b80751690)
+$ curl -H 'If-None-Match: 63108b8b80751690' http://127.0.0.1:59250/api/v1/registry/bundle
+status=304
+PASS M20.gate conditional bundle request returns 304
+$ curl -X POST http://127.0.0.1:59250/api/v1/configs/validate
+payload={"yaml_content": "upstreams:\n  mock\n    url: \"http://localhost:8081\"\ncompositions: [this is not valid\n"}
+status=200
+body={"valid":false,"errors":[{"message":"yaml: line 3: mapping values are not allowed in this context","line":3}]}
+PASS M20.gate validate endpoint returns 200
+body={"valid":false,"errors":[{"message":"yaml: line 3: mapping values are not allowed in this context","line":3}]}
+assert: data.get("valid") is False
+PASS M20.gate invalid YAML validate response has valid:false
+$ curl -s -w '%{http_code}' http://127.0.0.1:59250/api/info
+status=200
+body={"compositions":1,"config_hash":"6c68ad5718aa34d08de6abe7752dd63b426f762feb17335f1097e12aa78eca13","config_path":"/var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.FvRC0Q3IAu/m20.yaml","upstreams":1,"uptime_seconds":0.757046625,"version":"v1.0-33-g10919fd8"}
+PASS M20.gate existing gateway-admin proxy pass-through (/api/info) still works
+
+RESULT M20: PASS (21 pass, 0 fail, 0 manual, 0 skip)

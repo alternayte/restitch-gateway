@@ -1,0 +1,44 @@
+=== GATE M11 (commit 10919fd8, 2026-09-02) ===
+
+
+##[T11.1]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch version
+restitch v1.0-33-g10919fd8 (go1.26.2)
+exit_code=0
+PASS T11.1 version prints
+$ bin/restitch nonsense → exit 2
+unknown command: nonsense
+usage: restitch [run|check|version|import|dev|healthcheck] [flags]
+PASS T11.1 unknown command exits 2 (got 2)
+
+##[T11.2]
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch check -config /Users/nathananderson-tennant/Development/restitch/restitch.yaml
+  user-with-posts: 3 steps, 2 waves [user] → [posts quotes]
+Syntax OK
+exit_code=0
+PASS T11.2 check restitch.yaml
+
+##[T11.3]
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch import openapi /Users/nathananderson-tennant/Development/restitch/cmd/restitch/testdata/petstore.yaml --upstream pets -o /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.xAfqMcJyHP/pets.yaml
+scaffold written to /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.xAfqMcJyHP/pets.yaml — review auth, timeouts, and response shaping
+exit_code=0
+PASS T11.3 import openapi generates YAML
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch check -config /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.xAfqMcJyHP/pets.yaml
+  create-pet: 1 steps, 1 waves [main]
+  get-pet: 1 steps, 1 waves [main]
+  list-pets: 1 steps, 1 waves [main]
+Syntax OK
+exit_code=0
+PASS T11.3 generated YAML passes check
+
+##[M11.gate]
+$ go test -count=1 ./cmd/...
+?   	github.com/alternayte/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch	0.921s
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	0.611s
+exit_code=0
+PASS M11.gate cmd tests
+
+RESULT M11: PASS (6 pass, 0 fail, 0 manual, 0 skip)

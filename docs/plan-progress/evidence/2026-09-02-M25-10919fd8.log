@@ -1,0 +1,434 @@
+=== GATE M25 (commit 10919fd8, 2026-09-02) ===
+
+
+##[T25.1]
+$ test -f internal/session/session.go
+
+exit_code=0
+PASS session.go exists
+$ test -f internal/session/session_test.go
+
+exit_code=0
+PASS session_test.go exists
+$ grep -q CookieName = "restitch_browser_id" internal/session/session.go
+
+exit_code=0
+PASS CookieName is restitch_browser_id
+$ grep -q func Middleware internal/session/session.go
+
+exit_code=0
+PASS Middleware defined
+$ grep -q func FromContext internal/session/session.go
+
+exit_code=0
+PASS FromContext defined
+$ grep -q "crypto/rand" internal/session/session.go
+
+exit_code=0
+PASS uses crypto/rand
+$ grep -q SameSite: *http.SameSiteStrictMode internal/session/session.go
+
+exit_code=0
+PASS SameSite=Strict
+$ grep -q HttpOnly: *true internal/session/session.go
+
+exit_code=0
+PASS HttpOnly set
+$ grep -q r.TLS != nil internal/session/session.go
+
+exit_code=0
+PASS Secure gated on TLS
+$ grep -q 31536000 internal/session/session.go
+
+exit_code=0
+PASS 1-year Max-Age
+$ bash -c 
+  out="$(go test -count=1 -v -run "TestNewID|TestMiddleware" ./internal/session/ 2>&1)"
+  echo "$out"
+  echo "$out" | grep -q -- "--- PASS: TestNewIDIsUnique" || exit 1
+  echo "$out" | grep -q -- "--- PASS: TestMiddlewareMintsCookie" || exit 1
+  echo "$out" | grep -q -- "--- PASS: TestMiddlewareDoesNotMintOnAsset" || exit 1
+  echo "$out" | grep -q -- "--- PASS: TestMiddlewareSecureOnlyOverTLS" || exit 1
+  ! echo "$out" | grep -q -- "--- FAIL"
+
+=== RUN   TestNewIDIsUnique
+--- PASS: TestNewIDIsUnique (0.00s)
+=== RUN   TestMiddlewareMintsCookie
+2026/09/02 16:40:38 OK   20260715000000_registry_schema.sql (313.54µs)
+2026/09/02 16:40:38 OK   20260728000000_browser_sessions.sql (72.79µs)
+2026/09/02 16:40:38 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestMiddlewareMintsCookie (0.00s)
+=== RUN   TestMiddlewareReusesExistingCookie
+2026/09/02 16:40:38 OK   20260715000000_registry_schema.sql (225.08µs)
+2026/09/02 16:40:38 OK   20260728000000_browser_sessions.sql (57.46µs)
+2026/09/02 16:40:38 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestMiddlewareReusesExistingCookie (0.00s)
+=== RUN   TestMiddlewareDoesNotMintOnAsset
+2026/09/02 16:40:38 OK   20260715000000_registry_schema.sql (170.92µs)
+2026/09/02 16:40:38 OK   20260728000000_browser_sessions.sql (173.04µs)
+2026/09/02 16:40:38 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestMiddlewareDoesNotMintOnAsset (0.00s)
+=== RUN   TestMiddlewareMintsOnDocumentRequests
+=== RUN   TestMiddlewareMintsOnDocumentRequests/root_path
+2026/09/02 16:40:38 OK   20260715000000_registry_schema.sql (199.25µs)
+2026/09/02 16:40:38 OK   20260728000000_browser_sessions.sql (64.96µs)
+2026/09/02 16:40:38 goose: successfully migrated database to version: 20260728000000
+=== RUN   TestMiddlewareMintsOnDocumentRequests/html_accept
+2026/09/02 16:40:38 OK   20260715000000_registry_schema.sql (174.54µs)
+2026/09/02 16:40:38 OK   20260728000000_browser_sessions.sql (59.29µs)
+2026/09/02 16:40:38 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestMiddlewareMintsOnDocumentRequests (0.00s)
+    --- PASS: TestMiddlewareMintsOnDocumentRequests/root_path (0.00s)
+    --- PASS: TestMiddlewareMintsOnDocumentRequests/html_accept (0.00s)
+=== RUN   TestMiddlewareSecureOnlyOverTLS
+2026/09/02 16:40:38 OK   20260715000000_registry_schema.sql (161.42µs)
+2026/09/02 16:40:38 OK   20260728000000_browser_sessions.sql (53.96µs)
+2026/09/02 16:40:38 goose: successfully migrated database to version: 20260728000000
+=== RUN   TestMiddlewareSecureOnlyOverTLS/plaintext
+=== RUN   TestMiddlewareSecureOnlyOverTLS/tls
+=== RUN   TestMiddlewareSecureOnlyOverTLS/forwarded-proto_https
+=== RUN   TestMiddlewareSecureOnlyOverTLS/forwarded-proto_http
+--- PASS: TestMiddlewareSecureOnlyOverTLS (0.00s)
+    --- PASS: TestMiddlewareSecureOnlyOverTLS/plaintext (0.00s)
+    --- PASS: TestMiddlewareSecureOnlyOverTLS/tls (0.00s)
+    --- PASS: TestMiddlewareSecureOnlyOverTLS/forwarded-proto_https (0.00s)
+    --- PASS: TestMiddlewareSecureOnlyOverTLS/forwarded-proto_http (0.00s)
+=== RUN   TestMiddlewarePersistsMintedSession
+2026/09/02 16:40:38 OK   20260715000000_registry_schema.sql (161.25µs)
+2026/09/02 16:40:38 OK   20260728000000_browser_sessions.sql (59.21µs)
+2026/09/02 16:40:38 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestMiddlewarePersistsMintedSession (0.00s)
+PASS
+ok  	github.com/alternayte/restitch-gateway/internal/session	0.394s
+exit_code=0
+PASS session tests pass (non-vacuously)
+
+##[T25.2]
+$ test -f cmd/restitch-studio/preferences.go
+
+exit_code=0
+PASS preferences.go exists
+$ test -f cmd/restitch-studio/preferences_test.go
+
+exit_code=0
+PASS preferences_test.go exists
+$ grep -q GET /api/v1/preferences cmd/restitch-studio/main.go
+
+exit_code=0
+PASS GET route registered
+$ grep -q PUT /api/v1/preferences cmd/restitch-studio/main.go
+
+exit_code=0
+PASS PUT route registered
+$ test -f internal/session/types.go
+
+exit_code=0
+PASS types.go exists
+$ grep -q func (p \*Preferences) Validate internal/session/types.go
+
+exit_code=0
+PASS Validate defined
+$ grep -q DisallowUnknownFields cmd/restitch-studio/preferences.go
+
+exit_code=0
+PASS rejects unknown fields
+$ grep -q MaxBytesReader cmd/restitch-studio/preferences.go
+
+exit_code=0
+PASS 16KB body cap
+$ bash -c 
+  out="$(go test -count=1 -v -run "TestValidate|TestPreferences" ./internal/session/ ./cmd/restitch-studio/ 2>&1)"
+  echo "$out"
+  echo "$out" | grep -q -- "--- PASS: TestValidateRejectsBadTimeRange" || exit 1
+  echo "$out" | grep -q -- "--- PASS: TestValidateRejectsTooManyPins" || exit 1
+  echo "$out" | grep -q -- "--- PASS: TestPreferencesTwoSessionsAreIndependent" || exit 1
+  ! echo "$out" | grep -q -- "--- FAIL"
+
+=== RUN   TestValidateAcceptsEveryTimeRange
+--- PASS: TestValidateAcceptsEveryTimeRange (0.00s)
+=== RUN   TestValidateRejectsBadTimeRange
+--- PASS: TestValidateRejectsBadTimeRange (0.00s)
+=== RUN   TestValidateRejectsTooManyPins
+--- PASS: TestValidateRejectsTooManyPins (0.00s)
+=== RUN   TestValidateRejectsEmptyAndOverlongPins
+--- PASS: TestValidateRejectsEmptyAndOverlongPins (0.00s)
+=== RUN   TestValidateRejectsDuplicatePins
+--- PASS: TestValidateRejectsDuplicatePins (0.00s)
+=== RUN   TestValidateNormalisesNilPins
+--- PASS: TestValidateNormalisesNilPins (0.00s)
+=== RUN   TestValidateAcceptsExactlyMaxPins
+--- PASS: TestValidateAcceptsExactlyMaxPins (0.00s)
+=== RUN   TestValidateAcceptsExactlyMaxNameLength
+--- PASS: TestValidateAcceptsExactlyMaxNameLength (0.00s)
+PASS
+ok  	github.com/alternayte/restitch-gateway/internal/session	0.338s
+=== RUN   TestPreferencesGetMintsAndReturnsDefaults
+2026/09/02 16:40:40 OK   20260715000000_registry_schema.sql (271.58µs)
+2026/09/02 16:40:40 OK   20260728000000_browser_sessions.sql (79.46µs)
+2026/09/02 16:40:40 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestPreferencesGetMintsAndReturnsDefaults (0.00s)
+=== RUN   TestPreferencesPutThenGet
+2026/09/02 16:40:40 OK   20260715000000_registry_schema.sql (191.79µs)
+2026/09/02 16:40:40 OK   20260728000000_browser_sessions.sql (60.33µs)
+2026/09/02 16:40:40 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestPreferencesPutThenGet (0.00s)
+=== RUN   TestPreferencesTwoSessionsAreIndependent
+2026/09/02 16:40:40 OK   20260715000000_registry_schema.sql (186.04µs)
+2026/09/02 16:40:40 OK   20260728000000_browser_sessions.sql (59.67µs)
+2026/09/02 16:40:40 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestPreferencesTwoSessionsAreIndependent (0.00s)
+=== RUN   TestPreferencesRejectsInvalidTimeRange
+2026/09/02 16:40:40 OK   20260715000000_registry_schema.sql (175.38µs)
+2026/09/02 16:40:40 OK   20260728000000_browser_sessions.sql (61.42µs)
+2026/09/02 16:40:40 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestPreferencesRejectsInvalidTimeRange (0.00s)
+=== RUN   TestPreferencesRejectsUnknownField
+2026/09/02 16:40:40 OK   20260715000000_registry_schema.sql (175.42µs)
+2026/09/02 16:40:40 OK   20260728000000_browser_sessions.sql (59.83µs)
+2026/09/02 16:40:40 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestPreferencesRejectsUnknownField (0.00s)
+=== RUN   TestPreferencesRejectsMalformedJSON
+2026/09/02 16:40:40 OK   20260715000000_registry_schema.sql (168.13µs)
+2026/09/02 16:40:40 OK   20260728000000_browser_sessions.sql (57µs)
+2026/09/02 16:40:40 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestPreferencesRejectsMalformedJSON (0.00s)
+=== RUN   TestPreferencesRejectsOversizedBody
+2026/09/02 16:40:40 OK   20260715000000_registry_schema.sql (282.13µs)
+2026/09/02 16:40:40 OK   20260728000000_browser_sessions.sql (55.04µs)
+2026/09/02 16:40:40 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestPreferencesRejectsOversizedBody (0.00s)
+=== RUN   TestPreferencesPutWithoutCookieMintsSession
+2026/09/02 16:40:40 OK   20260715000000_registry_schema.sql (231.63µs)
+2026/09/02 16:40:40 OK   20260728000000_browser_sessions.sql (64.71µs)
+2026/09/02 16:40:40 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestPreferencesPutWithoutCookieMintsSession (0.00s)
+PASS
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	0.603s
+exit_code=0
+PASS validation tests pass (non-vacuously)
+
+##[T25.3]
+$ test -f internal/registry/migrations/20260728000000_browser_sessions.sql
+
+exit_code=0
+PASS migration file exists
+$ grep -q CREATE TABLE browser_sessions internal/registry/migrations/20260728000000_browser_sessions.sql
+
+exit_code=0
+PASS creates browser_sessions
+$ bash -c 
+  f=internal/registry/migrations/20260728000000_browser_sessions.sql
+  test -f "$f" || exit 1
+  grep -qE "^[[:space:]]*preferences[[:space:]]+TEXT" "$f" || exit 1
+  ! grep -qE "^[[:space:]]*preferences[[:space:]]+TEXT[^,]*NOT NULL" "$f"
+
+
+exit_code=0
+PASS preferences column is nullable
+$ grep -q DROP TABLE IF EXISTS browser_sessions internal/registry/migrations/20260728000000_browser_sessions.sql
+
+exit_code=0
+PASS has goose Down
+$ bash -c 
+  out="$(go test -count=1 -v -run "TestStore" ./internal/session/ 2>&1)"
+  echo "$out"
+  echo "$out" | grep -q -- "--- PASS: TestStoreRoundTrip" || exit 1
+  echo "$out" | grep -q -- "--- PASS: TestStoreUninitializedUntilPut" || exit 1
+  ! echo "$out" | grep -q -- "--- FAIL"
+
+=== RUN   TestStoreUninitializedUntilPut
+2026/09/02 16:40:41 OK   20260715000000_registry_schema.sql (317.46µs)
+2026/09/02 16:40:41 OK   20260728000000_browser_sessions.sql (82.71µs)
+2026/09/02 16:40:41 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestStoreUninitializedUntilPut (0.00s)
+=== RUN   TestStoreRoundTrip
+2026/09/02 16:40:41 OK   20260715000000_registry_schema.sql (203.17µs)
+2026/09/02 16:40:41 OK   20260728000000_browser_sessions.sql (61.75µs)
+2026/09/02 16:40:41 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestStoreRoundTrip (0.00s)
+=== RUN   TestStoreEnsureSessionIsIdempotent
+2026/09/02 16:40:41 OK   20260715000000_registry_schema.sql (179.21µs)
+2026/09/02 16:40:41 OK   20260728000000_browser_sessions.sql (55.25µs)
+2026/09/02 16:40:41 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestStoreEnsureSessionIsIdempotent (0.00s)
+=== RUN   TestStoreUnknownSessionReturnsDefaults
+2026/09/02 16:40:41 OK   20260715000000_registry_schema.sql (170µs)
+2026/09/02 16:40:41 OK   20260728000000_browser_sessions.sql (62.42µs)
+2026/09/02 16:40:41 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestStoreUnknownSessionReturnsDefaults (0.00s)
+=== RUN   TestStoreSessionsAreIsolated
+2026/09/02 16:40:41 OK   20260715000000_registry_schema.sql (357.08µs)
+2026/09/02 16:40:41 OK   20260728000000_browser_sessions.sql (72.42µs)
+2026/09/02 16:40:41 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestStoreSessionsAreIsolated (0.00s)
+=== RUN   TestStorePutOverwrites
+2026/09/02 16:40:41 OK   20260715000000_registry_schema.sql (193.42µs)
+2026/09/02 16:40:41 OK   20260728000000_browser_sessions.sql (60.08µs)
+2026/09/02 16:40:41 goose: successfully migrated database to version: 20260728000000
+--- PASS: TestStorePutOverwrites (0.00s)
+PASS
+ok  	github.com/alternayte/restitch-gateway/internal/session	0.346s
+exit_code=0
+PASS store tests pass (non-vacuously)
+
+##[T25.4]
+$ test -f studio/src/hooks/usePreferences.tsx
+
+exit_code=0
+PASS usePreferences hook exists
+$ test -f studio/src/hooks/usePreferences.test.tsx
+
+exit_code=0
+PASS usePreferences test exists
+$ grep -q credentials: "same-origin" studio/src/lib/api.ts
+
+exit_code=0
+PASS api client sends cookies
+$ grep -q getPreferences studio/src/lib/api.ts
+
+exit_code=0
+PASS getPreferences in api client
+$ grep -q putPreferences studio/src/lib/api.ts
+
+exit_code=0
+PASS putPreferences in api client
+$ grep -q PreferencesProvider studio/src/App.tsx
+
+exit_code=0
+PASS provider mounted in App
+$ grep -q sidebarCollapsed studio/src/App.tsx
+
+exit_code=0
+PASS sidebar collapse wired
+$ grep -q pinnedCompositions studio/src/pages/Compositions.tsx
+
+exit_code=0
+PASS pin control on compositions
+$ grep -q defaultTimeRange studio/src/pages/Dashboard.tsx
+
+exit_code=0
+PASS dashboard seeds time range
+$ bash -c cd studio && npm run test 2>&1
+
+> studio@0.0.0 test
+> vitest run
+
+
+ RUN  v4.1.10 /Users/nathananderson-tennant/Development/restitch/studio
+
+
+ Test Files  9 passed (9)
+      Tests  28 passed (28)
+   Start at  16:40:42
+   Duration  2.27s (transform 981ms, setup 0ms, import 4.17s, tests 631ms, environment 8.23s)
+exit_code=0
+PASS frontend tests pass
+
+##[M25.unit]
+$ go vet ./...
+
+exit_code=0
+PASS go vet
+$ go test -race -count=1 ./internal/session/...
+ok  	github.com/alternayte/restitch-gateway/internal/session	1.750s
+exit_code=0
+PASS session tests
+$ go test -race -count=1 ./cmd/restitch-studio/...
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	3.770s
+exit_code=0
+PASS studio cmd tests
+$ go test -race -count=1 ./...
+?   	github.com/alternayte/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch	2.411s
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	3.661s
+ok  	github.com/alternayte/restitch-gateway/internal/admin	1.922s
+ok  	github.com/alternayte/restitch-gateway/internal/auth	5.755s
+ok  	github.com/alternayte/restitch-gateway/internal/composition	3.037s
+ok  	github.com/alternayte/restitch-gateway/internal/devmode	5.414s
+ok  	github.com/alternayte/restitch-gateway/internal/gwconfig	3.331s
+ok  	github.com/alternayte/restitch-gateway/internal/hotreload	7.319s
+ok  	github.com/alternayte/restitch-gateway/internal/inbound	2.968s
+?   	github.com/alternayte/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/internal/observability	2.554s
+ok  	github.com/alternayte/restitch-gateway/internal/ratelimit	2.086s
+ok  	github.com/alternayte/restitch-gateway/internal/registry	2.300s
+ok  	github.com/alternayte/restitch-gateway/internal/reqlog	2.172s
+ok  	github.com/alternayte/restitch-gateway/internal/server	1.433s
+ok  	github.com/alternayte/restitch-gateway/internal/session	1.952s
+ok  	github.com/alternayte/restitch-gateway/internal/testenv	2.448s
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.918s
+exit_code=0
+PASS full test suite
+
+##[M25.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+# Starting studio on port 60485...
+HTTP/1.1 200 OK
+Accept-Ranges: bytes
+Content-Length: 759
+Content-Type: text/html; charset=utf-8
+Set-Cookie: restitch_browser_id=CjX08pFwXb1ch2ovLyK4nsmhCQFK0MyZ5H-PIJaFbzI; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict
+Date: Wed, 02 Sep 2026 14:41:05 GMT
+
+$ grep -qi set-cookie:.*restitch_browser_id= /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bH3XW69emg/doc_headers.txt
+
+exit_code=0
+PASS document sets restitch_browser_id
+$ grep -qi set-cookie:.*HttpOnly /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bH3XW69emg/doc_headers.txt
+
+exit_code=0
+PASS cookie is HttpOnly
+$ grep -qi set-cookie:.*SameSite=Strict /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bH3XW69emg/doc_headers.txt
+
+exit_code=0
+PASS cookie is SameSite=Strict
+$ grep -qi set-cookie:.*Max-Age=31536000 /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bH3XW69emg/doc_headers.txt
+
+exit_code=0
+PASS cookie has 1-year Max-Age
+$ bash -c 
+  grep -qi 'set-cookie:.*restitch_browser_id' '/var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bH3XW69emg/doc_headers.txt' || exit 1
+  ! grep -i 'set-cookie:.*restitch_browser_id' '/var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bH3XW69emg/doc_headers.txt' | grep -qi 'Secure'
+
+
+exit_code=0
+PASS cookie is not Secure over plaintext
+$ bash -c 
+  # Minting must be PROVEN to work on the document request first. Without that,
+  # 'the asset set no cookie' cannot distinguish selective minting from there
+  # being no middleware at all — it would pass against an empty implementation.
+  grep -qi 'set-cookie:.*restitch_browser_id' '/var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bH3XW69emg/doc_headers.txt' || exit 1
+  head -1 '/var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bH3XW69emg/asset_headers.txt' | grep -qE 'HTTP/[0-9.]+ 200' || exit 1
+  ! grep -qi 'set-cookie:.*restitch_browser_id' '/var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bH3XW69emg/asset_headers.txt'
+
+
+exit_code=0
+PASS static asset does not mint a session
+body={"pinned_compositions":[],"sidebar_collapsed":false,"default_time_range":"1h","initialized":false}
+assert: data["initialized"] == False and data["pinned_compositions"] == [] and data["default_time_range"] == "1h"
+PASS fresh session returns uninitialized defaults
+body={"pinned_compositions":["comp-1"],"sidebar_collapsed":true,"default_time_range":"6h","initialized":true}
+assert: data["initialized"] == True and data["pinned_compositions"] == ["comp-1"]
+PASS PUT stores preferences
+body={"pinned_compositions":["comp-1"],"sidebar_collapsed":true,"default_time_range":"6h","initialized":true}
+assert: data["pinned_compositions"] == ["comp-1"] and data["sidebar_collapsed"] == True and data["default_time_range"] == "6h"
+PASS preferences persist across requests
+body={"pinned_compositions":[],"sidebar_collapsed":false,"default_time_range":"1h","initialized":false}
+assert: data["initialized"] == False and data["pinned_compositions"] == []
+PASS different browser has independent preferences
+$ test 400 = 400
+
+exit_code=0
+PASS invalid time range is rejected with 400
+$ test 400 = 400
+
+exit_code=0
+PASS unknown field is rejected with 400
+$ test 413 = 413
+
+exit_code=0
+PASS oversized body is rejected with 413
+MANUAL Open Studio in a real browser at http://127.0.0.1:60485 — confirm a restitch_browser_id cookie is set in DevTools > Application > Cookies, collapse the sidebar and pin a composition, then reload and confirm both persist.
+
+RESULT M25: PASS (52 pass, 0 fail, 1 manual, 0 skip)

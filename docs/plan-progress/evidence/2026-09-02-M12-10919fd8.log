@@ -1,0 +1,32 @@
+=== GATE M12 (commit 10919fd8, 2026-09-02) ===
+
+
+##[T12.1]
+$ go test -count=1 ./cmd/restitch-studio/
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	0.491s
+exit_code=0
+PASS T12.1 studio server tests
+$ go build -o /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bji8mbza43/restitch-studio ./cmd/restitch-studio
+
+exit_code=0
+PASS T12.1 studio binary builds
+
+##[M12.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 58655...
+# Starting gateway on port 58653 (admin 58654)...
+# Starting studio on port 58656...
+$ curl -s -w '%{http_code}' http://127.0.0.1:58656/api/info
+status=200
+body={"compositions":1,"config_hash":"cbddda089add66822ca4b5caa158c0a731eb36d4126424100f063fe29288eb0f","config_path":"/var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.bji8mbza43/m12.yaml","upstreams":1,"uptime_seconds":0.516901792,"version":"v1.0-33-g10919fd8"}
+PASS M12.gate studio proxies /api/info
+$ curl studio /
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+PASS M12.gate studio serves HTML at root
+
+RESULT M12: PASS (4 pass, 0 fail, 0 manual, 0 skip)

@@ -1,0 +1,194 @@
+=== GATE final (commit 10919fd8, 2026-09-02) ===
+
+
+##[final.static]
+$ go vet ./...
+
+exit_code=0
+PASS final.1 go vet
+$ golangci-lint run
+0 issues.
+exit_code=0
+PASS final.1 golangci-lint
+$ grep TODO/FIXME
+  (none)
+PASS final.1 no TODO/FIXME in non-test code
+
+##[final.tests]
+$ go test -count=1 -race ./...
+?   	github.com/alternayte/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch	2.168s
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	3.628s
+ok  	github.com/alternayte/restitch-gateway/internal/admin	2.462s
+ok  	github.com/alternayte/restitch-gateway/internal/auth	4.773s
+ok  	github.com/alternayte/restitch-gateway/internal/composition	2.892s
+ok  	github.com/alternayte/restitch-gateway/internal/devmode	5.149s
+ok  	github.com/alternayte/restitch-gateway/internal/gwconfig	3.017s
+ok  	github.com/alternayte/restitch-gateway/internal/hotreload	6.715s
+ok  	github.com/alternayte/restitch-gateway/internal/inbound	1.791s
+?   	github.com/alternayte/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/internal/observability	1.698s
+ok  	github.com/alternayte/restitch-gateway/internal/ratelimit	1.468s
+ok  	github.com/alternayte/restitch-gateway/internal/registry	1.621s
+ok  	github.com/alternayte/restitch-gateway/internal/reqlog	1.315s
+ok  	github.com/alternayte/restitch-gateway/internal/server	1.213s
+ok  	github.com/alternayte/restitch-gateway/internal/session	1.604s
+ok  	github.com/alternayte/restitch-gateway/internal/testenv	2.118s
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.532s
+exit_code=0
+PASS final.2 go test -race
+$ make -C /Users/nathananderson-tennant/Development/restitch e2e
+go test -tags e2e ./tests/ -count=1 -v
+=== RUN   TestSpecs
+2026/09/02 16:41:21 INFO registered composition route composition=timeout method=GET path=/timeout public=false
+2026/09/02 16:41:21 INFO registered composition route composition=echo method=GET path=/echo public=false
+2026/09/02 16:41:21 INFO registered composition route composition=user method=GET path=/api/users/{id} public=false
+2026/09/02 16:41:21 INFO registered composition route composition=partial method=GET path=/partial public=false
+=== RUN   TestSpecs/happy_path_-_user_lookup
+2026/09/02 16:41:21 INFO executing composition composition=user method=GET path=/api/users/42
+2026/09/02 16:41:21 INFO executing composition composition=user waves=1 total_steps=1 execution_order=[[user]]
+2026/09/02 16:41:21 INFO step starting composition=user step=user wave=1 upstream=http://127.0.0.1:60919 optional=false
+2026/09/02 16:41:21 INFO step complete composition=user step=user wave=1 status=200 duration_ms=0.652
+2026/09/02 16:41:21 INFO composition complete composition=user status=200 partial=false errors=0 step_timings=map[user:0.652] total_steps=1 slowest_step="map[duration_ms:0.652 name:user]" gateway_overhead_ms=0.05000100000000007
+=== RUN   TestSpecs/method_not_allowed_-_POST_to_GET-only_route
+=== RUN   TestSpecs/not_found_-_unknown_route
+=== RUN   TestSpecs/partial_response_-_optional_step_failure
+2026/09/02 16:41:21 INFO executing composition composition=partial method=GET path=/partial
+2026/09/02 16:41:21 INFO executing composition composition=partial waves=1 total_steps=2 execution_order="[[main failing]]"
+2026/09/02 16:41:21 INFO step starting composition=partial step=failing wave=1 upstream=http://127.0.0.1:1 optional=true
+2026/09/02 16:41:21 INFO step starting composition=partial step=main wave=1 upstream=http://127.0.0.1:60919 optional=false
+2026/09/02 16:41:21 INFO step complete composition=partial step=main wave=1 status=200 duration_ms=0.16
+2026/09/02 16:41:21 WARN step failed composition=partial step=failing wave=1 optional=true duration_ms=0.477 error="request failed: Get \"http://127.0.0.1:1/unreachable\": dial tcp 127.0.0.1:1: connect: connection refused"
+2026/09/02 16:41:21 INFO composition complete composition=partial status=200 partial=true errors=1 step_timings="map[failing:0.477 main:0.16]" total_steps=2 slowest_step="map[duration_ms:0.477 name:failing]" gateway_overhead_ms=0.07766600000000001
+=== RUN   TestSpecs/path_parameters_-_id_passed_through_to_upstream
+2026/09/02 16:41:21 INFO executing composition composition=user method=GET path=/api/users/99
+2026/09/02 16:41:21 INFO executing composition composition=user waves=1 total_steps=1 execution_order=[[user]]
+2026/09/02 16:41:21 INFO step starting composition=user step=user wave=1 upstream=http://127.0.0.1:60919 optional=false
+2026/09/02 16:41:21 INFO step complete composition=user step=user wave=1 status=200 duration_ms=0.108
+2026/09/02 16:41:21 INFO composition complete composition=user status=200 partial=false errors=0 step_timings=map[user:0.108] total_steps=1 slowest_step="map[duration_ms:0.108 name:user]" gateway_overhead_ms=0.00937600000000001
+=== RUN   TestSpecs/timeout_-_required_step_timeout_returns_504
+2026/09/02 16:41:21 INFO executing composition composition=timeout method=GET path=/timeout
+2026/09/02 16:41:21 INFO executing composition composition=timeout waves=1 total_steps=1 execution_order=[[slow]]
+2026/09/02 16:41:21 INFO step starting composition=timeout step=slow wave=1 upstream=http://127.0.0.1:60919 optional=false
+2026/09/02 16:41:21 WARN step failed composition=timeout step=slow wave=1 optional=false duration_ms=52.168 error="timeout after 50ms: Get \"http://127.0.0.1:60919/slow?ms=5000\": context deadline exceeded"
+2026/09/02 16:41:21 ERROR required step failed in wave wave=0 step=slow error="timeout after 50ms: Get \"http://127.0.0.1:60919/slow?ms=5000\": context deadline exceeded"
+2026/09/02 16:41:21 ERROR composition execution failed composition=timeout error="required step \"slow\" failed: timeout after 50ms: Get \"http://127.0.0.1:60919/slow?ms=5000\": context deadline exceeded"
+--- PASS: TestSpecs (5.01s)
+    --- PASS: TestSpecs/happy_path_-_user_lookup (0.00s)
+    --- PASS: TestSpecs/method_not_allowed_-_POST_to_GET-only_route (0.00s)
+    --- PASS: TestSpecs/not_found_-_unknown_route (0.00s)
+    --- PASS: TestSpecs/partial_response_-_optional_step_failure (0.00s)
+    --- PASS: TestSpecs/path_parameters_-_id_passed_through_to_upstream (0.00s)
+    --- PASS: TestSpecs/timeout_-_required_step_timeout_returns_504 (0.05s)
+=== RUN   TestExampleConfigs
+=== RUN   TestExampleConfigs/examples/auth/restitch.yaml
+=== RUN   TestExampleConfigs/examples/docker-compose/restitch.yaml
+=== RUN   TestExampleConfigs/examples/quickstart/restitch.yaml
+=== RUN   TestExampleConfigs/examples/resilience/restitch.yaml
+--- PASS: TestExampleConfigs (0.00s)
+    --- PASS: TestExampleConfigs/examples/auth/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/docker-compose/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/quickstart/restitch.yaml (0.00s)
+    --- PASS: TestExampleConfigs/examples/resilience/restitch.yaml (0.00s)
+=== RUN   TestReadmeYAMLBlocks
+=== RUN   TestReadmeYAMLBlocks/block_0
+--- PASS: TestReadmeYAMLBlocks (0.00s)
+    --- PASS: TestReadmeYAMLBlocks/block_0 (0.00s)
+PASS
+ok  	github.com/alternayte/restitch-gateway/tests	5.492s
+exit_code=0
+PASS final.2 make e2e
+$ bash -c cd '/Users/nathananderson-tennant/Development/restitch/studio' && npm ci && npm run test && npm run build
+
+added 508 packages, and audited 509 packages in 8s
+
+142 packages are looking for funding
+  run `npm fund` for details
+
+12 vulnerabilities (2 moderate, 10 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+npm warn install-scripts 1 package has install scripts not yet covered by allowScripts:
+npm warn install-scripts   fsevents@2.3.3 (install: (install scripts present))
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+
+> studio@0.0.0 test
+> vitest run
+
+
+ RUN  v4.1.10 /Users/nathananderson-tennant/Development/restitch/studio
+
+
+ Test Files  9 passed (9)
+      Tests  28 passed (28)
+   Start at  16:41:35
+   Duration  1.80s (transform 723ms, setup 0ms, import 3.18s, tests 655ms, environment 5.89s)
+
+
+> studio@0.0.0 build
+> tsc -b && vite build
+
+vite v8.1.3 building client environment for production...
+[2Ktransforming...✓ 2515 modules transformed.
+rendering chunks...
+computing gzip size...
+../cmd/restitch-studio/dist/index.html                     0.75 kB │ gzip:   0.41 kB
+../cmd/restitch-studio/dist/assets/index-CBW0rT8g.css     83.05 kB │ gzip:  14.17 kB
+../cmd/restitch-studio/dist/assets/index-Dqd_edZs.js   1,369.38 kB │ gzip: 419.38 kB
+
+✓ built in 399ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+exit_code=0
+PASS final.2 studio tests + build
+
+##[final.build]
+$ make -C /Users/nathananderson-tennant/Development/restitch build-all
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch-studio ./cmd/restitch-studio
+exit_code=0
+PASS final.3 make build-all
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch version
+restitch v1.0-33-g10919fd8 (go1.26.2)
+exit_code=0
+PASS final.3 restitch version
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch check -config /Users/nathananderson-tennant/Development/restitch/examples/quickstart/restitch.yaml
+  user-posts: 2 steps, 2 waves [user] → [orders]
+  echo: 1 steps, 1 waves [e]
+Syntax OK
+exit_code=0
+PASS final.3 quickstart check
+
+##[final.smoke]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 60707...
+# Starting gateway on port 60705 (admin 60706)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:60705/api/user-posts?id=1
+status=200
+body={"orders":[{"id":1,"total":9.5,"userId":"1"}],"user":{"active":true,"id":"1","name":"user-1"}}
+PASS final.4 data-plane request returns 200
+Metric families: 43
+PASS final.4 >= 8 restitch_ metric families
+PASS final.4 admin requests endpoint
+$ grep -E 'config reloaded|config unchanged' /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.czSODbg4ts/gateway.log
+{"time":"2026-09-02T16:41:42.918535+02:00","level":"INFO","msg":"config unchanged","hash":"556d7f35c3b9f12bdb15adf792cbd11e7d1c624d53c87778fb91b5983db6a58e"}
+{"time":"2026-09-02T16:41:42.918548+02:00","level":"INFO","msg":"config reloaded","hash":"556d7f35c3b9f12bdb15adf792cbd11e7d1c624d53c87778fb91b5983db6a58e"}
+PASS final.4 SIGHUP triggers config reload/unchanged log
+# Starting studio on port 60708...
+$ curl -s -w '%{http_code}' http://127.0.0.1:60708/api/info
+status=200
+body={"compositions":2,"config_hash":"556d7f35c3b9f12bdb15adf792cbd11e7d1c624d53c87778fb91b5983db6a58e","config_path":"/var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.czSODbg4ts/final.yaml","upstreams":1,"uptime_seconds":1.5974540830000001,"version":"v1.0-33-g10919fd8"}
+PASS final.4 studio proxy works
+
+##[final.ci]
+PASS final.5 CI green on GitHub
+
+RESULT final: PASS (15 pass, 0 fail, 0 manual, 0 skip)

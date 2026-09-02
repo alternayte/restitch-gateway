@@ -1,0 +1,196 @@
+=== GATE M22 (commit 10919fd8, 2026-09-02) ===
+
+
+##[T22.1]
+$ test -f internal/devmode/writer.go
+
+exit_code=0
+PASS writer.go exists
+$ test -f internal/devmode/writer_test.go
+
+exit_code=0
+PASS writer_test.go exists
+$ grep -q type PrefixWriter struct internal/devmode/writer.go
+
+exit_code=0
+PASS PrefixWriter defined
+$ grep -q func WaitForHealth internal/devmode/writer.go
+
+exit_code=0
+PASS WaitForHealth defined
+$ grep -q NO_COLOR internal/devmode/writer.go
+
+exit_code=0
+PASS NO_COLOR support
+
+##[T22.2]
+$ test -f internal/devmode/manager.go
+
+exit_code=0
+PASS manager.go exists
+$ test -f internal/devmode/manager_test.go
+
+exit_code=0
+PASS manager_test.go exists
+$ grep -q type ProcessConfig struct internal/devmode/manager.go
+
+exit_code=0
+PASS ProcessConfig defined
+$ grep -q type ProcessManager struct internal/devmode/manager.go
+
+exit_code=0
+PASS ProcessManager defined
+$ grep -q cenkalti/backoff internal/devmode/manager.go
+
+exit_code=0
+PASS uses cenkalti/backoff
+
+##[T22.3]
+$ test ! -f internal/hotreload/backoff.go
+
+exit_code=0
+PASS backoff.go deleted
+$ test ! -f internal/hotreload/backoff_test.go
+
+exit_code=0
+PASS backoff_test.go deleted
+$ bash -c ! grep -rn "backoffDuration" internal/
+
+exit_code=0
+PASS no backoffDuration references
+$ grep -q cenkalti/backoff internal/hotreload/poller.go
+
+exit_code=0
+PASS poller uses cenkalti
+
+##[T22.4]
+$ test -f cmd/restitch/dev.go
+
+exit_code=0
+PASS dev.go exists
+$ grep -q func devCmd cmd/restitch/dev.go
+
+exit_code=0
+PASS devCmd function
+$ grep -q func findStudioBinary cmd/restitch/dev.go
+
+exit_code=0
+PASS findStudioBinary function
+$ grep -q "dev" cmd/restitch/main.go
+
+exit_code=0
+PASS dev case in main.go
+$ grep -q dev cmd/restitch/main.go
+
+exit_code=0
+PASS usage updated
+
+##[T22.5]
+$ grep -q "gateway-args" cmd/restitch/dev.go
+
+exit_code=0
+PASS --gateway-args flag defined
+$ grep -q "studio-args" cmd/restitch/dev.go
+
+exit_code=0
+PASS --studio-args flag defined
+$ grep -q Args:.*buildGatewayArgs( cmd/restitch/dev.go
+
+exit_code=0
+PASS buildGatewayArgs wired into ProcessConfig
+$ grep -q Args:.*buildStudioArgs( cmd/restitch/dev.go
+
+exit_code=0
+PASS buildStudioArgs wired into ProcessConfig
+$ bash -c 
+  out="$(go test -count=1 -v -run "TestBuildGatewayArgs|TestBuildStudioArgs" ./cmd/restitch/ 2>&1)"
+  echo "$out"
+  echo "$out" | grep -q -- "--- PASS: TestBuildGatewayArgs" || exit 1
+  echo "$out" | grep -q -- "--- PASS: TestBuildStudioArgs" || exit 1
+  ! echo "$out" | grep -q -- "--- FAIL"
+
+=== RUN   TestBuildGatewayArgs
+=== RUN   TestBuildGatewayArgs/empty_extra_string_yields_exactly_the_fixed_args
+=== RUN   TestBuildGatewayArgs/whitespace-only_extra_string_yields_exactly_the_fixed_args
+=== RUN   TestBuildGatewayArgs/single_extra_flag_appended_once,_last
+=== RUN   TestBuildGatewayArgs/multiple_extra_flags_appended_in_order,_last
+=== RUN   TestBuildGatewayArgs/extra_flag_duplicating_a_fixed_one_appears_after_it
+--- PASS: TestBuildGatewayArgs (0.00s)
+    --- PASS: TestBuildGatewayArgs/empty_extra_string_yields_exactly_the_fixed_args (0.00s)
+    --- PASS: TestBuildGatewayArgs/whitespace-only_extra_string_yields_exactly_the_fixed_args (0.00s)
+    --- PASS: TestBuildGatewayArgs/single_extra_flag_appended_once,_last (0.00s)
+    --- PASS: TestBuildGatewayArgs/multiple_extra_flags_appended_in_order,_last (0.00s)
+    --- PASS: TestBuildGatewayArgs/extra_flag_duplicating_a_fixed_one_appears_after_it (0.00s)
+=== RUN   TestBuildStudioArgs
+=== RUN   TestBuildStudioArgs/empty_extra_string_yields_exactly_the_fixed_args
+=== RUN   TestBuildStudioArgs/whitespace-only_extra_string_yields_exactly_the_fixed_args
+=== RUN   TestBuildStudioArgs/single_extra_flag_appended_once,_last
+=== RUN   TestBuildStudioArgs/multiple_extra_flags_appended_in_order,_last
+=== RUN   TestBuildStudioArgs/extra_flag_duplicating_a_fixed_one_appears_after_it
+--- PASS: TestBuildStudioArgs (0.00s)
+    --- PASS: TestBuildStudioArgs/empty_extra_string_yields_exactly_the_fixed_args (0.00s)
+    --- PASS: TestBuildStudioArgs/whitespace-only_extra_string_yields_exactly_the_fixed_args (0.00s)
+    --- PASS: TestBuildStudioArgs/single_extra_flag_appended_once,_last (0.00s)
+    --- PASS: TestBuildStudioArgs/multiple_extra_flags_appended_in_order,_last (0.00s)
+    --- PASS: TestBuildStudioArgs/extra_flag_duplicating_a_fixed_one_appears_after_it (0.00s)
+PASS
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch	0.378s
+exit_code=0
+PASS arg-builder tests pass (non-vacuously)
+
+##[M22.unit]
+$ go vet ./...
+
+exit_code=0
+PASS go vet
+$ go test -race -count=1 ./internal/devmode/...
+ok  	github.com/alternayte/restitch-gateway/internal/devmode	3.657s
+exit_code=0
+PASS devmode tests
+$ go test -race -count=1 ./internal/hotreload/...
+ok  	github.com/alternayte/restitch-gateway/internal/hotreload	4.972s
+exit_code=0
+PASS hotreload tests
+$ go test -race -count=1 ./...
+?   	github.com/alternayte/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch	1.518s
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	4.046s
+ok  	github.com/alternayte/restitch-gateway/internal/admin	2.441s
+ok  	github.com/alternayte/restitch-gateway/internal/auth	5.172s
+ok  	github.com/alternayte/restitch-gateway/internal/composition	2.818s
+ok  	github.com/alternayte/restitch-gateway/internal/devmode	5.084s
+ok  	github.com/alternayte/restitch-gateway/internal/gwconfig	2.972s
+ok  	github.com/alternayte/restitch-gateway/internal/hotreload	6.835s
+ok  	github.com/alternayte/restitch-gateway/internal/inbound	2.536s
+?   	github.com/alternayte/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/internal/observability	1.739s
+ok  	github.com/alternayte/restitch-gateway/internal/ratelimit	1.510s
+ok  	github.com/alternayte/restitch-gateway/internal/registry	1.611s
+ok  	github.com/alternayte/restitch-gateway/internal/reqlog	1.225s
+ok  	github.com/alternayte/restitch-gateway/internal/server	1.412s
+ok  	github.com/alternayte/restitch-gateway/internal/session	1.878s
+ok  	github.com/alternayte/restitch-gateway/internal/testenv	2.391s
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.629s
+exit_code=0
+PASS full test suite
+
+##[M22.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+$ /Users/nathananderson-tennant/Development/restitch/bin/restitch dev --help
+Usage of dev:
+  -config string
+    	path to composition config file (default "restitch.yaml")
+  -gateway-args string
+    	extra flags passed through to the gateway process (whitespace-separated)
+  -log-format string
+    	log format: json or text (default "text")
+  -studio-args string
+    	extra flags passed through to the studio process (whitespace-separated)
+  -studio-bin string
+    	path to restitch-studio binary (auto-discovered if empty)
+exit_code=0
+PASS restitch dev --help exits 0
+MANUAL Run 'make build-all && bin/restitch dev' — verify colored output, Ctrl+C shutdown
+
+RESULT M22: PASS (29 pass, 0 fail, 1 manual, 0 skip)

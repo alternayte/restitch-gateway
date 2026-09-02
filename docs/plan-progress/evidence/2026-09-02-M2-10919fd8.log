@@ -1,0 +1,47 @@
+=== GATE M2 (commit 10919fd8, 2026-09-02) ===
+
+
+##[T2.1]
+$ go test -count=1 -race ./internal/composition/ -run TestTemplate
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.494s
+exit_code=0
+PASS T2.1 template tests
+
+##[T2.2]
+$ go test -count=1 ./internal/composition/ -run TestBuildRequestEnv
+ok  	github.com/alternayte/restitch-gateway/internal/composition	0.470s
+exit_code=0
+PASS T2.2 request env alias test
+
+##[T2.3]
+$ grep runtime expr.Compile outside template.go
+  (no matches)
+PASS T2.3 no runtime expr.Compile outside template.go
+
+##[T2.4]
+$ grep -q LimitReader /Users/nathananderson-tennant/Development/restitch/internal/composition/step.go
+
+exit_code=0
+PASS T2.4 LimitReader in step execution
+
+##[M2.gate]
+$ go test -count=1 -race ./internal/composition/
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.631s
+exit_code=0
+PASS M2.gate composition package tests (race)
+$ grep TODO internal/composition/
+  (no matches)
+PASS M2.gate no TODOs in composition package
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-33-g10919fd8" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 57316...
+# Starting gateway on port 57314 (admin 57315)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:57314/t?id=1%2F..%2Fadmin
+status=200
+body={"u":{"active":true,"id":"1/../admin","name":"user-1/../admin"}}
+PASS M2.gate path-escaped request returns 200
+body={"u":{"active":true,"id":"1/../admin","name":"user-1/../admin"}}
+assert: "id" in data.get("u", {}) and "/" in str(data["u"]["id"])
+PASS M2.gate path parameter preserved with literal slashes
+
+RESULT M2: PASS (8 pass, 0 fail, 0 manual, 0 skip)
