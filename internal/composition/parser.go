@@ -57,10 +57,10 @@ var DefaultStepTimeout = 30 * time.Second
 
 // CompiledComposition holds compiled expressions for a single composition.
 type CompiledComposition struct {
-	Steps           map[string]*CompiledStep
-	Response        *CompiledResponse
-	ExecutionPlan   *ExecutionPlan
-	RequestSchema   *jsonschema.Schema
+	Steps         map[string]*CompiledStep
+	Response      *CompiledResponse
+	ExecutionPlan *ExecutionPlan
+	RequestSchema *jsonschema.Schema
 }
 
 // CompiledStep holds a step definition plus its compiled templates.
@@ -77,9 +77,10 @@ type CompiledStep struct {
 
 // CompiledResponse holds compiled templates for response.
 type CompiledResponse struct {
-	StatusTmpl  *Template
-	Body        *CompiledBodyNode
-	ContentType string
+	StatusTmpl   *Template
+	StaticStatus int
+	Body         *CompiledBodyNode
+	ContentType  string
 }
 
 // CompiledBodyNode represents a compiled node in the response body tree.
@@ -369,7 +370,18 @@ func compileResponse(resp *ResponseTemplate, env map[string]any) (*CompiledRespo
 				return nil, fmt.Errorf("status: %w", err)
 			}
 			compiled.StatusTmpl = statusTmpl
+		} else {
+			return nil, fmt.Errorf("status: %q must be an integer or a template expression", statusStr)
 		}
+	} else if statusNum, ok := resp.Status.(int); ok {
+		// A literal `status: 404` used to fall through the string assertion
+		// and silently produce a 200 (finding M7).
+		if statusNum < 100 || statusNum > 599 {
+			return nil, fmt.Errorf("status: %d is outside the valid range 100-599", statusNum)
+		}
+		compiled.StaticStatus = statusNum
+	} else if resp.Status != nil {
+		return nil, fmt.Errorf("status: unsupported type %T (want int or template)", resp.Status)
 	}
 
 	bodyNode, err := compileBodyNode(resp.Body, env)

@@ -2,6 +2,7 @@ package composition
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"testing"
 )
@@ -148,11 +149,11 @@ func TestBuildResponse(t *testing.T) {
 
 func TestEvaluateBodyNode(t *testing.T) {
 	tests := []struct {
-		name     string
-		body     any
-		env      map[string]any
-		wantNil  bool
-		wantErr  bool
+		name    string
+		body    any
+		env     map[string]any
+		wantNil bool
+		wantErr bool
 	}{
 		{
 			name: "literal string",
@@ -217,5 +218,89 @@ func TestEvaluateBodyNode(t *testing.T) {
 				t.Errorf("evaluateBodyNode() = nil, want non-nil")
 			}
 		})
+	}
+}
+
+// TestLiteralStatusCoversM7 verifies a literal integer response.status is
+// honored (it used to fall through and always return 200) and that the range
+// is validated at compile time.
+func TestLiteralStatusCoversM7(t *testing.T) {
+	configYAML := `
+upstreams:
+  mock:
+    url: "http://127.0.0.1:1"
+compositions:
+  notfound:
+    path: /notfound
+    method: GET
+    response:
+      status: 404
+      body: {}
+`
+
+	cfg, err := ParseConfig([]byte(configYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+	compiled, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig: %v", err)
+	}
+	tmpl := compiled.Compositions["notfound"].Response
+	if tmpl.StaticStatus != 404 {
+		t.Fatalf("StaticStatus = %d, want 404", tmpl.StaticStatus)
+	}
+
+	// End to end: an int status flows through CompileConfig to a response.
+	rd := NewRequestData(httptest.NewRequest("GET", "/notfound", nil), nil, nil)
+	resp, err := BuildResponse(context.Background(), tmpl, map[string]*StepResult{}, rd, nil, nil)
+	if err != nil {
+		t.Fatalf("BuildResponse: %v", err)
+	}
+	if resp.Status != 404 {
+		t.Errorf("response status = %d, want 404", resp.Status)
+	}
+
+	// Out-of-range ints are rejected at compile time.
+	for _, bad := range []any{99, 600} {
+		badYAML := `
+upstreams:
+  mock:
+    url: "http://127.0.0.1:1"
+compositions:
+  bad:
+    path: /bad
+    method: GET
+    response:
+      status: ` + fmt.Sprintf("%v", bad) + `
+      body: {}
+`
+		badCfg, err := ParseConfig([]byte(badYAML))
+		if err != nil {
+			t.Fatalf("ParseConfig for status %v: %v", bad, err)
+		}
+		if _, err := CompileConfig(context.Background(), badCfg); err == nil {
+			t.Errorf("status %v: expected a compile error", bad)
+		}
+	}
+
+	// A non-expression string status is now rejected instead of silently
+	// becoming 200.
+	strYAML := `
+upstreams:
+  mock:
+    url: "http://127.0.0.1:1"
+compositions:
+  bad:
+    path: /bad
+    method: GET
+    response:
+      status: "not-a-template"
+      body: {}
+`
+	if strCfg, err := ParseConfig([]byte(strYAML)); err == nil {
+		if _, err := CompileConfig(context.Background(), strCfg); err == nil {
+			t.Error("literal string status: expected a compile error")
+		}
 	}
 }

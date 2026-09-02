@@ -137,6 +137,19 @@ func buildMux(d muxDeps) *http.ServeMux {
 		}
 	}
 
+	// The gateway admin server emits CORS headers for its own clients. The
+	// Studio proxy is same-origin from the browser's point of view, so those
+	// headers must not reach the browser: with an empty gateway key the old
+	// gateway emitted `Access-Control-Allow-Origin: *`, which would have let
+	// any website read gateway data through the proxy (finding M12).
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		resp.Header.Del("Access-Control-Allow-Origin")
+		resp.Header.Del("Access-Control-Allow-Methods")
+		resp.Header.Del("Access-Control-Allow-Headers")
+		resp.Header.Del("Access-Control-Max-Age")
+		return nil
+	}
+
 	mux := http.NewServeMux()
 
 	// V1 routes (Studio-native) — registered before proxy catch-all. The

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -58,7 +59,16 @@ func New(ctx context.Context, cfg InboundAuthConfig) (*Authenticator, error) {
 	}
 
 	if cfg.JWT != nil {
-		kf, err := keyfunc.NewDefaultCtx(ctx, []string{cfg.JWT.JWKSURL})
+		// A custom client bounds JWKS refreshes: the default http.Client has
+		// no timeout, so a hung JWKS server could block refresh and token
+		// validation indefinitely (finding M4).
+		jwksClient := &http.Client{
+			Timeout: 10 * time.Second,
+		}
+		kf, err := keyfunc.NewDefaultOverrideCtx(ctx, []string{cfg.JWT.JWKSURL}, keyfunc.Override{
+			Client:      jwksClient,
+			HTTPTimeout: 5 * time.Second,
+		})
 		if err != nil {
 			return nil, err
 		}

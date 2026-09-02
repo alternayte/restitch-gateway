@@ -508,3 +508,43 @@ func TestRegistryBodyLimit(t *testing.T) {
 		})
 	}
 }
+
+// TestRegistryOriginCheck covers finding M11: cross-origin requests are
+// rejected even with a valid key, and non-JSON mutation bodies get 415.
+func TestRegistryOriginCheck(t *testing.T) {
+	mux := testMux(t)
+
+	t.Run("cross-origin with valid key is rejected", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/configs", nil)
+		req.Header.Set("X-Admin-Key", testRegistryKey)
+		req.Header.Set("Origin", "https://evil.example")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403", rec.Code)
+		}
+	})
+
+	t.Run("same-origin with valid key is allowed", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/configs", nil)
+		req.Host = "studio.internal:3080"
+		req.Header.Set("X-Admin-Key", testRegistryKey)
+		req.Header.Set("Origin", "http://studio.internal:3080")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+	})
+
+	t.Run("text/plain mutation body is rejected", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/api/v1/configs", strings.NewReader("name=x"))
+		req.Header.Set("Content-Type", "text/plain")
+		req.Header.Set("X-Admin-Key", testRegistryKey)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnsupportedMediaType {
+			t.Fatalf("status = %d, want 415", rec.Code)
+		}
+	})
+}

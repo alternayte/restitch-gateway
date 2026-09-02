@@ -126,9 +126,21 @@ func TestNewOAuth2StrategyValidateOnly(t *testing.T) {
 			ClientID:     "client",
 			ClientSecret: "secret",
 		}
-		_, err := NewOAuth2StrategyValidateOnly(cfg)
+		strategy, err := NewOAuth2StrategyValidateOnly(cfg)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
+		}
+
+		// Finding M10: if this strategy ever reached RoundTrip it must fail
+		// cleanly, not panic on a nil token source.
+		rt := strategy.RoundTripper(http.DefaultTransport)
+		req, _ := http.NewRequest("GET", "https://example.com/upstream", nil)
+		_, err = rt.RoundTrip(req)
+		if err == nil {
+			t.Error("expected an error from the validate-only strategy's RoundTrip")
+		}
+		if !strings.Contains(err.Error(), "validate-only") {
+			t.Errorf("error = %v, want the validate-only message", err)
 		}
 	})
 

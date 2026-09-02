@@ -20,6 +20,9 @@ func BuildResponse(ctx context.Context, template *CompiledResponse, results map[
 	env := buildRequestEnv(ctx, rd, results)
 
 	status := 200
+	if template.StaticStatus != 0 {
+		status = template.StaticStatus
+	}
 	if template.StatusTmpl != nil {
 		statusValue, err := template.StatusTmpl.EvalValue(env)
 		if err != nil {

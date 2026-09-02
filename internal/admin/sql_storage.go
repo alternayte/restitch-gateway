@@ -107,8 +107,12 @@ func (s *SQLStorage) RecordRequest(ctx context.Context, record reqlog.Record) er
 	if err != nil {
 		return err
 	}
+	// DO NOTHING, not INSERT OR REPLACE: a client-supplied X-Request-ID must
+	// not be able to overwrite a stored request record (finding M5). The
+	// first record for an ID wins; collisions on generated ULIDs do not
+	// occur in practice.
 	_, err = s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO request_log (id, timestamp, composition, data, created_at) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO request_log (id, timestamp, composition, data, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
 		record.ID, record.Time.Unix(), record.Composition, string(data), time.Now().Unix())
 	return err
 }

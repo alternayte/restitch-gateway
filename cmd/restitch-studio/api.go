@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -39,8 +40,14 @@ func writeError(w http.ResponseWriter, status int, message string) {
 const maxRegistryBody = 10 << 20 // 10 MiB
 
 // decodeJSONBody bounds the request body, decodes JSON into dst, and writes
-// the error response. It reports whether the decode succeeded.
+// the error response. It reports whether the decode succeeded. A non-JSON
+// content type is rejected so a browser "simple request" (for example a
+// text/plain form POST) cannot reach the handlers (finding M11).
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if !strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+		writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+		return false
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxRegistryBody)
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
 		var tooLarge *http.MaxBytesError
@@ -71,9 +78,26 @@ func requireRegistryKey(expected string) func(http.Handler) http.Handler {
 				writeError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
+			// Finding M11: after the key check, reject cross-origin requests.
+			// A browser page cannot send X-Admin-Key without a preflight, so
+			// this is defense in depth; it keeps the API same-origin even if
+			// a key ever leaks into browser storage.
+			if origin := r.Header.Get("Origin"); origin != "" && !sameOrigin(origin, r.Host) {
+				writeError(w, http.StatusForbidden, "cross-origin request rejected")
+				return
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// sameOrigin reports whether the Origin header value names r.Host.
+func sameOrigin(origin, host string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Host, host)
 }
 
 // keyMatches reports whether got equals want in constant time when the

@@ -59,7 +59,21 @@ func NewOAuth2StrategyValidateOnly(cfg *OAuth2Config) (*OAuth2Strategy, error) {
 	if cfg.TokenURL == "" {
 		return nil, fmt.Errorf("oauth2 token_url is required")
 	}
-	return &OAuth2Strategy{}, nil
+	// A nil tokenSource would panic in RoundTrip if this strategy ever
+	// reached it; store a failing source instead (finding M10).
+	return &OAuth2Strategy{
+		tokenSource: failingTokenSource{err: fmt.Errorf("oauth2 validate-only strategy has no token source")},
+	}, nil
+}
+
+// failingTokenSource always returns its error. It stands in for a real token
+// source in strategies that must never perform a request.
+type failingTokenSource struct {
+	err error
+}
+
+func (s failingTokenSource) Token() (*oauth2.Token, error) {
+	return nil, s.err
 }
 
 // RoundTripper returns an http.RoundTripper that injects OAuth2 Bearer tokens.
