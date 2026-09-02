@@ -224,9 +224,10 @@ func (f *File) Validate() error {
 			errs = append(errs, fmt.Errorf("admin.storage.url is required when type is %q", f.Admin.Storage.Type))
 		}
 	case "turso":
-		if f.Admin.Storage.URL == "" {
-			errs = append(errs, fmt.Errorf("admin.storage.url is required when type is %q", f.Admin.Storage.Type))
-		}
+		// The bundled sqlite driver cannot speak libsql (finding L8): a
+		// libsql:// DSN used to silently create a local file named after the
+		// URL. Reject it until a real libSQL client exists.
+		errs = append(errs, fmt.Errorf("admin.storage.type %q is not supported by this build; use sqlite or memory", f.Admin.Storage.Type))
 	default:
 		errs = append(errs, fmt.Errorf("admin.storage.type must be memory, sqlite, or turso, got %q", f.Admin.Storage.Type))
 	}

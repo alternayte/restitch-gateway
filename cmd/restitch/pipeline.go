@@ -33,6 +33,15 @@ func (p *Pipeline) Close() {
 	if p.Executor != nil {
 		p.Executor.Close()
 	}
+	if p.Compiled != nil {
+		// Release the idle connections of every per-upstream client so
+		// repeated reloads do not leak sockets (finding L10).
+		for _, up := range p.Compiled.Upstreams {
+			if up != nil && up.Client != nil {
+				up.Client.CloseIdleConnections()
+			}
+		}
+	}
 }
 
 // Swapper dispatches requests to the current Pipeline via atomic swap.

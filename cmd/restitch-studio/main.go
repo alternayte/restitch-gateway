@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"flag"
 	"fmt"
@@ -91,6 +92,31 @@ func main() {
 	sessionStore := session.NewStore(db)
 	prefsAPI := NewPreferencesAPI(sessionStore)
 
+	// Browser-session rows are minted per cookie-less preference call; sweep
+	// them on the SessionTTL so the table cannot grow without bound (finding
+	// L12). Runs at startup and hourly; the process lifetime is the goroutine
+	// lifetime.
+	go func() {
+		sweep := func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			n, err := sessionStore.SweepExpired(ctx, session.SessionTTL)
+			if err != nil {
+				slog.Warn("session sweep failed", "error", err)
+				return
+			}
+			if n > 0 {
+				slog.Info("session sweep removed expired rows", "rows", n)
+			}
+		}
+		sweep()
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			sweep()
+		}
+	}()
+
 	mux := buildMux(muxDeps{
 		gatewayAdminURL: *gatewayAdminURL,
 		adminKey:        *adminKey,
@@ -112,10 +138,12 @@ func main() {
 		"gateway_admin_url", *gatewayAdminURL)
 
 	srv := &http.Server{
-		Addr:         addr,
-		Handler:      mux,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		Addr:              addr,
+		Handler:           mux,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

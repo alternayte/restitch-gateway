@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -446,15 +447,31 @@ func compileBodyNode(body any, env map[string]any) (*CompiledBodyNode, error) {
 	}
 }
 
+// isPrivateUpstreamHost reports whether host is a literal IP address in the
+// loopback, link-local, or private ranges (finding L16). Hostnames pass: DNS
+// resolution happens at request time and is not the parse layer's business.
+func isPrivateUpstreamHost(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
+}
+
 func validateAndApplyDefaults(cfg *Config) error {
 	for name, up := range cfg.Upstreams {
 		if up.URL == "" {
 			return fmt.Errorf("upstream %s: url is required", name)
 		}
-		if u, err := url.Parse(up.URL); err != nil {
+		u, err := url.Parse(up.URL)
+		if err != nil {
 			return fmt.Errorf("upstream %s: invalid url %q: %w", name, up.URL, err)
-		} else if u.Scheme != "http" && u.Scheme != "https" {
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
 			return fmt.Errorf("upstream %s: url scheme must be http or https, got %q", name, u.Scheme)
+		}
+		if cfg.BlockPrivateUpstreams && isPrivateUpstreamHost(u.Hostname()) {
+			return fmt.Errorf("upstream %s: url %q points at a private or loopback address (block_private_upstreams is set)", name, up.URL)
 		}
 		if up.MaxResponseBytes <= 0 {
 			up.MaxResponseBytes = 10 * 1024 * 1024 // 10 MiB
@@ -469,6 +486,10 @@ func validateAndApplyDefaults(cfg *Config) error {
 
 		if comp.Response.ContentType == "" {
 			comp.Response.ContentType = "application/json"
+		}
+
+		if comp.MaxRequestBytes < 0 {
+			return fmt.Errorf("composition %s: max_request_bytes must not be negative (got %d)", compName, comp.MaxRequestBytes)
 		}
 
 		stepNames := make(map[string]bool)

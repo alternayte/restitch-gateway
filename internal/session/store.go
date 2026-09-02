@@ -19,7 +19,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 )
+
+// SessionTTL is how long a session row survives without activity before the
+// sweeper deletes it. It matches the cookie MaxAge, so a dead browser's rows
+// cannot accumulate forever (finding L12).
+const SessionTTL = cookieMaxAge * time.Second
 
 // Store provides data access for browser sessions and their preferences.
 type Store struct {
@@ -31,15 +37,32 @@ func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-// EnsureSession inserts a row for id if none exists. It never overwrites
-// existing preferences, so it is safe to call on every request.
+// EnsureSession inserts a row for id if none exists and stamps the row with
+// the current time so the TTL sweeper treats it as active. It never
+// overwrites existing preferences, so it is safe to call on every request.
 func (s *Store) EnsureSession(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO browser_sessions (id) VALUES (?) ON CONFLICT(id) DO NOTHING`, id)
+		`INSERT INTO browser_sessions (id) VALUES (?) ON CONFLICT(id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`, id)
 	if err != nil {
 		return fmt.Errorf("ensure session: %w", err)
 	}
 	return nil
+}
+
+// SweepExpired deletes session rows that have seen no activity for maxAge.
+// Call it on a schedule from the process that owns the store.
+func (s *Store) SweepExpired(ctx context.Context, maxAge time.Duration) (int64, error) {
+	cutoff := time.Now().UTC().Add(-maxAge).Format("2006-01-02 15:04:05")
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM browser_sessions WHERE updated_at < ?`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("sweep expired sessions: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("sweep expired sessions: %w", err)
+	}
+	return n, nil
 }
 
 // GetPreferences returns the preferences for id along with whether they have

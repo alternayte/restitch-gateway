@@ -194,7 +194,7 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 
 		slog.ErrorContext(ctx, "composition execution failed",
 			"composition", compositionName,
-			"error", err)
+			"error", RedactURLQuery(err.Error()))
 
 		var reqErr *RequiredStepError
 		if errors.As(err, &reqErr) {
