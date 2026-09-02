@@ -35,9 +35,13 @@ docker run -p 8080:8080 -p 9090:9090 \
   restitch:latest run -config /etc/restitch/restitch.yaml
 
 # Studio
+# The image ENTRYPOINT is /restitch, so the studio binary is selected with
+# --entrypoint; running `docker run restitch:latest /restitch-studio` would
+# start the gateway with an unknown command (finding M27).
 docker run -p 3080:3080 \
   -e STUDIO_GATEWAY_ADMIN_URL=http://restitch:9090 \
-  restitch:latest /restitch-studio
+  --entrypoint /restitch-studio \
+  restitch:latest -port=3080
 ```
 
 ## Docker Compose

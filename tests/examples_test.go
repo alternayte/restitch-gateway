@@ -1,5 +1,19 @@
 //go:build e2e
 
+// Copyright 2026 Restitch maintainers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package tests
 
 import (
@@ -26,14 +40,14 @@ func TestExampleConfigs(t *testing.T) {
 
 	// Set dummy env vars for configs that reference secrets
 	envVars := map[string]string{
-		"API_KEY":        "test-key",
-		"GATEWAY_KEY":    "test-gateway-key",
-		"ADMIN_KEY":      "test-admin-key",
-		"USERNAME":       "testuser",
-		"PASSWORD":       "testpass",
+		"API_KEY":         "test-key",
+		"GATEWAY_KEY":     "test-gateway-key",
+		"ADMIN_KEY":       "test-admin-key",
+		"USERNAME":        "testuser",
+		"PASSWORD":        "testpass",
 		"OAUTH_TOKEN_URL": "https://example.com/token",
 		"OAUTH_CLIENT_ID": "test-client",
-		"OAUTH_SECRET":   "test-secret",
+		"OAUTH_SECRET":    "test-secret",
 	}
 	for k, v := range envVars {
 		t.Setenv(k, v)

@@ -77,7 +77,7 @@ admin:
   api_key: "${ADMIN_KEY}"     # required; requests without a key are rejected
   request_log_size: 500
   storage:                       # optional; in-memory ring buffer if omitted
-    type: sqlite                 # sqlite | postgres
+    type: sqlite                 # memory | sqlite | turso
     url: "file:studio.db"
     auth_token: ""
     retention: 168h
@@ -428,7 +428,7 @@ hard latency threshold would flake on shared-runner noise.
 
 | Condition | Status | Body |
 |-----------|--------|------|
-| No matching route | 404 | `{"error":"not found"}` |
+| No matching route | 404 | ServeMux plain-text 404 |
 | Method mismatch | 405 + `Allow` | ServeMux default |
 | Inbound auth failed | 401 + `WWW-Authenticate` | `{"error":"unauthorized"}` |
 | Passthrough, no client auth | 401 | `{"error":"authorization header required"}` |
@@ -460,6 +460,13 @@ make ledger-check   # Check every plan task has green evidence
 
 `build-all` builds the frontend automatically when `cmd/restitch-studio/dist`
 has no assets, since that directory is a build artifact and is not committed.
+
+### Internal process files
+
+`PLAN.md`, `docs/plan-progress/`, `docs/superpowers/`, and
+`.superpowers/` are the maintainers' planning and verification records, not
+user documentation. They track milestone gates and the evidence ledger; the
+user-facing docs are `docs/` and this README.
 
 ### Project Structure
 
