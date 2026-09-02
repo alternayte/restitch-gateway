@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"github.com/restitch/restitch-gateway/internal/mockupstream"
+	"github.com/alternayte/restitch-gateway/internal/mockupstream"
 )
 
 // connCounter tracks accepted TCP connections and served requests. The M23 gate

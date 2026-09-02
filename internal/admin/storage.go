@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/internal/reqlog"
 )
 
 var LatencyBucketBounds = []float64{10, 50, 100, 250, 500, 1000, 5000}

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"github.com/restitch/restitch-gateway/internal/composition"
+	"github.com/alternayte/restitch-gateway/internal/composition"
 )
 
 // Pipeline is everything derived from one config file version.

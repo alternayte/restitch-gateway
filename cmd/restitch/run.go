@@ -14,15 +14,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/admin"
-	"github.com/restitch/restitch-gateway/internal/composition"
-	"github.com/restitch/restitch-gateway/internal/gwconfig"
-	"github.com/restitch/restitch-gateway/internal/hotreload"
-	"github.com/restitch/restitch-gateway/internal/inbound"
-	"github.com/restitch/restitch-gateway/internal/observability"
-	"github.com/restitch/restitch-gateway/internal/ratelimit"
-	"github.com/restitch/restitch-gateway/internal/server"
-	"github.com/restitch/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/internal/admin"
+	"github.com/alternayte/restitch-gateway/internal/composition"
+	"github.com/alternayte/restitch-gateway/internal/gwconfig"
+	"github.com/alternayte/restitch-gateway/internal/hotreload"
+	"github.com/alternayte/restitch-gateway/internal/inbound"
+	"github.com/alternayte/restitch-gateway/internal/observability"
+	"github.com/alternayte/restitch-gateway/internal/ratelimit"
+	"github.com/alternayte/restitch-gateway/internal/server"
+	"github.com/alternayte/restitch-gateway/internal/upstream"
 )
 
 func runCmd(args []string) int {

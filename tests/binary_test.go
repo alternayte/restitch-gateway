@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/mockupstream"
+	"github.com/alternayte/restitch-gateway/internal/mockupstream"
 )
 
 type Spec struct {

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/observability"
+	"github.com/alternayte/restitch-gateway/internal/observability"
 )
 
 type retryOverrideKey struct{}

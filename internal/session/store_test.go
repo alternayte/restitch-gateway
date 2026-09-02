@@ -7,7 +7,7 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (registers as "sqlite")
 
-	"github.com/restitch/restitch-gateway/internal/registry"
+	"github.com/alternayte/restitch-gateway/internal/registry"
 )
 
 func testStore(t *testing.T) *Store {

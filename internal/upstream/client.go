@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/auth"
-	"github.com/restitch/restitch-gateway/internal/observability"
+	"github.com/alternayte/restitch-gateway/internal/auth"
+	"github.com/alternayte/restitch-gateway/internal/observability"
 )
 
 // TransportConfig mirrors the YAML upstream.transport block.

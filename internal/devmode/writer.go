@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
-	"github.com/restitch/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/internal/upstream"
 )
 
 const (

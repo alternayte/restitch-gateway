@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/restitch/restitch-gateway/internal/session"
+	"github.com/alternayte/restitch-gateway/internal/session"
 )
 
 // maxPreferencesBody caps a preferences PUT at 16 KB.

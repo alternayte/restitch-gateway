@@ -1,4 +1,4 @@
-module github.com/restitch/restitch-gateway
+module github.com/alternayte/restitch-gateway
 
 go 1.25.7
 

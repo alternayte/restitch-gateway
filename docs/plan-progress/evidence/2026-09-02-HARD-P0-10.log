@@ -1,0 +1,38 @@
+# HARD.P0-10 — H9: module path decision
+
+## Decision (user, 2026-09-02)
+
+Rename the module path to the real owner: `github.com/alternayte/restitch-gateway`
+(chosen over keeping github.com/restitch/restitch-gateway, which 404s because
+the remote is alternayte/restitch).
+
+## Changes
+
+- go.mod: module github.com/alternayte/restitch-gateway
+- All 44 Go files with imports of the old path renamed mechanically
+  (sed across *.go and go.mod), no semantic edits.
+- CLAUDE.md module line updated (also corrects the stale Go 1.25.6 -> 1.25.7
+  drift, finding L33).
+- No replace directive: this is a single mechanical commit with zero
+  remaining references to the old path inside the module, so a self-replace
+  would be dead weight. The replace pattern is for consumers during a
+  transition; see "Outstanding user action" below.
+
+## Verification
+
+$ go list -m
+github.com/alternayte/restitch-gateway
+
+$ go build ./...          PASS
+$ go vet ./...            PASS
+$ go test -race -count=1 ./...   PASS, all packages
+clean GOMODCACHE build downloads every dependency and builds PASS
+binaries rebuilt via make build-all; no old-path string remains in them
+
+## Outstanding user action (account-level, cannot be done from this repo)
+
+The GitHub repository currently lives at github.com/alternayte/restitch.git.
+`go get github.com/alternayte/restitch-gateway` resolves only after the repo
+is reachable at that name. Rename the repo (gh repo rename restitch-gateway)
+or create the matching repo, then push. Until then the remote 404s; the code
+side of H9 is complete.

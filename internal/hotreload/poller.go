@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
-	"github.com/restitch/restitch-gateway/internal/observability"
+	"github.com/alternayte/restitch-gateway/internal/observability"
 )
 
 type PollStatus struct {

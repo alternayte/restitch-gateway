@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/devmode"
+	"github.com/alternayte/restitch-gateway/internal/devmode"
 )
 
 const (
