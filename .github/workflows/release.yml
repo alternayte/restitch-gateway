@@ -1,0 +1,63 @@
+name: Release
+
+# Publishes the container image to ghcr.io and attaches release binaries to
+# the GitHub release. Runs when a v* tag is pushed; the release must exist
+# (created with `gh release create`) so the binaries can be attached.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: studio/package-lock.json
+
+      # cmd/restitch-studio embeds dist/, which is a build artifact and not
+      # committed (finding M36); the image build needs the frontend first.
+      - name: Build frontend
+        run: npm ci && npm run build
+        working-directory: studio
+
+      - name: Publish image to GHCR
+        env:
+          IMAGE: ghcr.io/alternayte/restitch-gateway
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -t "${IMAGE}:${{ github.ref_name }}" -t "${IMAGE}:latest" .
+          docker push "${IMAGE}:${{ github.ref_name }}"
+          docker push "${IMAGE}:latest"
+
+      - name: Build release binaries
+        run: |
+          mkdir -p dist
+          for target in "linux amd64" "linux arm64" "darwin amd64" "darwin arm64"; do
+            set -- $target
+            GOOS=$1 GOARCH=$2 CGO_ENABLED=0 go build \
+              -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" \
+              -o "dist/restitch-${{ github.ref_name }}-$1-$2" ./cmd/restitch
+            GOOS=$1 GOARCH=$2 CGO_ENABLED=0 go build \
+              -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" \
+              -o "dist/restitch-studio-${{ github.ref_name }}-$1-$2" ./cmd/restitch-studio
+          done
+          ls -la dist
+
+      - name: Attach binaries to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" dist/* --clobber
