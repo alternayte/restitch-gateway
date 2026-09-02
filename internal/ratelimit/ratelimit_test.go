@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -170,5 +171,36 @@ func TestLimiter_EmptyKey(t *testing.T) {
 	r2 := httptest.NewRequest("GET", "/", nil)
 	if l.Allow(r2) {
 		t.Fatal("second request with empty key should be blocked (same bucket)")
+	}
+}
+
+// TestLimiter_BoundedEntries covers finding M3: the per-key table must not
+// grow without bound under an attacker minting distinct header keys. After
+// maxDistinctKeys distinct keys, the oldest entries are evicted (LRU).
+func TestLimiter_BoundedEntries(t *testing.T) {
+	l := New(Config{RequestsPerSecond: 1000, Burst: 10, Key: "header:X-Client-ID"})
+
+	// Saturate the table.
+	for i := 0; i < maxDistinctKeys+500; i++ {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.Header.Set("X-Client-ID", fmt.Sprintf("attacker-%d", i))
+		if !l.Allow(r) {
+			t.Fatalf("request %d should be allowed (burst)", i)
+		}
+	}
+
+	l.mu.Lock()
+	size := len(l.entries)
+	l.mu.Unlock()
+	if size > maxDistinctKeys {
+		t.Fatalf("entry count = %d, want <= %d", size, maxDistinctKeys)
+	}
+
+	// LRU eviction: the earliest keys are gone, so a fresh request for one
+	// creates a new bucket instead of sharing the saturated oldest bucket.
+	old := httptest.NewRequest("GET", "/", nil)
+	old.Header.Set("X-Client-ID", "attacker-0")
+	if !l.Allow(old) {
+		t.Fatal("evicted key should get a fresh bucket")
 	}
 }

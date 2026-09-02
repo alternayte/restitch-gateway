@@ -33,6 +33,35 @@ func TestProxyRewrite(t *testing.T) {
 	}
 }
 
+// TestProxyStripsCORSHeaders covers finding M12: CORS headers from the
+// gateway admin server must not reach the browser through the Studio proxy.
+func TestProxyStripsCORSHeaders(t *testing.T) {
+	admin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Vary", "Origin")
+		_, _ = w.Write([]byte(`{"version":"test"}`))
+	}))
+	defer admin.Close()
+
+	mux := buildMux(muxDeps{gatewayAdminURL: admin.URL})
+
+	req := httptest.NewRequest("GET", "/api/info", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin reached the browser: %q", got)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Methods"); got != "" {
+		t.Errorf("Access-Control-Allow-Methods reached the browser: %q", got)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}
+
 func TestSPAFallback(t *testing.T) {
 	mux := buildMux(muxDeps{gatewayAdminURL: "http://localhost:9999"})
 

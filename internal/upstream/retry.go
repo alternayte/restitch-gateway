@@ -84,6 +84,15 @@ func (rt *retryTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			if rt.metrics != nil {
 				rt.metrics.RetriesTotal.WithLabelValues(rt.name).Inc()
 			}
+			// A body that cannot be recreated must not be re-sent consumed:
+			// there is nothing to retry with (finding M1). Return the last
+			// outcome instead.
+			if req.Body != nil && req.GetBody == nil {
+				if lastResp != nil {
+					return lastResp, nil
+				}
+				return nil, lastErr
+			}
 			if req.GetBody != nil {
 				body, err := req.GetBody()
 				if err != nil {
@@ -159,6 +168,11 @@ func shouldRetry(ctx context.Context, attempt int, cfg RetryConfig, resp *http.R
 	if resp != nil {
 		if ra := resp.Header.Get("Retry-After"); ra != "" {
 			if secs, err := strconv.Atoi(ra); err == nil {
+				// A negative Retry-After must not produce an immediate
+				// (negative) sleep; clamp at zero (finding M2).
+				if secs < 0 {
+					secs = 0
+				}
 				sleepDur = time.Duration(secs) * time.Second
 				if sleepDur > cfg.MaxBackoff {
 					sleepDur = cfg.MaxBackoff

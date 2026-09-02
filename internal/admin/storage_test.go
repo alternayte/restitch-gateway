@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -139,3 +140,117 @@ func TestMemoryStorage_GetRequestByID(t *testing.T) {
 		t.Errorf("expected nil for missing id, got %+v", missing)
 	}
 }
+
+// TestAsyncStore_RecordsAndDrains covers finding M6: records written through
+// AsyncStore land in the underlying storage, and Close drains the queue.
+func TestAsyncStore_RecordsAndDrains(t *testing.T) {
+	inner := NewMemoryStorage(24 * time.Hour)
+	as := NewAsyncStore(inner)
+
+	ctx := context.Background()
+	for i := 0; i < 50; i++ {
+		rec := reqlog.Record{
+			ID:          fmt.Sprintf("async-%d", i),
+			Time:        time.Now(),
+			Composition: "test",
+			Method:      "GET",
+			Path:        "/x",
+			Status:      200,
+		}
+		if err := as.RecordRequest(ctx, rec); err != nil {
+			t.Fatalf("RecordRequest %d: %v", i, err)
+		}
+	}
+
+	// Close drains the queue before closing the inner store.
+	if err := as.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := inner.QueryRequests(ctx, RequestQuery{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 50 {
+		t.Fatalf("persisted = %d, want 50", len(results))
+	}
+}
+
+// TestAsyncStore_DropsWhenFull covers finding M6's bounded queue: when the
+// queue is full, RecordRequest drops rather than blocking the caller.
+func TestAsyncStore_DropsWhenFull(t *testing.T) {
+	blocker := &blockingStorage{done: make(chan struct{})}
+	as := NewAsyncStore(blocker)
+	defer func() {
+		close(blocker.done)
+		_ = as.Close()
+	}()
+
+	// Fill the queue; the writer is blocked, so these stay queued.
+	ctx := context.Background()
+	for i := 0; i < asyncQueueSize; i++ {
+		if err := as.RecordRequest(ctx, reqlog.Record{ID: fmt.Sprintf("q-%d", i)}); err != nil {
+			t.Fatalf("enqueue %d: %v", i, err)
+		}
+	}
+
+	// The next write must not block: it is dropped.
+	dropped := make(chan error, 1)
+	go func() {
+		dropped <- as.RecordRequest(ctx, reqlog.Record{ID: "overflow"})
+	}()
+	select {
+	case err := <-dropped:
+		if err != nil {
+			t.Fatalf("overflow RecordRequest: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("RecordRequest blocked on a full queue")
+	}
+}
+
+// blockingStorage blocks RecordRequest until done is closed.
+type blockingStorage struct {
+	done chan struct{}
+}
+
+func (b *blockingStorage) RecordRequest(ctx context.Context, _ reqlog.Record) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-b.done:
+		return nil
+	}
+}
+
+func (b *blockingStorage) RecordBucket(ctx context.Context, bucket Bucket) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-b.done:
+		return nil
+	}
+}
+
+func (b *blockingStorage) QueryTimeSeries(context.Context, time.Time, time.Time, time.Duration, string) ([]Bucket, error) {
+	return nil, nil
+}
+
+func (b *blockingStorage) QueryRequests(context.Context, RequestQuery) ([]reqlog.Record, error) {
+	return nil, nil
+}
+
+func (b *blockingStorage) GetRequestByID(context.Context, string) (*reqlog.Record, error) {
+	return nil, nil
+}
+
+func (b *blockingStorage) QueryStepMetrics(context.Context, string, time.Time, time.Time) ([]StepAggregate, error) {
+	return nil, nil
+}
+
+func (b *blockingStorage) Compact(context.Context, time.Duration) error {
+	<-b.done
+	return nil
+}
+
+func (b *blockingStorage) Close() error { return nil }

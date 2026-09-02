@@ -53,6 +53,18 @@ func MintOnDocument(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
+// requestIsSecure reports whether the browser's channel to this server is
+// HTTPS: either a direct TLS connection or the immediate proxy's claim in
+// X-Forwarded-Proto (finding M8). A client can forge the header on a direct
+// connection, but the only harm is its own cookie being refused by the
+// browser over plain HTTP.
+func requestIsSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
 // Middleware reads the session cookie, minting a new session when the cookie
 // is absent and shouldRequestMint reports true. Requests that neither carry a
 // cookie nor qualify for minting pass through without a session.
@@ -83,9 +95,11 @@ func Middleware(store *Store, shouldRequestMint func(*http.Request) bool) func(h
 					MaxAge:   cookieMaxAge,
 					HttpOnly: true,
 					SameSite: http.SameSiteStrictMode,
-					// Secure would make the cookie undeliverable over
-					// http://localhost, which is Studio's primary mode.
-					Secure: r.TLS != nil,
+					// Secure is off over plain http://localhost (Studio's
+					// primary mode) but on behind a TLS-terminating proxy,
+					// where r.TLS alone would wrongly report plaintext
+					// (finding M8).
+					Secure: requestIsSecure(r),
 				})
 			}
 

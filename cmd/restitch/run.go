@@ -251,6 +251,13 @@ func runCmd(args []string) int {
 			store = admin.NewMemoryStorage(retention)
 		}
 
+		// Durable request records go through a bounded async writer so a slow
+		// or locked database cannot stall request completion (finding M6).
+		// Memory storage is fast and never wrapped.
+		if adminCfg.Storage.Type == "sqlite" || adminCfg.Storage.Type == "turso" {
+			store = admin.NewAsyncStore(store)
+		}
+
 		acc := admin.NewAccumulator()
 
 		// Start flush goroutine: periodically drains the accumulator into

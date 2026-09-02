@@ -73,6 +73,50 @@ func TestSQLStorage_RecordRequest(t *testing.T) {
 	}
 }
 
+// TestSQLStorage_RecordRequestConflictKeepsFirst covers finding M5: a
+// replayed request ID must not overwrite the stored record.
+func TestSQLStorage_RecordRequestConflictKeepsFirst(t *testing.T) {
+	s, err := NewSQLStorage("file::memory:?cache=shared", "", 24*time.Hour)
+	if err != nil {
+		t.Fatalf("NewSQLStorage: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+	first := reqlog.Record{
+		ID:          "req-collision",
+		Time:        time.Now(),
+		Composition: "first",
+		Method:      "GET",
+		Path:        "/first",
+		Status:      200,
+		DurationMS:  1,
+	}
+	second := reqlog.Record{
+		ID:          "req-collision",
+		Time:        time.Now(),
+		Composition: "attacker",
+		Method:      "GET",
+		Path:        "/second",
+		Status:      200,
+		DurationMS:  2,
+	}
+	if err := s.RecordRequest(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordRequest(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.GetRequestByID(ctx, "req-collision")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Composition != "first" {
+		t.Errorf("composition = %q, want %q (first record must win)", got.Composition, "first")
+	}
+}
+
 func TestSQLStorage_GetRequestByID(t *testing.T) {
 	s, err := NewSQLStorage("file::memory:?cache=shared", "", 24*time.Hour)
 	if err != nil {

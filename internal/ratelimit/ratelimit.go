@@ -2,6 +2,7 @@
 package ratelimit
 
 import (
+	"container/list"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -18,19 +19,35 @@ type Config struct {
 	Key               string  `yaml:"key" json:"key"` // "ip", "header:X-Client-ID", "api-key"
 }
 
-// Limiter is a per-key token-bucket rate limiter backed by sync.Map.
+// maxDistinctKeys bounds the per-key limiter table. In header:<name> mode an
+// attacker can mint unlimited distinct keys; without a bound the table grows
+// without limit (finding M3). The bound is generous for real traffic and the
+// eviction is LRU, so the most active keys survive.
+const maxDistinctKeys = 10_000
+
+// Limiter is a bounded per-key token-bucket rate limiter.
 type Limiter struct {
 	rate    rate.Limit
 	burst   int
 	keyFunc func(*http.Request) string
-	entries sync.Map // map[string]*rate.Limiter
+
+	mu      sync.Mutex
+	entries map[string]*list.Element
+	lru     *list.List // front = most recently used
+}
+
+type lruItem struct {
+	key     string
+	limiter *rate.Limiter
 }
 
 // New creates a new Limiter from the given config.
 func New(cfg Config) *Limiter {
 	l := &Limiter{
-		rate:  rate.Limit(cfg.RequestsPerSecond),
-		burst: cfg.Burst,
+		rate:    rate.Limit(cfg.RequestsPerSecond),
+		burst:   cfg.Burst,
+		entries: make(map[string]*list.Element),
+		lru:     list.New(),
 	}
 
 	key := cfg.Key
@@ -64,8 +81,30 @@ func (l *Limiter) Allow(r *http.Request) bool {
 		key = "__empty__"
 	}
 
-	v, _ := l.entries.LoadOrStore(key, rate.NewLimiter(l.rate, l.burst))
-	return v.(*rate.Limiter).Allow()
+	l.mu.Lock()
+	lim := l.limiterFor(key)
+	l.mu.Unlock()
+	return lim.Allow()
+}
+
+// limiterFor returns the token bucket for key, creating it if needed. The
+// caller must hold l.mu. When the table is full, the least-recently-used
+// entry is evicted first.
+func (l *Limiter) limiterFor(key string) *rate.Limiter {
+	if el, ok := l.entries[key]; ok {
+		l.lru.MoveToFront(el)
+		return el.Value.(*lruItem).limiter
+	}
+	if l.lru.Len() >= maxDistinctKeys {
+		if back := l.lru.Back(); back != nil {
+			item := back.Value.(*lruItem)
+			delete(l.entries, item.key)
+			l.lru.Remove(back)
+		}
+	}
+	item := &lruItem{key: key, limiter: rate.NewLimiter(l.rate, l.burst)}
+	l.entries[key] = l.lru.PushFront(item)
+	return item.limiter
 }
 
 // Middleware returns an http.Handler that wraps next with rate limiting.

@@ -157,6 +157,28 @@ func TestMiddlewareSecureOnlyOverTLS(t *testing.T) {
 			t.Error("Secure not set over TLS")
 		}
 	})
+
+	t.Run("forwarded-proto https", func(t *testing.T) {
+		// Finding M8: behind a TLS-terminating proxy r.TLS is nil; the
+		// proxy's X-Forwarded-Proto must still produce a Secure cookie.
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("X-Forwarded-Proto", "https")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if !rec.Result().Cookies()[0].Secure {
+			t.Error("Secure not set when X-Forwarded-Proto: https")
+		}
+	})
+
+	t.Run("forwarded-proto http", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("X-Forwarded-Proto", "http")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Result().Cookies()[0].Secure {
+			t.Error("Secure set when X-Forwarded-Proto: http")
+		}
+	})
 }
 
 func TestMiddlewarePersistsMintedSession(t *testing.T) {
