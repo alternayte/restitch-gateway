@@ -17,6 +17,7 @@
 package tests
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,14 +27,21 @@ import (
 )
 
 func TestExampleConfigs(t *testing.T) {
-	matches, err := filepath.Glob("../examples/**/restitch.yaml")
+	var matches []string
+	// WalkDir instead of a two-level glob: examples may nest deeper than
+	// examples/*/ (finding L26).
+	err := filepath.WalkDir("../examples", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && d.Name() == "restitch.yaml" {
+			matches = append(matches, path)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Also check nested dirs
-	nested, _ := filepath.Glob("../examples/*/**/restitch.yaml")
-	matches = append(matches, nested...)
-
 	if len(matches) == 0 {
 		t.Fatal("no example restitch.yaml files found")
 	}

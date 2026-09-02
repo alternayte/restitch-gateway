@@ -51,8 +51,11 @@ variable substitution, so this literal is the configuration point. After
 editing, re-run the unit tests:
 
 ```bash
+# Prefer .env when present so a version override there does not drift from
+# the Prometheus actually being tested (finding L28).
+ENV_FILE="$PWD/.env"; [ -f "$ENV_FILE" ] || ENV_FILE="$PWD/.env.example"
 docker run --rm -v "$PWD/prometheus:/p:ro" --entrypoint=/bin/promtool \
-  prom/prometheus:$(grep -E '^PROMETHEUS_VERSION=' .env.example | cut -d= -f2) \
+  prom/prometheus:$(grep -E '^PROMETHEUS_VERSION=' "$ENV_FILE" | cut -d= -f2) \
   test rules /p/rules/alerts_test.yml
 ```
 

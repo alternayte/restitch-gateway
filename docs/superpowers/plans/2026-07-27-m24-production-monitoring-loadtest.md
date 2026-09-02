@@ -153,6 +153,10 @@ absent from the completion table. Documentation-only; no behaviour change."
 
 ## Task 1: Replace the `scripts/gates/m24.sh` placeholder
 
+> Historical record. UPDATED 2026-09-02: Task 6b shipped in commit 22949c3b;
+> CI now carries the measured P95_MS. Statements below saying P95_MS is a
+> placeholder describe the state before that commit.
+
 **STOP GATE — the finished script must be shown to the user and explicitly approved before Task 2 begins.** Per CLAUDE.md rule 2, this is M24's first task; per the hard rules, gate changes need user approval and a `gate:` commit prefix.
 
 The gate is written **before** the features exist and is *expected* to fail at this point. That failure is the proof the gate detects absence — the same discipline `m23.sh` used ("checks and both k6 runs to FAIL until those tasks are implemented", `scripts/gates/m23.sh:26`).

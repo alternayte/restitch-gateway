@@ -132,6 +132,9 @@ config file:
 | `RESTITCH_ADMIN_BIND` | `admin.bind` | `127.0.0.1` |
 | `RESTITCH_ADMIN_ENABLED` | `admin.enabled` | `true` |
 | `RESTITCH_ADMIN_API_KEY` | `admin.api_key` | (none; required — requests without a key are rejected) |
+| `RESTITCH_REGISTRY_URL` | `-registry-url` | (none) — enables registry mode |
+| `RESTITCH_REGISTRY_KEY` | `-registry-key` | (none) — key sent to the Studio registry API |
+| `RESTITCH_POLL_INTERVAL` | `-poll-interval` | `10s` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector URL | (none) |
 
 Precedence: CLI flags > `RESTITCH_*` env > YAML file > defaults.
