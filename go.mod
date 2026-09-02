@@ -5,7 +5,7 @@ go 1.25.7
 require (
 	github.com/expr-lang/expr v1.17.7
 	github.com/google/uuid v1.6.0
-	golang.org/x/sync v0.21.0
+	golang.org/x/sync v0.22.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
