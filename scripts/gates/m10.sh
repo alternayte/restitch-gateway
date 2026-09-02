@@ -101,10 +101,14 @@ compositions:
 YAML
 cp "${H_TMP}/m10_restored.yaml" "${config}"
 
-# Get the gateway PID and send SIGHUP
-gw_pid="${H_PIDS[1]}"  # second PID is gateway (first is mockupstream)
-if kill -0 "${gw_pid}" 2>/dev/null; then
-    kill -HUP "${gw_pid}" 2>/dev/null || true
+# Get the gateway PID and send SIGHUP. The PID is found by the config path
+# (finding L25): indexing H_PIDS assumed mockupstream-then-gateway startup
+# order, which breaks the moment anything else starts between them.
+GW_PID_FILE="${H_TMP}/m10_gw.pid"
+pgrep -f "bin/restitch.*run.*-config .*${H_TMP}" > "${GW_PID_FILE}" 2>/dev/null || true
+
+if [[ -s "${GW_PID_FILE}" ]]; then
+    kill -HUP "$(head -1 "${GW_PID_FILE}")" 2>/dev/null || true
     sleep 2
 
     # Check log for reload message
