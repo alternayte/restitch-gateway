@@ -38,3 +38,9 @@ Thumbs.db
 studio.db
 studio.db-shm
 studio.db-wal
+
+# Maintainers' local planning and verification records (kept out of the
+# public tree; see README "Repository notes")
+docs/plan-progress/
+docs/superpowers/
+.superpowers/
