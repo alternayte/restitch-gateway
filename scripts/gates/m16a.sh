@@ -42,20 +42,24 @@ YAML
 
 h_start_gateway "${config}"
 
-# Check that CORS doesn't blindly allow all origins when api_key is set
+# Check that CORS doesn't blindly allow all origins when api_key is set.
+# The header must exist first: an absent header used to trip the pass branch
+# and make the check vacuous (finding H8).
 cors_header=$(curl -sI -H 'Origin: https://evil.example' \
     -H "X-Admin-Key: test-admin-key" \
     "http://127.0.0.1:${ADMIN_PORT}/admin/api/info" 2>/dev/null \
     | grep -i 'Access-Control-Allow-Origin' | head -1 | tr -d '\r') || true
 
 {
-    echo "CORS header with evil origin: ${cors_header}"
+    echo "CORS header with evil origin: ${cors_header:-  (absent)}"
 } >> "${H_EVIDENCE_FILE}"
 
-if echo "${cors_header}" | grep -qF '*'; then
+if [[ -z "${cors_header}" ]]; then
+    h_fail "T16.3 no Access-Control-Allow-Origin header emitted (cannot distinguish restricted origin from no CORS support)"
+elif echo "${cors_header}" | grep -qF '*'; then
     h_fail "T16.3 CORS still allows all origins when api_key is set"
 else
-    h_pass "T16.3 CORS does not allow all origins when api_key is set"
+    h_pass "T16.3 CORS header present and not wildcard (${cors_header})"
 fi
 
 # ── T16.4 SQL LIMIT clause ──────────────────────────────────────────────────
