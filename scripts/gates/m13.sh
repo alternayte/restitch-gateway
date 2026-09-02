@@ -13,7 +13,7 @@ h_task M13.gate
 # npm test + build
 if [[ -f "${REPO_ROOT}/studio/package.json" ]]; then
     h_run "M13.gate npm ci" -- bash -c "cd '${REPO_ROOT}/studio' && npm ci"
-    h_run "M13.gate npm test" -- bash -c "cd '${REPO_ROOT}/studio' && npm run test -- --passWithNoTests"
+    h_run "M13.gate npm test" -- bash -c "cd '${REPO_ROOT}/studio' && npm run test"
     h_run "M13.gate npm build" -- bash -c "cd '${REPO_ROOT}/studio' && npm run build"
 else
     h_skip "M13.gate studio not found"

@@ -34,7 +34,7 @@ h_run "final.2 make e2e" -- make -C "${REPO_ROOT}" e2e
 
 if [[ -f "${REPO_ROOT}/studio/package.json" ]]; then
     h_run "final.2 studio tests + build" -- \
-        bash -c "cd '${REPO_ROOT}/studio' && npm ci && npm run test -- --passWithNoTests && npm run build"
+        bash -c "cd '${REPO_ROOT}/studio' && npm ci && npm run test && npm run build"
 else
     h_skip "final.2 studio (not found)"
 fi
