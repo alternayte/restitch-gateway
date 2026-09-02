@@ -1,0 +1,26 @@
+# HARD.P2 — Wave P2 (quality bar)
+
+Plan items completed:
+
+## P2.1 — L1-L34 low findings
+Commits ca876eea (L1-L20 backend), 51e1d928 (L21-L24 studio), dace7e7a
+(L26-L34 docs/compose/process), 258392d4 (L25+L29 gates, user-approved).
+L9 was closed with C4 (P0-2); L33 was closed with H9 (P0-10).
+Verification: go build/vet/test -race green; studio tsc strict + 28 vitest
+tests; M10 and final gates re-run PASS after the L25/L29 changes.
+
+## P2.2 — README architecture + install path
+Commit 897f269d. Added: Install section, Architecture section, and
+docs/architecture.md (request lifecycle + trust boundaries).
+
+## P2.3 — README badges
+Commit 897f269d. License, Go version, and CI badges at the top of README.
+
+## P2.4 — versioning and compatibility policy
+Commit 897f269d. VERSIONING.md (semver, compatibility commitments, release
+procedure); linked from README and CONTRIBUTING.
+
+## P2.5 — registry-mode end-to-end example
+Commit 897f269d. examples/registry/: compose stack + README walkthrough.
+Verified live: studio 200, seed config 201, gateway route 200 within one
+poll interval, /admin/api/registry/status shows mode=registry count=1.

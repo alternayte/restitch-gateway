@@ -1,0 +1,87 @@
+=== GATE M3 (commit 897f269d, 2026-09-02) ===
+
+
+##[T3.1]
+$ go test -count=1 -race ./internal/composition/ -run TestExecutor_InferredDependencySkipped
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.479s
+exit_code=0
+PASS T3.1 TestExecutor_InferredDependencySkipped
+
+##[T3.2]
+$ grep -q StepFailed.*=.*"failed" /Users/nathananderson-tennant/Development/restitch/internal/composition/executor.go
+
+exit_code=0
+PASS T3.2 step status types exist
+$ grep -q Status.*string.*json:"status" /Users/nathananderson-tennant/Development/restitch/internal/composition/errors.go
+
+exit_code=0
+PASS T3.2 error detail has Status field
+
+##[T3.3]
+$ go test -count=1 -race ./internal/composition/ -run TestHandler_PartialResponse_OptionalStepInTemplate
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.487s
+exit_code=0
+PASS T3.3 TestHandler_PartialResponse_OptionalStepInTemplate
+
+##[T3.4]
+$ grep -q type RequiredStepError struct /Users/nathananderson-tennant/Development/restitch/internal/composition/errors.go
+
+exit_code=0
+PASS T3.4 RequiredStepError type exists
+$ python3 -c 
+import re, sys
+with open('/Users/nathananderson-tennant/Development/restitch/internal/composition/handler.go') as f:
+    content = f.read()
+# Find writeError function — it should never pass err.Error() to the response body
+# It should use sanitized messages like 'upstream error', 'upstream timeout', 'internal error'
+if 'err.Error()' in content.split('func writeError')[1].split('\nfunc ')[0] if 'func writeError' in content else '':
+    print('writeError leaks err.Error()', file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+
+
+exit_code=0
+PASS T3.4 writeError does not leak err.Error
+
+##[M3.gate]
+$ go test -count=1 -race ./internal/composition/
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.621s
+exit_code=0
+PASS M3.gate composition package tests (race)
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-39-g897f269d" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 52331...
+# Starting gateway on port 52329 (admin 52330)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:52329/p
+status=200
+body={"_errors":[{"step":"loyalty","message":"upstream error","status":"failed"},{"step":"bonus","message":"dependency_failed","status":"skipped"}],"points":null,"user":{"active":true,"id":"1","name":"user-1"}}
+PASS M3.gate partial response returns 200
+$ curl -sI http://127.0.0.1:52329/p
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Partial-Response: true
+X-Request-Id: 01M1HB31MRSVXRN71YD2GK0BFG
+X-Restitch-Complete: false
+Date: Wed, 02 Sep 2026 15:16:36 GMT
+Content-Length: 206
+
+PASS M3.gate X-Restitch-Complete: false
+body={"_errors":[{"step":"loyalty","message":"upstream error","status":"failed"},{"step":"bonus","message":"dependency_failed","status":"skipped"}],"points":null,"user":{"active":true,"id":"1","name":"user-1"}}
+assert: data.get("user") is not None
+PASS M3.gate user field is populated
+body={"_errors":[{"step":"loyalty","message":"upstream error","status":"failed"},{"step":"bonus","message":"dependency_failed","status":"skipped"}],"points":null,"user":{"active":true,"id":"1","name":"user-1"}}
+assert: data.get("points") is None
+PASS M3.gate points field is null
+body={"_errors":[{"step":"loyalty","message":"upstream error","status":"failed"},{"step":"bonus","message":"dependency_failed","status":"skipped"}],"points":null,"user":{"active":true,"id":"1","name":"user-1"}}
+assert: "_errors" in data and len(data["_errors"]) >= 1
+PASS M3.gate _errors array present
+body={"_errors":[{"step":"loyalty","message":"upstream error","status":"failed"},{"step":"bonus","message":"dependency_failed","status":"skipped"}],"points":null,"user":{"active":true,"id":"1","name":"user-1"}}
+assert: any(e.get("step") == "loyalty" and e.get("status") == "failed" for e in data.get("_errors", []))
+PASS M3.gate loyalty step marked failed in _errors
+body={"_errors":[{"step":"loyalty","message":"upstream error","status":"failed"},{"step":"bonus","message":"dependency_failed","status":"skipped"}],"points":null,"user":{"active":true,"id":"1","name":"user-1"}}
+assert: any(e.get("step") == "bonus" and e.get("status") == "skipped" and e.get("message") == "dependency_failed" for e in data.get("_errors", []))
+PASS M3.gate bonus step marked skipped/dependency_failed in _errors
+$ grep -E '"step":"bonus".*"upstream"' /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.Xz8weyE0WC/gateway.log (expecting no match)
+PASS M3.gate bonus step never executed (no upstream call)
+
+RESULT M3: PASS (15 pass, 0 fail, 0 manual, 0 skip)

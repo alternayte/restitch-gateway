@@ -1,0 +1,45 @@
+=== GATE M6 (commit 897f269d, 2026-09-02) ===
+
+
+##[T6.1]
+$ test -f /Users/nathananderson-tennant/Development/restitch/internal/upstream/retry.go
+
+exit_code=0
+PASS T6.1 retry.go exists
+$ go test -count=1 -race ./internal/upstream/ -run TestRetry
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.371s
+exit_code=0
+PASS T6.1 upstream retry tests
+
+##[T6.2]
+$ grep -q sony/gobreaker /Users/nathananderson-tennant/Development/restitch/go.mod
+
+exit_code=0
+PASS T6.2 gobreaker dependency present
+$ go test -count=1 -race ./internal/upstream/ -run TestBreaker
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.355s
+exit_code=0
+PASS T6.2 breaker tests
+
+##[T6.3]
+$ go test -count=1 ./internal/upstream/ -run TestCoalesce\|TestSingleflight
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	0.404s [no tests to run]
+exit_code=0
+PASS T6.3 coalescing tests
+
+##[M6.gate]
+$ go test -count=1 -race ./internal/upstream/ ./internal/composition/
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.424s
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.613s
+exit_code=0
+PASS M6.gate upstream + composition tests (race)
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-39-g897f269d" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 52866...
+# Starting gateway on port 52864 (admin 52865)...
+Status codes from 6 requests:  200 200 200 502 502 502
+PASS M6.gate circuit breaker tripped (502 seen)
+Breaker metric: restitch_breaker_state{upstream="flaky"} 2
+PASS M6.gate breaker state metric present
+
+RESULT M6: PASS (8 pass, 0 fail, 0 manual, 0 skip)

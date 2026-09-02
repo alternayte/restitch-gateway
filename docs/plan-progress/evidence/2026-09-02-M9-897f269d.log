@@ -1,0 +1,53 @@
+=== GATE M9 (commit 897f269d, 2026-09-02) ===
+
+
+##[T9.1]
+$ test -d /Users/nathananderson-tennant/Development/restitch/internal/inbound
+
+exit_code=0
+PASS T9.1 inbound package exists
+$ go test -count=1 -race ./internal/inbound/ ./internal/composition/
+ok  	github.com/alternayte/restitch-gateway/internal/inbound	1.424s
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.617s
+exit_code=0
+PASS T9.1 inbound + composition tests
+
+##[M9.gate]
+$ go test -count=1 -race ./...
+?   	github.com/alternayte/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch	2.490s
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	4.225s
+ok  	github.com/alternayte/restitch-gateway/internal/admin	1.424s
+ok  	github.com/alternayte/restitch-gateway/internal/auth	4.644s
+ok  	github.com/alternayte/restitch-gateway/internal/composition	2.715s
+ok  	github.com/alternayte/restitch-gateway/internal/devmode	4.887s
+ok  	github.com/alternayte/restitch-gateway/internal/gwconfig	2.739s
+ok  	github.com/alternayte/restitch-gateway/internal/hotreload	6.673s
+ok  	github.com/alternayte/restitch-gateway/internal/inbound	2.616s
+?   	github.com/alternayte/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/internal/observability	1.774s
+ok  	github.com/alternayte/restitch-gateway/internal/ratelimit	1.506s
+ok  	github.com/alternayte/restitch-gateway/internal/registry	1.630s
+ok  	github.com/alternayte/restitch-gateway/internal/reqlog	1.213s
+ok  	github.com/alternayte/restitch-gateway/internal/server	1.228s
+ok  	github.com/alternayte/restitch-gateway/internal/session	1.796s
+ok  	github.com/alternayte/restitch-gateway/internal/testenv	2.287s
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.950s
+exit_code=0
+PASS M9.gate full tests (race)
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-39-g897f269d" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 53257...
+# Starting gateway on port 53255 (admin 53256)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:53255/protected
+status=401
+body={"error":"unauthorized"}
+PASS M9.gate no API key returns 401
+$ curl -H 'X-API-Key: test-key-123' /protected → 200
+PASS M9.gate valid API key returns 200
+$ curl -s -w '%{http_code}' http://127.0.0.1:53255/health
+status=200
+body={"status":"ok"}
+PASS M9.gate /health open without key
+
+RESULT M9: PASS (6 pass, 0 fail, 0 manual, 0 skip)

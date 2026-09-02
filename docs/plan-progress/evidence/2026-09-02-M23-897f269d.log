@@ -1,0 +1,185 @@
+=== GATE M23 (commit 897f269d, 2026-09-02) ===
+
+
+##[M23.gate]
+$ k6 version
+k6 v2.1.0 (commit/devel, go1.26.4, darwin/arm64)
+PASS k6 available (hard requirement)
+
+##[T23.1]
+$ grep -q func BuildTransport internal/upstream/client.go
+
+exit_code=0
+PASS BuildTransport defined
+$ grep -q maxIdleConnsPerHost = 100 internal/upstream/client.go
+
+exit_code=0
+PASS MaxIdleConnsPerHost defaults to 100
+$ grep -q MinVersion:         tls.VersionTLS12 internal/upstream/client.go
+
+exit_code=0
+PASS TLS 1.2 minimum enforced
+$ go test -race -count=1 -run TestBuildTransport ./internal/upstream/...
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.347s
+exit_code=0
+PASS transport defaults covered by tests
+
+##[T23.2]
+$ grep -q func DrainAndClose internal/upstream/drain.go
+
+exit_code=0
+PASS DrainAndClose defined
+$ grep -q DrainAndClose(resp.Body) internal/composition/step.go
+
+exit_code=0
+PASS composition step drains
+$ grep -q DrainAndClose(resp.Body) internal/upstream/health.go
+
+exit_code=0
+PASS health check drains
+$ grep -q DrainAndClose(resp.Body) internal/hotreload/client.go
+
+exit_code=0
+PASS hotreload client drains
+$ grep -q DrainAndClose(resp.Body) internal/devmode/writer.go
+
+exit_code=0
+PASS devmode writer drains
+$ grep -rn 'defer resp.Body.Close()' internal/upstream internal/hotreload internal/devmode internal/composition
+  (no matches)
+count=0
+PASS no bare resp.Body.Close() on upstream response paths
+
+##[T23.3]
+$ grep -q type TransportConfig struct internal/composition/config.go
+
+exit_code=0
+PASS TransportConfig type in config.go
+$ grep -q Transport .*\`yaml:"transport"\` internal/composition/config.go
+
+exit_code=0
+PASS Upstream.Transport field bound to yaml
+$ grep -q yaml:"max_idle_conns_per_host" internal/composition/config.go
+
+exit_code=0
+PASS max_idle_conns_per_host yaml tag
+$ grep -q yaml:"insecure_skip_verify" internal/composition/config.go
+
+exit_code=0
+PASS insecure_skip_verify yaml tag
+$ grep -q toUpstreamTransport(up.Transport) internal/composition/parser.go
+
+exit_code=0
+PASS parser translates the transport block
+$ bash -c ! grep -qE "Transport:[[:space:]]+upstream\.TransportConfig\{\}" internal/composition/parser.go
+
+exit_code=0
+PASS parser no longer hardcodes empty transport
+$ test -f internal/composition/transport_test.go
+
+exit_code=0
+PASS transport_test.go exists
+$ bash -c out=$(go test -race -count=1 -run 'TestTransportEndToEndThroughCompileConfig' -v ./internal/composition/... 2>&1); code=$?; echo "$out"; echo "$out" | grep -q '^--- PASS: TestTransportEndToEndThroughCompileConfig' && [ "$code" -eq 0 ]
+=== RUN   TestTransportEndToEndThroughCompileConfig
+2026/09/02 17:20:43 WARN TLS verification disabled for upstream upstream=api
+--- PASS: TestTransportEndToEndThroughCompileConfig (0.00s)
+PASS
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.482s
+exit_code=0
+PASS m23.pool YAML transport reaches the live http.Transport
+$ bash -c out=$(go test -race -count=1 -run 'TestTransport' -v ./internal/composition/... 2>&1); code=$?; echo "$out"; echo "$out" | grep -q '^--- PASS: TestTransport' && [ "$code" -eq 0 ]
+=== RUN   TestTransportBlockParsesAllFields
+--- PASS: TestTransportBlockParsesAllFields (0.00s)
+=== RUN   TestTransportBlockOmittedIsNil
+--- PASS: TestTransportBlockOmittedIsNil (0.00s)
+=== RUN   TestTransportPartialBlockLeavesOthersZero
+--- PASS: TestTransportPartialBlockLeavesOthersZero (0.00s)
+=== RUN   TestTransportTranslatesToUpstreamConfig
+2026/09/02 17:20:46 WARN TLS verification disabled for upstream upstream=api
+--- PASS: TestTransportTranslatesToUpstreamConfig (0.00s)
+=== RUN   TestTransportEndToEndThroughCompileConfig
+2026/09/02 17:20:46 WARN TLS verification disabled for upstream upstream=api
+--- PASS: TestTransportEndToEndThroughCompileConfig (0.00s)
+PASS
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.483s
+exit_code=0
+PASS transport parser tests pass
+
+##[M23.unit]
+$ go vet ./internal/upstream/...
+
+exit_code=0
+PASS go vet upstream
+$ go vet ./internal/composition/...
+
+exit_code=0
+PASS go vet composition
+$ go test -race -count=1 ./internal/upstream/...
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.416s
+exit_code=0
+PASS go test upstream
+$ go test -race -count=1 ./internal/composition/...
+ok  	github.com/alternayte/restitch-gateway/internal/composition	1.745s
+exit_code=0
+PASS go test composition
+$ go test -race -count=1 ./...
+?   	github.com/alternayte/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch	1.532s
+ok  	github.com/alternayte/restitch-gateway/cmd/restitch-studio	4.578s
+ok  	github.com/alternayte/restitch-gateway/internal/admin	2.054s
+ok  	github.com/alternayte/restitch-gateway/internal/auth	4.772s
+ok  	github.com/alternayte/restitch-gateway/internal/composition	2.862s
+ok  	github.com/alternayte/restitch-gateway/internal/devmode	4.575s
+ok  	github.com/alternayte/restitch-gateway/internal/gwconfig	2.753s
+ok  	github.com/alternayte/restitch-gateway/internal/hotreload	6.553s
+ok  	github.com/alternayte/restitch-gateway/internal/inbound	2.506s
+?   	github.com/alternayte/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/alternayte/restitch-gateway/internal/observability	2.121s
+ok  	github.com/alternayte/restitch-gateway/internal/ratelimit	1.495s
+ok  	github.com/alternayte/restitch-gateway/internal/registry	1.638s
+ok  	github.com/alternayte/restitch-gateway/internal/reqlog	1.229s
+ok  	github.com/alternayte/restitch-gateway/internal/server	1.291s
+ok  	github.com/alternayte/restitch-gateway/internal/session	1.621s
+ok  	github.com/alternayte/restitch-gateway/internal/testenv	2.313s
+ok  	github.com/alternayte/restitch-gateway/internal/upstream	1.869s
+exit_code=0
+PASS go test full suite
+
+##[M23.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-39-g897f269d" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 54693...
+$ curl /__stats (probe)
+{"conns_accepted":2,"requests":0}
+PASS mockupstream /__stats endpoint available
+# Running k6 baseline arm (max_idle_conns_per_host: 2)...
+$ curl -X POST /__stats/reset  (arm baseline) -> {"reset":true}
+$ curl /__stats  (arm baseline) -> {"conns_accepted":16195,"requests":56825}
+# Cooling down 15s so loopback TIME_WAIT sockets drain...
+# Running k6 tuned arm (max_idle_conns_per_host: 100)...
+$ curl -X POST /__stats/reset  (arm tuned) -> {"reset":true}
+$ curl /__stats  (arm tuned) -> {"conns_accepted":249,"requests":968595}
+baseline  max_idle=2    p95=690.346ms  error_rate=0.032615  conns_accepted=16195  http_reqs=11559
+tuned     max_idle=100  p95=11.342ms error_rate=0.000000 conns_accepted=249 http_reqs=193719
+$ python3 -c import sys; b=int(sys.argv[1]); t=int(sys.argv[2]); assert b>0 and t>0, f'no connections recorded: baseline={b} tuned={t}'; assert b >= 10*t, f'baseline={b} is not >= 10x tuned={t} (ratio {b/t:.1f}x) — pooling not in effect' 16195 249
+
+exit_code=0
+PASS tuned run accepted >=10x fewer upstream connections than baseline
+$ python3 -c import sys; bc,br,tc,tr=(int(x) for x in sys.argv[1:5]); b=bc/max(br,1); t=tc/max(tr,1); assert b >= 10*t, f'baseline {b:.4f} conns/req not >= 10x tuned {t:.6f} conns/req' 16195 11559 249 193719
+
+exit_code=0
+PASS tuned connection reuse ratio beats baseline by >=10x
+$ python3 -c import sys; p=float(sys.argv[1]); assert p<50.0, f'p95={p}ms' 11.342
+
+exit_code=0
+PASS tuned P95 < 50ms
+$ python3 -c import sys; e=float(sys.argv[1]); assert e<0.01, f'error_rate={e}' 0.000000
+
+exit_code=0
+PASS tuned error rate < 1%
+$ python3 -c import sys; n=int(sys.argv[1]); assert n>1000, f'http_reqs={n}' 193719
+
+exit_code=0
+PASS tuned run actually generated load
+
+RESULT M23: PASS (31 pass, 0 fail, 0 manual, 0 skip)

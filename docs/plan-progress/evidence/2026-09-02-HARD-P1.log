@@ -1,0 +1,44 @@
+# HARD.P1 — Wave P1 (before the first public release tag)
+
+Plan items completed, each verified with the named command output:
+
+## P1.1 — M1-M12 data-plane and control-plane correctness
+Fix commit ff494c2a. Verification: go build/vet clean; full
+`go test -race -count=1 ./...` green (17 packages). Negative checks: the M1
+retry, M7 status, M11 origin, and M12 proxy tests FAIL on the unfixed code
+(reproduced by removing each guard) and PASS with the fix.
+
+## P1.2 — H7 + M13-M18 docker and frontend
+Commits 98bffb43, b8891c8e, 3b28862d, 25cbcb22, 7b9c8e9e.
+Verification: docker compose quickstart + deploy stack up as the distroless
+nonroot user (uid 65532) with real healthchecks (`/restitch healthcheck`,
+`/restitch-studio -healthcheck`); studio SPA and gateway metrics 200;
+prometheus scrape up=1. Studio: tsc strict-clean, 28/28 vitest tests pass,
+vite build clean.
+
+## P1.3 — M19-M25 CI, verification, harness
+Commits ef759fa0, 651b3ef8, 10919fd8. Verification: coverage gate awk form
+passes at 76.1%; M23 A/B load gate PASS; all gates re-run green in the final
+make verify-all (RESULT lines in 2026-09-02-*-<sha>.log evidence files).
+
+## P1.4 — M26-M36 docs, hygiene, community files
+Commit fc355ca4. Verification: gofmt -l . prints nothing across the tree;
+fresh-clone `make build-all` rebuilds the frontend when dist/ is absent
+(dist fully ignored, M36); community files exist (CONTRIBUTING, SECURITY,
+CODE_OF_CONDUCT, templates, CODEOWNERS); license headers on all 135 Go
+files; ledger-check green.
+
+## P1.5 — SECURITY.md trust model
+Committed with fc355ca4 (M33 batch). Contents: supported versions, the
+trust model (admin key required, loopback binds, registry key), and the
+vulnerability reporting flow.
+
+## P1.6 — full verification suite
+`make ci` exit 0; `make e2e` exit 0; `make build-all` exit 0;
+`make verify-all` exit 0 (26 gates PASS, 2026-09-02 final runs);
+`make ledger-check` exit 0 (COVERAGE 126/129, remainder MANUAL-status rows
+that do not error).
+
+Note: M23's chained-run flake on this macOS host is loopback ephemeral-port
+exhaustion (`can't assign requested address`); standalone and drained
+runs PASS, and CI (ubuntu, wider port range) runs the loadtest job alone.
