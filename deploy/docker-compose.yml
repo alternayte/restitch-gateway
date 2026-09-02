@@ -17,8 +17,14 @@ services:
     entrypoint: ["/restitch-studio"]
     command:
       - "-port=3080"
+      # The studio defaults to loopback (hardening C2); inside a container
+      # that makes the SPA unreachable from the host and the registry
+      # unreachable from the gateway, so the stack binds all interfaces.
+      - "-bind=0.0.0.0"
       - "-db-path=/data/studio.db"
       - "-gateway-admin-url=http://gateway:9090"
+      - "-registry-key=${RESTITCH_REGISTRY_KEY:-restitch-dev}"
+      - "-admin-key=${RESTITCH_ADMIN_API_KEY:-restitch-dev}"
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: restitch-studio
@@ -43,6 +49,7 @@ services:
     command:
       - "run"
       - "-registry-url=http://studio:3080"
+      - "-registry-key=${RESTITCH_REGISTRY_KEY:-restitch-dev}"
       - "-poll-interval=10s"
       - "-port=8080"
       - "-log-format=json"
@@ -51,9 +58,15 @@ services:
       # bundle, and a fresh Studio has no configs. Setting the admin server
       # through env vars means /metrics is up regardless of bundle contents,
       # so Prometheus has something to scrape from the first second.
+      # The admin key is required since hardening C3; the studio proxy sends
+      # the same value as X-Admin-Key.
       RESTITCH_ADMIN_ENABLED: "true"
       RESTITCH_ADMIN_PORT: "9090"
-      RESTITCH_ADMIN_API_KEY: ${RESTITCH_ADMIN_API_KEY:-}
+      # The admin server defaults to loopback (hardening C3); inside a
+      # container that would make /metrics unreachable from Prometheus and
+      # the host port mapping dead, so the stack binds all interfaces.
+      RESTITCH_ADMIN_BIND: "0.0.0.0"
+      RESTITCH_ADMIN_API_KEY: ${RESTITCH_ADMIN_API_KEY:-restitch-dev}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: restitch-gateway
     ports:
@@ -62,6 +75,9 @@ services:
     depends_on:
       studio:
         condition: service_started
+    # The initial registry fetch is fatal if the studio is not yet listening
+    # (a startup race), so the gateway retries until it succeeds.
+    restart: on-failure
 
   prometheus:
     image: prom/prometheus:${PROMETHEUS_VERSION}
