@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.0.0 — 2026-09-02
+## v1.2.0 — 2026-09-02
 
 First public release. Everything below this entry — the composition-engine
 rewrite, the Studio, milestones M17-M25, and the open-source hardening pass —
@@ -55,7 +55,7 @@ plan ledger.
 ### Rewrite overview
 
 Complete rewrite of the composition engine and addition of Restitch Studio
-(originally drafted as the v2.0.0 section below).
+(this section was drafted under the heading "v2.0.0" before the release was tagged v1.2.0 to match the module path).
 
 ### Features
 
