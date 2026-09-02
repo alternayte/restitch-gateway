@@ -1,4 +1,15 @@
+# Keep the docker build context small (finding H7): only what the Go build
+# and frontend build need. Everything else bloats the context sent to the
+# daemon — including stale binaries and live database files.
 .git
 .planning
 bin
 studio/node_modules
+docs
+tests
+scripts
+examples
+PLAN.md
+/restitch
+/*.test
+studio.db*
