@@ -10,7 +10,7 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (registers as "sqlite")
 
-	"github.com/restitch/restitch-gateway/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/internal/reqlog"
 )
 
 // SQLStorage is a Storage implementation backed by SQLite (or Turso, which

@@ -3,7 +3,7 @@ package upstream
 import (
 	"net/http"
 
-	"github.com/restitch/restitch-gateway/internal/observability"
+	"github.com/alternayte/restitch-gateway/internal/observability"
 )
 
 type metricsTripper struct {

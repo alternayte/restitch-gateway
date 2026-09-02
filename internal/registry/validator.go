@@ -7,8 +7,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/restitch/restitch-gateway/internal/composition"
-	"github.com/restitch/restitch-gateway/internal/gwconfig"
+	"github.com/alternayte/restitch-gateway/internal/composition"
+	"github.com/alternayte/restitch-gateway/internal/gwconfig"
 )
 
 // lineRe and columnRe extract "line N" / "column N" substrings from yaml.v3

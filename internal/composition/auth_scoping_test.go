@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/restitch/restitch-gateway/internal/server"
+	"github.com/alternayte/restitch-gateway/internal/server"
 )
 
 func TestHandler_AuthorizationScoping_D8(t *testing.T) {

@@ -46,7 +46,7 @@ proof of work. scripts/verify.sh is the judge. You do not get to be the judge.
 
 ## Project conventions
 
-- Go module: `github.com/restitch/restitch-gateway`, Go 1.25.6
+- Go module: `github.com/alternayte/restitch-gateway`, Go 1.25.7
 - Build: `make build` (gateway), `make build-all` (gateway + studio)
 - Test: `make ci` (vet + lint + race), `make e2e` (golden specs)
 - Frontend: `cd studio && npm ci && npm run build`

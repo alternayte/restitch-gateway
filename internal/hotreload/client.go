@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/internal/upstream"
 )
 
 // maxBundleBytes bounds the registry bundle response body. A broken or

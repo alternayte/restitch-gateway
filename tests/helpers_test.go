@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/restitch/restitch-gateway/internal/composition"
-	"github.com/restitch/restitch-gateway/internal/server"
+	"github.com/alternayte/restitch-gateway/internal/composition"
+	"github.com/alternayte/restitch-gateway/internal/server"
 )
 
 func parseAndCompile(yamlBytes []byte) (*composition.CompiledConfig, error) {

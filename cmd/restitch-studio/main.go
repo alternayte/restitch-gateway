@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/registry"
-	"github.com/restitch/restitch-gateway/internal/session"
+	"github.com/alternayte/restitch-gateway/internal/registry"
+	"github.com/alternayte/restitch-gateway/internal/session"
 )
 
 //go:embed all:dist

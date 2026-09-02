@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	upstreampkg "github.com/restitch/restitch-gateway/internal/upstream"
+	upstreampkg "github.com/alternayte/restitch-gateway/internal/upstream"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )

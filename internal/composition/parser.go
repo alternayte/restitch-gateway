@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/auth"
-	"github.com/restitch/restitch-gateway/internal/gwconfig"
-	"github.com/restitch/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/internal/auth"
+	"github.com/alternayte/restitch-gateway/internal/gwconfig"
+	"github.com/alternayte/restitch-gateway/internal/upstream"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )

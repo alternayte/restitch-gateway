@@ -11,7 +11,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/restitch/restitch-gateway/internal/admin"
+	"github.com/alternayte/restitch-gateway/internal/admin"
 )
 
 // Duration wraps time.Duration for YAML unmarshaling from Go duration strings.

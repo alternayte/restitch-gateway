@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/internal/reqlog"
 )
 
 func TestAccumulator_Flush(t *testing.T) {

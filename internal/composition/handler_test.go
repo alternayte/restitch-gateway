@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/restitch/restitch-gateway/internal/server"
+	"github.com/alternayte/restitch-gateway/internal/server"
 )
 
 func TestHandler_ServeHTTP(t *testing.T) {

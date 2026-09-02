@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/internal/reqlog"
 )
 
 // MultiRecorder feeds request records to the ring buffer, stats, the

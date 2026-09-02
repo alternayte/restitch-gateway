@@ -3,7 +3,7 @@ package admin
 import (
 	"sync"
 
-	"github.com/restitch/restitch-gateway/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/internal/reqlog"
 )
 
 // RingBuffer is a fixed-size circular buffer for request records.

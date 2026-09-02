@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/restitch/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/internal/upstream"
 )
 
 // The transport: block is documented in docs/configuration.md and PLAN.md but
