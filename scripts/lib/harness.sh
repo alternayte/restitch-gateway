@@ -3,6 +3,13 @@
 # Source this at the top of every gate script:
 #   source "$(dirname "$0")/../lib/harness.sh"
 #   h_init M3
+#
+# External dependencies (finding M25, declared here):
+#   - python3: h_free_port, h_assert_json, h_assert_json_body, and several
+#     gates use it. Not optional on macOS or GitHub ubuntu runners.
+#   - curl: every HTTP assertion.
+#   - go/make: build and test steps.
+#   - jq is NOT required; gates parse JSON with python3 only.
 
 set -euo pipefail
 
@@ -363,6 +370,7 @@ h_assert_header() {
 
 # Assert a Python expression against JSON from a URL.
 # Usage: h_assert_json "http://..." 'data["key"] == "value"' "desc"
+# Requires python3 (declared in the header of this file).
 h_assert_json() {
     local url="$1" expr="$2" desc="${3:-json assertion at ${url}}"
     local body
@@ -374,11 +382,17 @@ h_assert_json() {
         echo "assert: ${expr}"
     } >> "${H_EVIDENCE_FILE}"
 
+    # Route the body through a temp file (finding M25): interpolating it into
+    # a shell-quoted Python string breaks on quotes and can inject code.
+    local tmpfile="${H_TMP}/json_assert_$$"
+    echo "${body}" > "${tmpfile}"
+
     local result exit_code=0
     result=$(python3 -c "
 import json, sys
 try:
-    data = json.loads('''${body}''')
+    with open('${tmpfile}') as f:
+        data = json.load(f)
     result = ${expr}
     if result:
         sys.exit(0)
@@ -390,6 +404,7 @@ except Exception as e:
     sys.exit(1)
 " 2>&1) || exit_code=$?
 
+    rm -f "${tmpfile}"
     if [[ $exit_code -eq 0 ]]; then
         h_pass "${desc}"
     else
@@ -561,7 +576,9 @@ h_grep_repo() {
     fi
 
     local output count=0
-    output=$(grep -rn "${pattern}" ${REPO_ROOT}/${paths} 2>/dev/null) || true
+    # Quoted paths (finding M25): REPO_ROOT and the path/glob argument come
+    # from callers; unquoted they break on spaces.
+    output=$(grep -rn "${pattern}" "${REPO_ROOT}/${paths}" 2>/dev/null) || true
     if [[ -n "${output}" ]]; then
         count=$(echo "${output}" | wc -l | tr -d ' ')
     fi
