@@ -130,7 +130,6 @@ async function put<T>(path: string, body: unknown): Promise<T> {
 export const api = {
   info: () => get<Info>("/api/info"),
   compositions: () => get<CompositionInfo[]>("/api/compositions"),
-  composition: (name: string) => get<CompositionInfo>(`/api/compositions/${name}`),
   upstreams: () => get<UpstreamInfo[]>("/api/upstreams"),
   requests: (limit = 100) => get<RequestRecord[]>(`/api/requests?limit=${limit}`),
   stats: () => get<StatsResponse>("/api/stats"),
@@ -140,8 +139,6 @@ export const api = {
     get<TimeSeriesBucket[]>(`/api/stats/timeseries?range=${range}&resolution=${resolution}${composition ? `&composition=${composition}` : ''}`),
   stepMetrics: (composition: string, range: string) =>
     get<StepAggregate[]>(`/api/stats/steps?composition=${composition}&range=${range}`),
-  request: (id: string) =>
-    get<RequestRecord>(`/api/requests/${id}`),
   getPreferences: () => get<PreferencesResponse>("/api/v1/preferences"),
   putPreferences: (p: PreferencesPayload) =>
     put<PreferencesResponse>("/api/v1/preferences", p),

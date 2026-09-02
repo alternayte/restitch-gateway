@@ -298,7 +298,13 @@ func spaFileServer(fsys http.FileSystem) http.Handler {
 			fileServer.ServeHTTP(w, r)
 			return
 		}
-		f.Close()
+		defer f.Close()
+		if st, statErr := f.Stat(); statErr == nil && st.IsDir() {
+			// A path that resolves to a directory would otherwise serve an
+			// http.FileServer listing (finding L21).
+			http.NotFound(w, r)
+			return
+		}
 
 		fileServer.ServeHTTP(w, r)
 	})

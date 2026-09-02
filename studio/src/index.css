@@ -35,8 +35,8 @@
   --color-inverse-ink: #000000;
 
   /* Font families */
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", helvetica, arial, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "Fira Code", monospace;
+  --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", helvetica, arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", monospace;
 }
 
 @theme inline {

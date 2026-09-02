@@ -6,7 +6,7 @@ export function StepDetailPanel({ step, onClose }: { step: StepRecord; onClose: 
     <div className="bg-surface-2 border border-hairline rounded-xl p-4 mt-2">
       <div className="flex items-center justify-between mb-3">
         <div className="text-[14px] font-semibold text-ink">{step.name}</div>
-        <button onClick={onClose} className="p-1 text-ink-subtle hover:text-ink">
+        <button onClick={onClose} aria-label={`Close ${step.name} details`} className="p-1 text-ink-subtle hover:text-ink">
           <X size={14} />
         </button>
       </div>

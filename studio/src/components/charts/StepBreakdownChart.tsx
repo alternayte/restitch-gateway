@@ -22,7 +22,7 @@ export function StepBreakdownChart({ steps }: { steps: StepAggregate[] }) {
           <YAxis type="category" dataKey="name" tick={{ fill: chartTheme.colors.axisText, fontSize: 12 }} axisLine={false} tickLine={false} width={80} />
           <Tooltip
             contentStyle={{ background: chartTheme.colors.tooltipBg, border: `1px solid ${chartTheme.colors.tooltipBorder}`, borderRadius: 8, fontSize: 12 }}
-            formatter={(value: any) => [`${Number(value).toFixed(1)}ms`]}
+            formatter={(value) => [`${Number(value).toFixed(1)}ms`]}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           <Bar dataKey="avg" name="Avg" radius={[0, 4, 4, 0]}>

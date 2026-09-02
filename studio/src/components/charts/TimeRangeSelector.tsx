@@ -1,5 +1,11 @@
 export type TimeRange = "1h" | "6h" | "24h"
 
+// isTimeRange narrows an unknown value to TimeRange (finding L22): server or
+// localStorage data must be validated, not cast.
+export function isTimeRange(v: unknown): v is TimeRange {
+  return v === "1h" || v === "6h" || v === "24h"
+}
+
 export function TimeRangeSelector({ value, onChange }: { value: TimeRange; onChange: (v: TimeRange) => void }) {
   const options: TimeRange[] = ["1h", "6h", "24h"]
   return (
