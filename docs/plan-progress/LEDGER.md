@@ -990,3 +990,15 @@ Latest row per task ID wins. Never edit or delete existing rows.
 | 2026-09-02 | final.build | final | PASS | 897f269d | evidence/2026-09-02-final-897f269d.log#final.build | auto (h_finish) |
 | 2026-09-02 | final.smoke | final | PASS | 897f269d | evidence/2026-09-02-final-897f269d.log#final.smoke | auto (h_finish) |
 | 2026-09-02 | final.ci | final | PASS | 897f269d | evidence/2026-09-02-final-897f269d.log#final.ci | auto (h_finish) |
+
+| 2026-09-02 | HARD.P1-1 | HARD | PASS | ff494c2a | evidence/2026-09-02-HARD-P1.log | M1-M12 fixed (M9 already landed in P0-2). Negative checks reproduce each defect on unfixed code. Full race suite green |
+| 2026-09-02 | HARD.P1-2 | HARD | PASS | 25cbcb22 | evidence/2026-09-02-HARD-P1.log | H7+M13-M18: nonroot distroless image, node:24, real healthchecks, strict TS + error boundary + error states, --passWithNoTests gone. Compose stacks verified live as uid 65532 |
+| 2026-09-02 | HARD.P1-3 | HARD | PASS | ef759fa0 | evidence/2026-09-02-HARD-P1.log | M19-M25: coverage scope documented, actions pinned + dependabot, readme test non-vacuous, e2e race+timeout, permissions, artifacts, harness fixes (user-approved) |
+| 2026-09-02 | HARD.P1-4 | HARD | PASS | fc355ca4 | evidence/2026-09-02-HARD-P1.log | M26-M36: docs corrected, .planning deleted, CHANGELOG dated entry, license headers on 135 Go files, gofmt clean tree + CI check, dist fully ignored |
+| 2026-09-02 | HARD.P1-5 | HARD | PASS | fc355ca4 | evidence/2026-09-02-HARD-P1.log | SECURITY.md trust model shipped with M33 |
+| 2026-09-02 | HARD.P1-6 | HARD | PASS | 7c3e6baa | evidence/2026-09-02-HARD-P1.log | make ci/e2e/build-all/verify-all exit 0; verify-all 26/26 gates PASS; ledger-check exit 0. M23 mac chained-run flake = loopback port exhaustion (standalone PASS) |
+| 2026-09-02 | HARD.P2-1 | HARD | PASS | dace7e7a | evidence/2026-09-02-HARD-P2.log | L1-L34: L9->C4, L33->H9; backend+studio+docs+gate (L25/L29 user-approved) fixes landed; M10/final gates PASS after gate tweaks |
+| 2026-09-02 | HARD.P2-2 | HARD | PASS | 897f269d | evidence/2026-09-02-HARD-P2.log | README Install + Architecture sections, docs/architecture.md added |
+| 2026-09-02 | HARD.P2-3 | HARD | PASS | 897f269d | evidence/2026-09-02-HARD-P2.log | README badges (license, Go, CI) added |
+| 2026-09-02 | HARD.P2-4 | HARD | PASS | 897f269d | evidence/2026-09-02-HARD-P2.log | VERSIONING.md compatibility policy added |
+| 2026-09-02 | HARD.P2-5 | HARD | PASS | 897f269d | evidence/2026-09-02-HARD-P2.log | examples/registry verified live end to end (seed 201, route 200, status mode=registry count=1) |
