@@ -21,6 +21,7 @@ server:
   port: @GW_PORT@
 admin:
   port: @ADMIN_PORT@
+  api_key: "test-admin-key"
 upstreams:
   mock:
     url: "http://127.0.0.1:@MOCK_PORT@"
@@ -47,8 +48,10 @@ h_assert_status "http://127.0.0.1:${GW_PORT}/api/users/1" 200 \
 # Corrupt the config file
 echo 'garbage: [' >> "${config}"
 
-# Try reload via admin API — should fail but keep serving
-reload_body=$(curl -s -X POST "http://127.0.0.1:${ADMIN_PORT}/admin/api/reload" 2>/dev/null) || true
+# Try reload via admin API — should fail but keep serving. The admin key is
+# required since hardening C3.
+reload_body=$(curl -s -X POST -H "X-Admin-Key: test-admin-key" \
+    "http://127.0.0.1:${ADMIN_PORT}/admin/api/reload" 2>/dev/null) || true
 {
     echo "$ POST /admin/api/reload (with corrupted config)"
     echo "${reload_body}"
@@ -80,6 +83,7 @@ server:
   port: @GW_PORT@
 admin:
   port: @ADMIN_PORT@
+  api_key: "test-admin-key"
 upstreams:
   mock:
     url: "http://127.0.0.1:@MOCK_PORT@"

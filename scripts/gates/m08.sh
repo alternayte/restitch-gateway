@@ -31,6 +31,7 @@ server:
   port: @GW_PORT@
 admin:
   port: @ADMIN_PORT@
+  api_key: "test-admin-key"
 upstreams:
   mock:
     url: "http://127.0.0.1:@MOCK_PORT@"
@@ -59,16 +60,29 @@ h_assert_body_contains "http://127.0.0.1:${ADMIN_PORT}/metrics" \
     "restitch_requests_total" \
     "M8.gate restitch_requests_total metric present"
 
-# Check admin API requests endpoint
-h_assert_status "http://127.0.0.1:${ADMIN_PORT}/admin/api/requests" 200 \
-    "M8.gate admin requests endpoint returns 200"
-body="${H_LAST_BODY}"
-h_assert_json_body "${body}" 'isinstance(data, list) and len(data) >= 1' \
+# Check admin API requests endpoint (key required since hardening C3)
+admin_hdrs=(-H "X-Admin-Key: test-admin-key")
+requests_status=$(curl -s -o "${H_TMP}/requests.json" -w '%{http_code}' \
+    "${admin_hdrs[@]}" \
+    "http://127.0.0.1:${ADMIN_PORT}/admin/api/requests") || true
+requests_body=$(cat "${H_TMP}/requests.json" 2>/dev/null || true)
+if [[ "${requests_status}" == "200" ]]; then
+    h_pass "M8.gate admin requests endpoint returns 200"
+else
+    h_fail "M8.gate admin requests endpoint returns 200 (got ${requests_status})"
+fi
+h_assert_json_body "${requests_body}" 'isinstance(data, list) and len(data) >= 1' \
     "M8.gate admin requests contains at least 1 record"
 
 # Check compositions endpoint
-h_assert_status "http://127.0.0.1:${ADMIN_PORT}/admin/api/compositions" 200 \
-    "M8.gate admin compositions endpoint returns 200"
+compositions_status=$(curl -s -o "${H_TMP}/compositions.json" -w '%{http_code}' \
+    "${admin_hdrs[@]}" \
+    "http://127.0.0.1:${ADMIN_PORT}/admin/api/compositions") || true
+if [[ "${compositions_status}" == "200" ]]; then
+    h_pass "M8.gate admin compositions endpoint returns 200"
+else
+    h_fail "M8.gate admin compositions endpoint returns 200 (got ${compositions_status})"
+fi
 
 # /health/upstreams on data port should be gone (moved to admin)
 status_old=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${GW_PORT}/health/upstreams" 2>/dev/null) || true

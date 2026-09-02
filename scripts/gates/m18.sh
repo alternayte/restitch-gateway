@@ -42,6 +42,7 @@ server:
   port: @GW_PORT@
 admin:
   port: @ADMIN_PORT@
+  api_key: "test-admin-key"
 upstreams:
   mock:
     url: "http://127.0.0.1:@MOCK_PORT@"
@@ -98,9 +99,10 @@ else
     h_fail "M18.gate traceparent not found in echo response"
 fi
 
-# Check trace_id in admin request records
+# Check trace_id in admin request records (admin key required since C3)
 sleep 1
-requests_body=$(curl -s "http://127.0.0.1:${ADMIN_PORT}/admin/api/requests" 2>/dev/null) || true
+requests_body=$(curl -s -H "X-Admin-Key: test-admin-key" \
+    "http://127.0.0.1:${ADMIN_PORT}/admin/api/requests" 2>/dev/null) || true
 if echo "${requests_body}" | grep -qi 'trace_id'; then
     h_pass "M18.gate trace_id present in admin request records"
 else

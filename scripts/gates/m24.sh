@@ -196,7 +196,9 @@ if [[ ! -f "${REPO_ROOT}/tests/loadtest/m24_baseline.js" ]]; then
     h_fail "tests/loadtest/m24_baseline.js missing"
 else
     h_start_mockupstream
-    h_start_studio
+    # The k6 studio scenario polls the registry API, which requires the key
+    # (hardening C1).
+    h_start_studio -registry-key test-registry-key
 
     M24_CONFIG="$(h_config m24_load <<'YAML'
 server:
@@ -233,6 +235,7 @@ YAML
     ERR_RATE="${M24_ERR_RATE}" \
     GW_URL="http://127.0.0.1:${GW_PORT}/loadtest" \
     STUDIO_URL="http://127.0.0.1:${STUDIO_PORT}/api/v1/configs" \
+    STUDIO_KEY="test-registry-key" \
     SUMMARY_OUT="${M24_SUMMARY_OUT}" \
         k6 run "${REPO_ROOT}/tests/loadtest/m24_baseline.js" \
         >> "${H_TMP}/k6_m24.log" 2>&1 || true

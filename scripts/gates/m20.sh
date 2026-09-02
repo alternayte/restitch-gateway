@@ -69,6 +69,7 @@ server:
   port: @GW_PORT@
 admin:
   port: @ADMIN_PORT@
+  api_key: "test-admin-key"
 upstreams:
   mock:
     url: "http://127.0.0.1:@MOCK_PORT@"
@@ -90,9 +91,14 @@ h_start_gateway "${gw_config}"
 
 db_path="${H_TMP}/test.db"
 h_log "Starting studio on port ${STUDIO_PORT} with registry db ${db_path}..."
-h_start_studio -db-path "${db_path}"
+# The studio registry API requires a key and the proxy forwards the gateway
+# admin key (hardening C1/C2/C3).
+h_start_studio -db-path "${db_path}" \
+    -registry-key test-registry-key \
+    -admin-key test-admin-key
 
 studio_url="http://127.0.0.1:${STUDIO_PORT}"
+reg_key_hdr=(-H "X-Admin-Key: test-registry-key")
 
 valid_yaml=$(cat <<'YAML'
 upstreams:
@@ -125,6 +131,7 @@ create_response_file="${H_TMP}/create_response.json"
 create_status=$(curl -s -o "${create_response_file}" -w '%{http_code}' \
     -X POST "${studio_url}/api/v1/configs" \
     -H 'Content-Type: application/json' \
+    "${reg_key_hdr[@]}" \
     --data @"${create_payload}") || true
 create_body=$(cat "${create_response_file}" 2>/dev/null || true)
 
@@ -142,8 +149,18 @@ else
 fi
 
 # ── List configs -> includes the created config ─────────────────────────────
-h_assert_status "${studio_url}/api/v1/configs" 200 "M20.gate list configs returns 200"
-if echo "${H_LAST_BODY}" | grep -qF 'test-comp'; then
+list_body=$(curl -s "${reg_key_hdr[@]}" "${studio_url}/api/v1/configs") || true
+list_status=$(curl -s -o /dev/null -w '%{http_code}' "${reg_key_hdr[@]}" "${studio_url}/api/v1/configs") || true
+{
+    echo "$ curl ${studio_url}/api/v1/configs"
+    echo "status=${list_status}"
+} >> "${H_EVIDENCE_FILE}"
+if [[ "${list_status}" == "200" ]]; then
+    h_pass "M20.gate list configs returns 200"
+else
+    h_fail "M20.gate list configs returns 200 (got ${list_status})"
+fi
+if echo "${list_body}" | grep -qF 'test-comp'; then
     h_pass "M20.gate list contains created config"
 else
     h_fail "M20.gate list contains created config"
@@ -151,7 +168,7 @@ fi
 
 # ── Bundle endpoint -> YAML with composition names + ETag header ────────────
 bundle_headers="${H_TMP}/bundle_headers.txt"
-bundle_body=$(curl -s -D "${bundle_headers}" "${studio_url}/api/v1/registry/bundle") || true
+bundle_body=$(curl -s -D "${bundle_headers}" "${reg_key_hdr[@]}" "${studio_url}/api/v1/registry/bundle") || true
 {
     echo "$ curl -sD - ${studio_url}/api/v1/registry/bundle"
     echo "--- headers ---"
@@ -177,6 +194,7 @@ fi
 if [[ -n "${etag}" ]]; then
     conditional_status=$(curl -s -o /dev/null -w '%{http_code}' \
         -H "If-None-Match: ${etag}" \
+        "${reg_key_hdr[@]}" \
         "${studio_url}/api/v1/registry/bundle") || true
     {
         echo "$ curl -H 'If-None-Match: ${etag}' ${studio_url}/api/v1/registry/bundle"
@@ -211,6 +229,7 @@ validate_response_file="${H_TMP}/validate_response.json"
 validate_status=$(curl -s -o "${validate_response_file}" -w '%{http_code}' \
     -X POST "${studio_url}/api/v1/configs/validate" \
     -H 'Content-Type: application/json' \
+    "${reg_key_hdr[@]}" \
     --data @"${validate_payload}") || true
 validate_body=$(cat "${validate_response_file}" 2>/dev/null || true)
 
