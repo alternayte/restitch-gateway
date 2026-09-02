@@ -20,6 +20,7 @@ server:
   port: @GW_PORT@
 admin:
   port: @ADMIN_PORT@
+  api_key: "test-admin-key"
 upstreams:
   mock:
     url: "http://127.0.0.1:@MOCK_PORT@"
@@ -38,7 +39,8 @@ YAML
 )
 
 h_start_gateway "${config}"
-h_start_studio
+# The studio proxy forwards the gateway admin key (hardening C3/C1).
+h_start_studio -admin-key test-admin-key
 
 # Studio proxies /api/info
 h_assert_status "http://127.0.0.1:${STUDIO_PORT}/api/info" 200 \

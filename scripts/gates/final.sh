@@ -55,6 +55,7 @@ server:
   port: @GW_PORT@
 admin:
   port: @ADMIN_PORT@
+  api_key: "test-admin-key"
 upstreams:
   mock:
     url: "http://127.0.0.1:@MOCK_PORT@"
@@ -104,9 +105,15 @@ else
     h_fail "final.4 only ${metrics_count} restitch_ metric families (expected >= 8)"
 fi
 
-# Admin API requests
-h_assert_status "http://127.0.0.1:${ADMIN_PORT}/admin/api/requests" 200 \
-    "final.4 admin requests endpoint"
+# Admin API requests (admin key required since hardening C3)
+admin_status=$(curl -s -o /dev/null -w '%{http_code}' \
+    -H "X-Admin-Key: test-admin-key" \
+    "http://127.0.0.1:${ADMIN_PORT}/admin/api/requests") || true
+if [[ "${admin_status}" == "200" ]]; then
+    h_pass "final.4 admin requests endpoint"
+else
+    h_fail "final.4 admin requests endpoint (got ${admin_status})"
+fi
 
 # SIGHUP
 gw_pid="${H_PIDS[1]}"
@@ -117,9 +124,10 @@ if kill -0 "${gw_pid}" 2>/dev/null; then
         "final.4 SIGHUP triggers config reload/unchanged log"
 fi
 
-# Studio proxy (if binary available)
+# Studio proxy (if binary available). The proxy forwards the gateway admin
+# key (hardening C3).
 if [[ -f "${REPO_ROOT}/bin/restitch-studio" ]]; then
-    h_start_studio
+    h_start_studio -admin-key test-admin-key
     h_assert_status "http://127.0.0.1:${STUDIO_PORT}/api/info" 200 \
         "final.4 studio proxy works"
 else

@@ -25,7 +25,7 @@ h_run "FetchResult type defined" -- grep -q 'type FetchResult struct' internal/h
 
 h_task T21.2
 h_run "poller.go exists" -- test -f internal/hotreload/poller.go
-h_run "backoff.go exists" -- test -f internal/hotreload/backoff.go
+h_run "backoff implemented in poller" -- grep -q 'backoff' internal/hotreload/poller.go
 h_run "PollStatus type defined" -- grep -q 'type PollStatus struct' internal/hotreload/poller.go
 h_run "Trigger method exists" -- grep -q 'func.*Poller.*Trigger' internal/hotreload/poller.go
 
@@ -56,7 +56,9 @@ h_task M21.gate
 
 h_start_mockupstream
 
-h_start_studio -db-path "$H_TMP/studio.db"
+# The studio registry API requires a key; the gateway polls with the same
+# key (hardening C1).
+h_start_studio -db-path "$H_TMP/studio.db" -registry-key test-registry-key
 
 sleep 1
 
@@ -77,6 +79,7 @@ compositions:
 "
 CREATE_RESP=$(curl -s -X POST "http://localhost:${STUDIO_PORT}/api/v1/configs" \
   -H "Content-Type: application/json" \
+  -H "X-Admin-Key: test-registry-key" \
   -d "$(python3 -c "import json,sys; print(json.dumps({'name':'regtest','yaml_content':sys.stdin.read()}))" <<< "$COMP_YAML")") || true
 h_evidence "config create response: ${CREATE_RESP}"
 h_run "config created in registry" -- test -n "$CREATE_RESP"
@@ -85,8 +88,10 @@ h_run "config created in registry" -- test -n "$CREATE_RESP"
 h_build
 GW_PID_FILE="$H_TMP/gw_reg.pid"
 RESTITCH_ADMIN_PORT="$ADMIN_PORT" \
+RESTITCH_ADMIN_API_KEY="test-admin-key" \
 "${REPO_ROOT}/bin/restitch" run \
   -registry-url "http://localhost:${STUDIO_PORT}" \
+  -registry-key "test-registry-key" \
   -poll-interval 2s \
   -port "$GW_PORT" \
   -log-format json \
@@ -100,8 +105,15 @@ h_wait_for_port "$GW_PORT" "gw_reg" 10
 h_assert_status "http://localhost:${GW_PORT}/regtest" 200 "gateway serves registry composition"
 
 # Verify admin registry status endpoint
-h_assert_status "http://localhost:${ADMIN_PORT}/admin/api/registry/status" 200 "registry status endpoint returns 200"
-REG_STATUS=$(curl -sf "http://localhost:${ADMIN_PORT}/admin/api/registry/status" 2>/dev/null) || true
+reg_status_http=$(curl -s -o /dev/null -w '%{http_code}' \
+  -H "X-Admin-Key: test-admin-key" \
+  "http://localhost:${ADMIN_PORT}/admin/api/registry/status") || true
+if [[ "${reg_status_http}" == "200" ]]; then
+  h_pass "registry status endpoint returns 200"
+else
+  h_fail "registry status endpoint returns 200 (got ${reg_status_http})"
+fi
+REG_STATUS=$(curl -sf -H "X-Admin-Key: test-admin-key" "http://localhost:${ADMIN_PORT}/admin/api/registry/status" 2>/dev/null) || true
 h_evidence "registry status: ${REG_STATUS}"
 h_run "status shows registry mode" -- \
   python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['mode']=='registry', f'mode={d[\"mode\"]}'" "$REG_STATUS"
