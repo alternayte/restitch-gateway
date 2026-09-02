@@ -177,6 +177,13 @@ for task_id in "${!LEDGER_STATUS[@]}"; do
     if [[ "${task_id}" == *".gate" || "${task_id}" == "final" ]]; then
         continue
     fi
+    # Skip documented pseudo-ID families that never appear in PLAN.md:
+    #   - M<n>.unit    — per-milestone unit-test task rows written by gates
+    #   - final.*      — per-phase rows of the final gate
+    #   - HARD.*       — open-source hardening rows (hardening-doc.md plan)
+    if [[ "${task_id}" == *".unit" || "${task_id}" == "final."* || "${task_id}" == "HARD."* ]]; then
+        continue
+    fi
     if ! echo "${ALL_TASK_IDS}" | grep -qF "${task_id}"; then
         UNKNOWN_IDS+=("${task_id}")
     fi
