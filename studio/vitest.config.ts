@@ -12,13 +12,18 @@ import path from "path"
 // passed to the parent is not. Setting it here rather than inline in the npm
 // script keeps `npm run test` working on Windows, where cmd.exe does not
 // understand `VAR=value command` syntax.
-// Guarded on the global actually existing rather than on a version number:
-// older Node (CI runs 20) rejects the flag outright with "--no-experimental-
-// webstorage is not allowed in NODE_OPTIONS", which kills every vitest worker.
-// If this process has no built-in localStorage there is nothing to disable.
+//
+// The switch keys off the Node major version, not on the presence of the
+// global: Node 26 does not install the built-in localStorage until something
+// accesses it, so a `typeof globalThis.localStorage` probe reads "undefined"
+// at config load time even though workers still receive the broken global.
+// Older Node (CI runs 24 and the floor is declared in .github/workflows)
+// rejects the flag outright with "--no-experimental-webstorage is not allowed
+// in NODE_OPTIONS", which kills every vitest worker, so the flag is set only
+// on the majors that know it.
 const WEBSTORAGE_OFF = "--no-experimental-webstorage"
-const hasBuiltinWebStorage = typeof (globalThis as { localStorage?: unknown }).localStorage !== "undefined"
-if (hasBuiltinWebStorage && !(process.env.NODE_OPTIONS ?? "").includes(WEBSTORAGE_OFF)) {
+const nodeMajor = Number(process.versions.node.split(".")[0])
+if (nodeMajor >= 25 && !(process.env.NODE_OPTIONS ?? "").includes(WEBSTORAGE_OFF)) {
   process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} ${WEBSTORAGE_OFF}`.trim()
 }
 
