@@ -1,0 +1,131 @@
+=== GATE M21 (commit e766fadb, 2026-09-02) ===
+
+
+##[T21.1]
+$ test -f internal/hotreload/client.go
+
+exit_code=0
+PASS client.go exists
+$ test -f internal/hotreload/client_test.go
+
+exit_code=0
+PASS client_test.go exists
+$ grep -q type FetchResult struct internal/hotreload/client.go
+
+exit_code=0
+PASS FetchResult type defined
+
+##[T21.2]
+$ test -f internal/hotreload/poller.go
+
+exit_code=0
+PASS poller.go exists
+$ grep -q backoff internal/hotreload/poller.go
+
+exit_code=0
+PASS backoff implemented in poller
+$ grep -q type PollStatus struct internal/hotreload/poller.go
+
+exit_code=0
+PASS PollStatus type defined
+$ grep -q func.*Poller.*Trigger internal/hotreload/poller.go
+
+exit_code=0
+PASS Trigger method exists
+
+##[T21.3]
+$ grep -q registry-url cmd/restitch/run.go
+
+exit_code=0
+PASS registry-url flag in run.go
+$ grep -q poll-interval cmd/restitch/run.go
+
+exit_code=0
+PASS poll-interval flag in run.go
+$ grep -q registry-key cmd/restitch/run.go
+
+exit_code=0
+PASS registry-key flag in run.go
+$ grep -q RESTITCH_REGISTRY_URL cmd/restitch/run.go
+
+exit_code=0
+PASS RESTITCH_REGISTRY_URL env
+
+##[T21.4]
+$ grep -q RegistryStatus internal/admin/server.go
+
+exit_code=0
+PASS RegistryStatus in admin Deps
+$ grep -q registry/status internal/admin/server.go
+
+exit_code=0
+PASS registry/status endpoint
+
+##[T21.5]
+$ grep -q triggerCh internal/hotreload/poller.go
+
+exit_code=0
+PASS triggerCh in poller
+
+##[M21.unit]
+$ go vet ./internal/hotreload/...
+
+exit_code=0
+PASS go vet hotreload
+$ go test -race -count=1 ./internal/hotreload/...
+ok  	github.com/restitch/restitch-gateway/internal/hotreload	4.953s
+exit_code=0
+PASS go test hotreload
+$ go test -race -count=1 ./internal/admin/...
+ok  	github.com/restitch/restitch-gateway/internal/admin	1.411s
+exit_code=0
+PASS go test admin
+$ go test -race -count=1 ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	1.681s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	5.725s
+ok  	github.com/restitch/restitch-gateway/internal/admin	2.468s
+ok  	github.com/restitch/restitch-gateway/internal/auth	5.155s
+ok  	github.com/restitch/restitch-gateway/internal/composition	2.460s
+ok  	github.com/restitch/restitch-gateway/internal/devmode	4.608s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	1.963s
+ok  	github.com/restitch/restitch-gateway/internal/hotreload	5.853s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	2.595s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	1.707s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	1.238s
+ok  	github.com/restitch/restitch-gateway/internal/registry	1.758s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	1.198s
+ok  	github.com/restitch/restitch-gateway/internal/server	1.383s
+ok  	github.com/restitch/restitch-gateway/internal/session	1.790s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	2.047s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	1.775s
+exit_code=0
+PASS go test full suite
+
+##[M21.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-13-ge766fadb" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 51470...
+# Starting studio on port 51471...
+config create response: {"id":"01M1G8VX2YRR54PM4D3W1VB76W","name":"regtest","description":"","tags":[],"active_version_id":1,"active_version":1,"created_at":"2026-09-02T05:18:31Z","updated_at":"2026-09-02T05:18:31Z","yaml_content":"upstreams:\n  mock:\n    url: \"http://localhost:51470\"\ncompositions:\n  regtest:\n    path: \"/regtest\"\n    steps:\n      - name: e\n        upstream: mock\n        path: \"/echo\"\n    response:\n      body:\n        result: \"{{ steps.e.body }}\"\n\n","version_number":1}
+$ test -n {"id":"01M1G8VX2YRR54PM4D3W1VB76W","name":"regtest","description":"","tags":[],"active_version_id":1,"active_version":1,"created_at":"2026-09-02T05:18:31Z","updated_at":"2026-09-02T05:18:31Z","yaml_content":"upstreams:\n  mock:\n    url: \"http://localhost:51470\"\ncompositions:\n  regtest:\n    path: \"/regtest\"\n    steps:\n      - name: e\n        upstream: mock\n        path: \"/echo\"\n    response:\n      body:\n        result: \"{{ steps.e.body }}\"\n\n","version_number":1}
+
+exit_code=0
+PASS config created in registry
+$ curl -s -w '%{http_code}' http://localhost:51467/regtest
+status=200
+body={"result":{"body":"","headers":{"Accept":"*/*","Accept-Encoding":"gzip","User-Agent":"Go-http-client/1.1","X-Request-Id":"846fb8d0-639f-4ab3-9214-2dffd1c1772f"},"method":"GET","path":"/echo","query":{}}}
+PASS gateway serves registry composition
+PASS registry status endpoint returns 200
+registry status: {"composition_count":1,"consecutive_errors":0,"error":null,"error_type":null,"etag":"10b8e0d596bcf90f","last_poll":"2026-09-02T07:18:31.329485+02:00","last_success":"2026-09-02T07:18:31.329485+02:00","mode":"registry","poll_interval_seconds":2,"registry_url":"http://localhost:51471"}
+$ python3 -c import json,sys; d=json.loads(sys.argv[1]); assert d['mode']=='registry', f'mode={d["mode"]}' {"composition_count":1,"consecutive_errors":0,"error":null,"error_type":null,"etag":"10b8e0d596bcf90f","last_poll":"2026-09-02T07:18:31.329485+02:00","last_success":"2026-09-02T07:18:31.329485+02:00","mode":"registry","poll_interval_seconds":2,"registry_url":"http://localhost:51471"}
+
+exit_code=0
+PASS status shows registry mode
+$ grep -q registry poll triggered /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.8gpE9C8RnM/gw_reg.log
+
+exit_code=0
+PASS SIGHUP logged
+
+RESULT M21: PASS (23 pass, 0 fail, 0 manual, 0 skip)

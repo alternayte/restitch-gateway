@@ -1,0 +1,40 @@
+=== GATE M10 (commit e766fadb, 2026-09-02) ===
+
+
+##[T10.1]
+$ test -f /Users/nathananderson-tennant/Development/restitch/cmd/restitch/pipeline.go
+
+exit_code=0
+PASS T10.1 pipeline.go exists
+$ test -f /Users/nathananderson-tennant/Development/restitch/cmd/restitch/reload.go
+
+exit_code=0
+PASS T10.1 reload.go exists
+$ go test -count=1 -race ./cmd/restitch/
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	1.650s
+exit_code=0
+PASS T10.1 cmd/restitch tests (race)
+
+##[M10.gate]
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-13-ge766fadb" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 50613...
+# Starting gateway on port 50611 (admin 50612)...
+$ curl -s -w '%{http_code}' http://127.0.0.1:50611/api/users/1
+status=200
+body={"user":{"active":true,"id":"1","name":"user-1"}}
+PASS M10.gate baseline request returns 200
+$ POST /admin/api/reload (with corrupted config)
+{"errors":["load config: parsing config: yaml: line 20: did not find expected node content"],"ok":false}
+PASS M10.gate reload with bad config returns ok:false
+$ curl -s -w '%{http_code}' http://127.0.0.1:50611/api/users/1
+status=200
+body={"user":{"active":true,"id":"1","name":"user-1"}}
+PASS M10.gate still serves after failed reload
+$ grep -E 'config reloaded|config unchanged|config file changed' /var/folders/hq/1xh9g9g51wldy0s3mtsyvhhm0000gn/T/tmp.OkMpz3nezk/gateway.log
+{"time":"2026-09-02T07:16:14.84471+02:00","level":"INFO","msg":"config unchanged","hash":"a8030429e50b1416f27ff56e50825e6a8410d400a9833e7d997dc2f779ffcfe3"}
+{"time":"2026-09-02T07:16:14.844727+02:00","level":"INFO","msg":"config reloaded","hash":"a8030429e50b1416f27ff56e50825e6a8410d400a9833e7d997dc2f779ffcfe3"}
+{"time":"2026-09-02T07:16:15.344139+02:00","level":"INFO","msg":"config file changed, reloading"}
+PASS M10.gate SIGHUP triggers reload log message
+
+RESULT M10: PASS (7 pass, 0 fail, 0 manual, 0 skip)

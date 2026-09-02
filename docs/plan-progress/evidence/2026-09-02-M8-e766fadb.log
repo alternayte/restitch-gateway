@@ -1,0 +1,195 @@
+=== GATE M8 (commit e766fadb, 2026-09-02) ===
+
+
+##[T8.1]
+$ test -f /Users/nathananderson-tennant/Development/restitch/internal/observability/metrics.go
+
+exit_code=0
+PASS T8.1 metrics.go exists
+$ grep -q prometheus/client_golang /Users/nathananderson-tennant/Development/restitch/go.mod
+
+exit_code=0
+PASS T8.1 prometheus dependency
+
+##[T8.2]
+$ grep -rq gateway_overhead_ms\|gateway_overhead /Users/nathananderson-tennant/Development/restitch/internal/composition/handler.go
+
+exit_code=0
+PASS T8.2 gateway_overhead_ms in handler
+
+##[T8.3]
+$ test -d /Users/nathananderson-tennant/Development/restitch/internal/admin
+
+exit_code=0
+PASS T8.3 admin package exists
+$ go test -count=1 ./internal/admin/
+ok  	github.com/restitch/restitch-gateway/internal/admin	0.249s
+exit_code=0
+PASS T8.3 admin tests
+
+##[M8.gate]
+$ go test -count=1 -race ./...
+?   	github.com/restitch/restitch-gateway/cmd/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/cmd/restitch	2.150s
+ok  	github.com/restitch/restitch-gateway/cmd/restitch-studio	8.364s
+ok  	github.com/restitch/restitch-gateway/internal/admin	1.611s
+ok  	github.com/restitch/restitch-gateway/internal/auth	6.479s
+ok  	github.com/restitch/restitch-gateway/internal/composition	4.134s
+ok  	github.com/restitch/restitch-gateway/internal/devmode	4.993s
+ok  	github.com/restitch/restitch-gateway/internal/gwconfig	3.727s
+ok  	github.com/restitch/restitch-gateway/internal/hotreload	7.468s
+ok  	github.com/restitch/restitch-gateway/internal/inbound	3.552s
+?   	github.com/restitch/restitch-gateway/internal/mockupstream	[no test files]
+ok  	github.com/restitch/restitch-gateway/internal/observability	3.289s
+ok  	github.com/restitch/restitch-gateway/internal/ratelimit	1.595s
+ok  	github.com/restitch/restitch-gateway/internal/registry	2.475s
+ok  	github.com/restitch/restitch-gateway/internal/reqlog	1.538s
+ok  	github.com/restitch/restitch-gateway/internal/server	1.681s
+ok  	github.com/restitch/restitch-gateway/internal/session	2.378s
+ok  	github.com/restitch/restitch-gateway/internal/testenv	2.862s
+ok  	github.com/restitch/restitch-gateway/internal/upstream	1.926s
+exit_code=0
+PASS M8.gate full tests (race)
+# Building binaries...
+go build -ldflags "-X main.version=v1.0-13-ge766fadb" -o bin/restitch ./cmd/restitch
+# Starting mockupstream on port 50378...
+# Starting gateway on port 50376 (admin 50377)...
+$ curl -s http://127.0.0.1:50377/metrics
+# HELP go_gc_duration_seconds A summary of the wall-time pause (stop-the-world) duration in garbage collection cycles.
+# TYPE go_gc_duration_seconds summary
+go_gc_duration_seconds{quantile="0"} 5.55e-05
+go_gc_duration_seconds{quantile="0.25"} 5.55e-05
+go_gc_duration_seconds{quantile="0.5"} 0.000357375
+go_gc_duration_seconds{quantile="0.75"} 0.000357375
+go_gc_duration_seconds{quantile="1"} 0.000357375
+go_gc_duration_seconds_sum 0.000412875
+go_gc_duration_seconds_count 2
+# HELP go_gc_gogc_percent Heap size target percentage configured by the user, otherwise 100. This value is set by the GOGC environment variable, and the runtime/debug.SetGCPercent function. Sourced from /gc/gogc:percent.
+# TYPE go_gc_gogc_percent gauge
+go_gc_gogc_percent 100
+# HELP go_gc_gomemlimit_bytes Go runtime memory limit configured by the user, otherwise math.MaxInt64. This value is set by the GOMEMLIMIT environment variable, and the runtime/debug.SetMemoryLimit function. Sourced from /gc/gomemlimit:bytes.
+# TYPE go_gc_gomemlimit_bytes gauge
+go_gc_gomemlimit_bytes 9.223372036854776e+18
+# HELP go_goroutines Number of goroutines that currently exist.
+# TYPE go_goroutines gauge
+go_goroutines 18
+# HELP go_info Information about the Go environment.
+# TYPE go_info gauge
+go_info{version="go1.26.2"} 1
+# HELP go_memstats_alloc_bytes Number of bytes allocated in heap and currently in use. Equals to /memory/classes/heap/objects:bytes.
+# TYPE go_memstats_alloc_bytes gauge
+go_memstats_alloc_bytes 3.514512e+06
+# HELP go_memstats_alloc_bytes_total Total number of bytes allocated in heap until now, even if released already. Equals to /gc/heap/allocs:bytes.
+# TYPE go_memstats_alloc_bytes_total counter
+go_memstats_alloc_bytes_total 6.1508e+06
+# HELP go_memstats_buck_hash_sys_bytes Number of bytes used by the profiling bucket hash table. Equals to /memory/classes/profiling/buckets:bytes.
+# TYPE go_memstats_buck_hash_sys_bytes gauge
+go_memstats_buck_hash_sys_bytes 1.445661e+06
+# HELP go_memstats_frees_total Total number of heap objects frees. Equals to /gc/heap/frees:objects + /gc/heap/tiny/allocs:objects.
+# TYPE go_memstats_frees_total counter
+go_memstats_frees_total 34518
+# HELP go_memstats_gc_sys_bytes Number of bytes used for garbage collection system metadata. Equals to /memory/classes/metadata/other:bytes.
+# TYPE go_memstats_gc_sys_bytes gauge
+go_memstats_gc_sys_bytes 3.094256e+06
+# HELP go_memstats_heap_alloc_bytes Number of heap bytes allocated and currently in use, same as go_memstats_alloc_bytes. Equals to /memory/classes/heap/objects:bytes.
+# TYPE go_memstats_heap_alloc_bytes gauge
+go_memstats_heap_alloc_bytes 3.514512e+06
+# HELP go_memstats_heap_idle_bytes Number of heap bytes waiting to be used. Equals to /memory/classes/heap/released:bytes + /memory/classes/heap/free:bytes.
+# TYPE go_memstats_heap_idle_bytes gauge
+go_memstats_heap_idle_bytes 1.581056e+06
+# HELP go_memstats_heap_inuse_bytes Number of heap bytes that are in use. Equals to /memory/classes/heap/objects:bytes + /memory/classes/heap/unused:bytes
+# TYPE go_memstats_heap_inuse_bytes gauge
+go_memstats_heap_inuse_bytes 6.02112e+06
+# HELP go_memstats_heap_objects Number of currently allocated objects. Equals to /gc/heap/objects:objects.
+# TYPE go_memstats_heap_objects gauge
+go_memstats_heap_objects 33546
+# HELP go_memstats_heap_released_bytes Number of heap bytes released to OS. Equals to /memory/classes/heap/released:bytes.
+# TYPE go_memstats_heap_released_bytes gauge
+go_memstats_heap_released_bytes 1.581056e+06
+# HELP go_memstats_heap_sys_bytes Number of heap bytes obtained from system. Equals to /memory/classes/heap/objects:bytes + /memory/classes/heap/unused:bytes + /memory/classes/heap/released:bytes + /memory/classes/heap/free:bytes.
+# TYPE go_memstats_heap_sys_bytes gauge
+go_memstats_heap_sys_bytes 7.602176e+06
+# HELP go_memstats_last_gc_time_seconds Number of seconds since 1970 of last garbage collection.
+# TYPE go_memstats_last_gc_time_seconds gauge
+go_memstats_last_gc_time_seconds 1.788326168206434e+09
+# HELP go_memstats_mallocs_total Total number of heap objects allocated, both live and gc-ed. Semantically a counter version for go_memstats_heap_objects gauge. Equals to /gc/heap/allocs:objects + /gc/heap/tiny/allocs:objects.
+# TYPE go_memstats_mallocs_total counter
+go_memstats_mallocs_total 68064
+# HELP go_memstats_mcache_inuse_bytes Number of bytes in use by mcache structures. Equals to /memory/classes/metadata/mcache/inuse:bytes.
+# TYPE go_memstats_mcache_inuse_bytes gauge
+go_memstats_mcache_inuse_bytes 18368
+# HELP go_memstats_mcache_sys_bytes Number of bytes used for mcache structures obtained from system. Equals to /memory/classes/metadata/mcache/inuse:bytes + /memory/classes/metadata/mcache/free:bytes.
+# TYPE go_memstats_mcache_sys_bytes gauge
+go_memstats_mcache_sys_bytes 32144
+# HELP go_memstats_mspan_inuse_bytes Number of bytes in use by mspan structures. Equals to /memory/classes/metadata/mspan/inuse:bytes.
+# TYPE go_memstats_mspan_inuse_bytes gauge
+go_memstats_mspan_inuse_bytes 127040
+# HELP go_memstats_mspan_sys_bytes Number of bytes used for mspan structures obtained from system. Equals to /memory/classes/metadata/mspan/inuse:bytes + /memory/classes/metadata/mspan/free:bytes.
+# TYPE go_memstats_mspan_sys_bytes gauge
+go_memstats_mspan_sys_bytes 130560
+# HELP go_memstats_next_gc_bytes Number of heap bytes when next garbage collection will take place. Equals to /gc/heap/goal:bytes.
+# TYPE go_memstats_next_gc_bytes gauge
+go_memstats_next_gc_bytes 5.59617e+06
+# HELP go_memstats_other_sys_bytes Number of bytes used for other system allocations. Equals to /memory/classes/other:bytes.
+# TYPE go_memstats_other_sys_bytes gauge
+go_memstats_other_sys_bytes 1.050475e+06
+# HELP go_memstats_stack_inuse_bytes Number of bytes obtained from system for stack allocator in non-CGO environments. Equals to /memory/classes/heap/stacks:bytes.
+# TYPE go_memstats_stack_inuse_bytes gauge
+go_memstats_stack_inuse_bytes 720896
+# HELP go_memstats_stack_sys_bytes Number of bytes obtained from system for stack allocator. Equals to /memory/classes/heap/stacks:bytes + /memory/classes/os-stacks:bytes.
+# TYPE go_memstats_stack_sys_bytes gauge
+go_memstats_stack_sys_bytes 720896
+# HELP go_memstats_sys_bytes Number of bytes obtained from system. Equals to /memory/classes/total:byte.
+# TYPE go_memstats_sys_bytes gauge
+go_memstats_sys_bytes 1.4076168e+07
+# HELP go_sched_gomaxprocs_threads The current runtime.GOMAXPROCS setting, or the number of operating system threads that can execute user-level Go code simultaneously. Sourced from /sched/gomaxprocs:threads.
+# TYPE go_sched_gomaxprocs_threads gauge
+go_sched_gomaxprocs_threads 8
+# HELP go_threads Number of OS threads created.
+# TYPE go_threads gauge
+go_threads 12
+# HELP restitch_request_duration_seconds Composition request duration
+# TYPE restitch_request_duration_seconds histogram
+restitch_request_duration_seconds_bucket{composition="user",le="0.005"} 0
+restitch_request_duration_seconds_bucket{composition="user",le="0.01"} 1
+restitch_request_duration_seconds_bucket{composition="user",le="0.025"} 1
+restitch_request_duration_seconds_bucket{composition="user",le="0.05"} 1
+restitch_request_duration_seconds_bucket{composition="user",le="0.1"} 1
+restitch_request_duration_seconds_bucket{composition="user",le="0.25"} 1
+restitch_request_duration_seconds_bucket{composition="user",le="0.5"} 1
+restitch_request_duration_seconds_bucket{composition="user",le="1"} 1
+restitch_request_duration_seconds_bucket{composition="user",le="2.5"} 1
+restitch_request_duration_seconds_bucket{composition="user",le="5"} 1
+restitch_request_duration_seconds_bucket{composition="user",le="10"} 1
+restitch_request_duration_seconds_bucket{composition="user",le="+Inf"} 1
+restitch_request_duration_seconds_sum{composition="user"} 0.0051381249999999995
+restitch_request_duration_seconds_count{composition="user"} 1
+# HELP restitch_requests_total Total composition requests
+# TYPE restitch_requests_total counter
+restitch_requests_total{composition="user",method="GET",status="200"} 1
+# HELP restitch_step_duration_seconds Step execution duration
+# TYPE restitch_step_duration_seconds histogram
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="0.005"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="0.01"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="0.025"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="0.05"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="0.1"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="0.25"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="0.5"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="1"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="2.5"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="5"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="10"} 1
+restitch_step_duration_seconds_bucket{composition="user",status="success",step="u",upstream="mock",le="+Inf"} 1
+restitch_step_duration_seconds_sum{composition="user",status="success",step="u",upstream="mock"} 0.0033079999999999997
+restitch_step_duration_seconds_count{composition="user",status="success",step="u",upstream="mock"} 1
+PASS M8.gate restitch_requests_total metric present
+PASS M8.gate admin requests endpoint returns 200
+body=[{"id":"01M1G8QHW3RQT06BRJ3H3HSB48","time":"2026-09-02T07:16:08.451582+02:00","composition":"user","method":"GET","path":"/api/users/1","status":200,"duration_ms":5.138125,"partial":false,"steps":[{"name":"u","status":"success","wave":1,"duration_ms":3.308,"http_status":200,"upstream":"mock","url":"http://127.0.0.1:50378/users/1","start_offset_ms":0.079,"body_size":41,"cached":false,"retries":0}]}]
+assert: isinstance(data, list) and len(data) >= 1
+PASS M8.gate admin requests contains at least 1 record
+PASS M8.gate admin compositions endpoint returns 200
+$ curl /health/upstreams on data port → 404
+PASS M8.gate /health/upstreams not on data port
+
+RESULT M8: PASS (11 pass, 0 fail, 0 manual, 0 skip)
