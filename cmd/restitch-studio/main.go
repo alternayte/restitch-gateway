@@ -30,7 +30,12 @@ func main() {
 	registryKey := flag.String("registry-key", "", "registry API key required from clients (X-Admin-Key header)")
 	dbPath := flag.String("db-path", "./studio.db", "SQLite database path")
 	noMigrate := flag.Bool("no-migrate", false, "skip auto-migration on startup")
+	healthcheckURL := flag.String("healthcheck", "", "probe this URL and exit (container HEALTHCHECK; finding M17)")
 	flag.Parse()
+
+	if *healthcheckURL != "" {
+		os.Exit(healthcheck(*healthcheckURL))
+	}
 
 	if v := os.Getenv("STUDIO_PORT"); v != "" {
 		_, _ = fmt.Sscanf(v, "%d", port)
@@ -205,6 +210,24 @@ func isLoopback(bind string) bool {
 		return true
 	}
 	return false
+}
+
+// healthcheck GETs url and exits 0 on a 2xx response. The runtime image is
+// shell-less distroless, so container HEALTHCHECK probes must be a real
+// binary (finding M17).
+func healthcheck(url string) int {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("healthcheck %s: %v", url, err)
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Printf("healthcheck %s: status %d", url, resp.StatusCode)
+		return 1
+	}
+	return 0
 }
 
 // spaFileServer serves files from the embedded filesystem, falling back to
