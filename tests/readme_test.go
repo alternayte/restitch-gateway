@@ -22,7 +22,9 @@ func TestReadmeYAMLBlocks(t *testing.T) {
 
 	matches := yamlFencePattern.FindAllSubmatch(readme, -1)
 	if len(matches) == 0 {
-		t.Skip("no YAML fenced blocks found in README.md")
+		// The README's YAML examples are part of the documented contract; a
+		// README without them means the test cannot fail (finding M21).
+		t.Fatal("no YAML fenced blocks found in README.md — the README contract is no longer tested")
 	}
 
 	for i, m := range matches {
