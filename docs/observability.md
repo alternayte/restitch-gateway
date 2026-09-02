@@ -116,7 +116,7 @@ at 10 requests per second with a burst of 5, per IP.
 
 ```json
 {
-  "version": "v2.0.0",
+  "version": "v1.2.0",
   "uptime_seconds": 3600,
   "config_hash": "a1b2c3d4...",
   "config_path": "/etc/restitch/restitch.yaml",

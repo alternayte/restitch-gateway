@@ -8,7 +8,7 @@ The multi-stage Dockerfile builds both binaries (gateway and Studio):
 
 ```bash
 docker build -t restitch:latest .
-docker build --build-arg VERSION=v2.0.0 -t restitch:v2.0.0 .
+docker build --build-arg VERSION=v1.2.0 -t restitch:v1.2.0 .
 ```
 
 Build stages:
