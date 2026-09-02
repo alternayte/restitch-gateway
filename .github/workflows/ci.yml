@@ -43,7 +43,11 @@ jobs:
           go test -coverprofile=coverage.out ./internal/...
           TOTAL=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
           echo "Total coverage: ${TOTAL}%"
-          if [ "$(echo "$TOTAL < 70" | bc -l)" = "1" ]; then
+          # awk, not bc: GitHub-hosted ubuntu-latest runners do not ship bc,
+          # so the old comparison failed every run (finding H6).
+          if awk 'BEGIN { exit !('"$TOTAL"' >= 70) }'; then
+            echo "Coverage ${TOTAL}% is at or above the 70% threshold"
+          else
             echo "Coverage ${TOTAL}% is below 70% threshold"
             exit 1
           fi
