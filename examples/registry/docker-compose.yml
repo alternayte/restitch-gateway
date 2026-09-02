@@ -1,0 +1,65 @@
+# Registry mode, end to end: mock upstream -> Studio registry -> gateway.
+# The gateway polls the Studio bundle (no config file), which is the
+# centralized-management deployment the deploy/ stack uses in production
+# shape. Registry API and gateway admin are keyed (hardening C1/C3).
+
+name: restitch-registry-example
+
+services:
+  mockupstream:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    entrypoint: ["/mockupstream"]
+    command: ["-port", "8081"]
+
+  studio:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    entrypoint: ["/restitch-studio"]
+    command:
+      - "-port=3080"
+      - "-db-path=/data/studio.db"
+      - "-registry-key=example-registry-key"
+    environment:
+      STUDIO_BIND: "0.0.0.0"
+    volumes:
+      - studio-data:/data
+    depends_on:
+      studio-data-init:
+        condition: service_completed_successfully
+    ports:
+      - "3080:3080"
+
+  # The image runs as the distroless nonroot user (H7); docker initializes a
+  # fresh named volume root-owned, so fix ownership before the studio writes.
+  studio-data-init:
+    image: alpine:3.20
+    command: ["chown", "-R", "65532:65532", "/data"]
+    volumes:
+      - studio-data:/data
+    restart: "no"
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    command:
+      - "run"
+      - "-registry-url=http://studio:3080"
+      - "-registry-key=example-registry-key"
+      - "-poll-interval=5s"
+    environment:
+      RESTITCH_ADMIN_BIND: "0.0.0.0"
+      RESTITCH_ADMIN_API_KEY: "example-admin-key"
+    depends_on:
+      studio:
+        condition: service_started
+    restart: on-failure
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+
+volumes:
+  studio-data:

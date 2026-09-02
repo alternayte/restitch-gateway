@@ -1,9 +1,50 @@
 # Restitch
 
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Go version](https://img.shields.io/badge/go-1.25.7-blue.svg)](go.mod)
+[![CI](https://img.shields.io/github/actions/workflow/status/alternayte/restitch-gateway/ci.yml?branch=main)](https://github.com/alternayte/restitch-gateway/actions)
+
 A production-grade REST API composition gateway. Declare multi-step API
 compositions in YAML — Restitch executes the DAG of upstream calls in
 parallel, wires results together with expressions, and returns a single
 merged response. No BFF code required.
+
+## Install
+
+Requirements: Go 1.25.7 and Node.js 24 (for the Studio).
+
+```bash
+git clone https://github.com/alternayte/restitch-gateway.git
+cd restitch-gateway
+make build-all         # gateway + Studio binaries under bin/
+./bin/restitch version
+```
+
+Release binaries and container images are published with each tagged
+release; `make docker` builds the image locally. See [VERSIONING.md] for the
+compatibility policy.
+
+## Architecture
+
+RESTitch has two processes plus the data sources they talk to:
+
+- **Gateway** (`./bin/restitch`): the data plane. It loads a YAML config
+  (file or Studio registry), compiles every composition into a DAG once at
+  startup, and serves the composed HTTP routes. Request handling is: inbound
+  auth → rate limit → route → wave-parallel step execution (per-upstream
+  retry, circuit breaker, cache, coalescing) → template evaluation → merged
+  response. A separate admin server (port 9090, loopback by default) serves
+  metrics, request records, stats, and config reload.
+- **Studio** (`./bin/restitch-studio`): the control plane. An embedded React
+  SPA for dashboards, request inspection, and a visual composition builder.
+  It proxies read-only gateway admin calls, and optionally owns a config
+  registry that the gateway polls instead of a file.
+- **Upstreams**: plain HTTP services. The gateway never modifies them.
+
+Requests never touch the Studio; the Studio going down does not affect the
+data plane. The gateway keeps its last known-good config when the registry
+is unreachable. See [docs/architecture.md] for the request lifecycle and the
+trust boundaries between the processes.
 
 ## Quick Start
 
