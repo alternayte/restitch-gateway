@@ -29,11 +29,11 @@ e2e:
 studio:
 	cd studio && npm ci && npm run build
 
-# cmd/restitch-studio/dist is embedded into the binary, but .gitignore keeps it
-# out of the repo apart from index.html — the asset bundles are build artifacts.
-# On a fresh clone the frontend must therefore be built before the Go binary, or
-# the embedded index.html references bundles that do not exist. Build it only
-# when the assets are missing, so repeat builds stay fast.
+# cmd/restitch-studio/dist is embedded into the binary, but nothing under it
+# is committed (finding M36) — the whole directory is a build artifact that
+# `npm run build` produces. Fresh clones must build the frontend before any
+# Go command that compiles ./... (for example `make build-all` or a plain
+# `go build ./...`); CI builds it explicitly in the go job.
 build-all: build
 	@if [ ! -d cmd/restitch-studio/dist/assets ]; then \
 		echo "==> studio assets missing; building frontend first"; \

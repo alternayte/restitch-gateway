@@ -7,9 +7,10 @@ bin/
 *.so
 *.dylib
 
-# Bundled frontend assets (keep placeholder for go:embed)
-cmd/restitch-studio/dist/*
-!cmd/restitch-studio/dist/index.html
+# Bundled frontend assets (finding M36): the build produces the whole dist/
+# directory; nothing under it is committed, and the Makefile builds the
+# frontend before Go steps that embed it.
+cmd/restitch-studio/dist/
 
 # Test binary
 *.test

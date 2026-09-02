@@ -30,12 +30,15 @@ server already owns 9090 on the host.
 ## Seeding the registry
 
 A fresh Studio has no compositions, so the registry bundle is empty and the
-gateway starts serving nothing. Create one:
+gateway starts serving nothing. Create one (the registry API requires the
+key from `RESTITCH_REGISTRY_KEY` in your `.env`, hardening C1; the field is
+`yaml_content`, finding M26):
 
 ```bash
 curl -X POST http://localhost:3080/api/v1/configs \
   -H 'Content-Type: application/json' \
-  -d '{"name":"example","yaml":"compositions:\n  hello:\n    path: /hello\n    method: GET\n    steps: []\n"}'
+  -H 'X-Admin-Key: restitch-dev' \
+  -d '{"name":"example","yaml_content":"compositions:\n  hello:\n    path: /hello\n    method: GET\n    steps: []\n"}'
 ```
 
 The gateway picks it up within one poll interval (10s by default).

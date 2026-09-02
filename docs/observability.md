@@ -21,6 +21,9 @@ Metrics are served on the admin port (default 9090) at `GET /metrics`.
 | `restitch_cache_hits_total` | counter | `composition`, `step` | Step cache hits |
 | `restitch_cache_misses_total` | counter | `composition`, `step` | Step cache misses |
 | `restitch_coalesced_total` | counter | `composition`, `step` | Requests that shared a coalesced upstream call |
+| `restitch_registry_polls_total` | counter | `result` | Registry polls by result (`success`, `not_modified`, `error`) |
+| `restitch_registry_poll_duration_seconds` | histogram | — | Registry poll duration |
+| `restitch_registry_last_success_timestamp` | gauge | — | Unix time of the last successful registry poll |
 
 ### Scrape Configuration
 
@@ -81,11 +84,12 @@ correlate gateway requests with downstream traces.
 
 ## Admin API
 
-The admin API runs on a separate port (default 9090) from the data plane.
-If `admin.api_key` is configured, every request must include
-`X-Admin-Key: <key>`. POST endpoints (`/admin/api/reload`,
-`/admin/api/validate`) are rate-limited at 10 requests per second with a
-burst of 5, per IP.
+The admin API runs on a separate port (default 9090) from the data plane,
+bound to loopback by default (`admin.bind`). The `admin.api_key` is
+required: every request without a matching `X-Admin-Key` is rejected,
+including `OPTIONS` preflights. `GET /metrics` and `GET /health` stay open.
+POST endpoints (`/admin/api/reload`, `/admin/api/validate`) are rate-limited
+at 10 requests per second with a burst of 5, per IP.
 
 ### Endpoints
 
@@ -96,7 +100,11 @@ burst of 5, per IP.
 | `GET` | `/admin/api/compositions/{name}` | Single composition detail (404 if unknown) |
 | `GET` | `/admin/api/upstreams` | List upstreams with health status |
 | `GET` | `/admin/api/requests?limit=100` | Recent requests from the ring buffer (newest first) |
+| `GET` | `/admin/api/requests/{id}` | One stored request record with step detail (durable storage only) |
 | `GET` | `/admin/api/stats` | Per-composition statistics (counts, error rates, latency percentiles) |
+| `GET` | `/admin/api/stats/timeseries` | Bucketed request/error/partial counts over a range |
+| `GET` | `/admin/api/stats/steps` | Per-step aggregates for one composition |
+| `GET` | `/admin/api/registry/status` | Registry poll status (registry mode only): last poll, ETag, count, error state |
 | `POST` | `/admin/api/validate` | Validate raw YAML config (body = YAML text) |
 | `POST` | `/admin/api/reload` | Trigger hot config reload |
 | `GET` | `/metrics` | Prometheus metrics |

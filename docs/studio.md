@@ -35,8 +35,8 @@ go build -o bin/restitch-studio ./cmd/restitch-studio
 
 ### Prerequisites
 
-- Go 1.22+
-- Node.js 20+
+- Go 1.25.7+
+- Node.js 24+ (the CI floor; see `.github/workflows/ci.yml`)
 - npm
 
 ## Running
@@ -176,7 +176,7 @@ proxies to the gateway admin API (port 9090).
 
 ## Tech Stack
 
-- [React 18](https://react.dev/) + TypeScript
+- [React 19](https://react.dev/) + TypeScript (strict mode)
 - [Vite](https://vitejs.dev/) (build tool)
 - [Tailwind CSS v4](https://tailwindcss.com/) (styling)
 - [shadcn/ui](https://ui.shadcn.com/) (component library)

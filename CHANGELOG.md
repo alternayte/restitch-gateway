@@ -1,5 +1,56 @@
 # Changelog
 
+## Unreleased — hardening for public release (2026-09-02)
+
+Security and trust-boundary hardening, ahead of the first public release
+tag. Changes grouped by area; the open-source hardening review is recorded
+in the repo's plan ledger.
+
+### Security
+
+- **Studio registry API authenticated** (C1): every `/api/v1/configs*` and
+  `/api/v1/registry/bundle` handler requires `X-Admin-Key`, compared in
+  constant time. With no key configured every request is rejected. Gateway
+  pollers send the matching key via `-registry-key`.
+- **Studio binds loopback by default** (C2): new `-bind` flag (env
+  `STUDIO_BIND`); a non-loopback bind logs a warning.
+- **Admin API key is required** (C3): `admin.enabled` is now honored, the
+  empty-key default rejects every admin request, the admin server binds
+  `127.0.0.1` by default (new `admin.bind` / `RESTITCH_ADMIN_BIND`), and
+  preflight `OPTIONS` also requires the key (C4).
+- **Module path renamed** (H9): `github.com/alternayte/restitch-gateway`.
+- Registry bundle and Studio JSON bodies are size-bounded (H4, H5); malformed
+  JSON bodies are rejected with 400 (H11).
+- Step cache keys include evaluated step headers; responses with `Set-Cookie`
+  or `Cache-Control: private|no-store` are not cached (H1).
+- Cross-origin registry requests are rejected (M11); the Studio proxy strips
+  gateway CORS headers (M12); client-supplied request IDs cannot overwrite
+  stored records (M5); retries refuse to re-send non-rewindable bodies (M1);
+  per-key rate-limit tables are bounded LRU (M3); JWKS refreshes use a
+  time-bounded client (M4); request-record writes go through a bounded async
+  queue (M6); literal `response.status` integers are honored and validated
+  (M7); session cookies honor `X-Forwarded-Proto` for `Secure` (M8); the
+  oauth2 validate-only strategy fails cleanly instead of panicking (M10).
+
+### Containers and operations
+
+- Docker image runs as the distroless non-root user, built on `node:24`
+  (H7, M16); `.dockerignore` keeps the build context small.
+- Real HTTP container healthchecks via `restitch healthcheck <url>` and
+  `restitch-studio -healthcheck <url>` (M17).
+- The docker-compose quickstart works again: `/mockupstream` is in the image
+  and services select their binary with `entrypoint` (H12).
+
+### Verification integrity
+
+- Four gate scripts no longer record PASS vacuously (H8).
+- The CI coverage gate uses `awk` instead of `bc` (H6); actions are pinned to
+  commit SHAs with Dependabot (M20); jobs declare permissions and timeouts
+  (M23); coverage and test results are uploaded (M24); the e2e job runs with
+  `-race` and a timeout (M22); `--passWithNoTests` is gone (M18).
+- Frontend: TypeScript `strict` + `noUncheckedIndexedAccess` (M13), a
+  top-level error boundary (M14), and fetch error states with retry (M15).
+
 ## v2.0.0
 
 Complete rewrite of the composition engine and addition of Restitch Studio.

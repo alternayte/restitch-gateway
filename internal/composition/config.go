@@ -1,3 +1,17 @@
+// Copyright 2026 Restitch maintainers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Package composition provides YAML configuration parsing and expression compilation
 // for the composition engine.
 //
@@ -76,14 +90,14 @@ type CacheConfig struct {
 // Composition represents a multi-step API composition with a response template.
 // Compositions are matched to incoming requests by path and method.
 type Composition struct {
-	Path             string            `yaml:"path"`
-	Method           string            `yaml:"method"`
-	Public           bool              `yaml:"public"`
-	Steps            []Step            `yaml:"steps"`
-	Response         ResponseTemplate  `yaml:"response"`
-	RateLimit        *ratelimit.Config `yaml:"rate_limit"`
-	MaxRequestBytes  int64             `yaml:"max_request_bytes"`
-	RequestSchema    map[string]any    `yaml:"request_schema"`
+	Path            string            `yaml:"path"`
+	Method          string            `yaml:"method"`
+	Public          bool              `yaml:"public"`
+	Steps           []Step            `yaml:"steps"`
+	Response        ResponseTemplate  `yaml:"response"`
+	RateLimit       *ratelimit.Config `yaml:"rate_limit"`
+	MaxRequestBytes int64             `yaml:"max_request_bytes"`
+	RequestSchema   map[string]any    `yaml:"request_schema"`
 }
 
 // Step represents a single upstream request in a composition.
