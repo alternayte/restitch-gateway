@@ -26,7 +26,9 @@ import (
 )
 
 // OnBreakerStateChange is called when a circuit breaker changes state.
-// Set by the metrics package to update the breaker_state gauge.
+// Set by the metrics package to update the breaker_state gauge. Like the
+// metrics singleton (finding L34) this global is a deliberate
+// simplification: the gateway wires it once at startup.
 var OnBreakerStateChange func(name string, from, to string)
 
 // BreakerConfig configures a circuit breaker for an upstream.

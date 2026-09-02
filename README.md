@@ -259,7 +259,7 @@ Failed step references evaluate to `null` in templates (no 500).
 | `GET /admin/api/stats` | Per-composition count/errors/avg/p95 |
 | `GET /admin/api/stats/steps` | Per-step aggregates for a composition |
 | `GET /admin/api/stats/timeseries` | Bucketed request/error/partial counts |
-| `GET /admin/api/registry/status` | Last poll time, ETag, count, error state |
+| `GET /admin/api/registry/status` | Last poll time, ETag, count, error state (registry mode only) |
 | `POST /admin/api/validate` | Validate YAML config |
 | `POST /admin/api/reload` | Trigger hot config reload |
 | `GET /metrics` | Prometheus metrics |

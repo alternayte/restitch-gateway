@@ -103,7 +103,10 @@ services:
     restart: "no"
 
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION}
+    # The :-defaults keep `docker compose up` working without a .env file
+    # (finding L27); deploy/.env.example remains the version source of truth
+    # for verification.
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -120,7 +123,7 @@ services:
       - gateway
 
   jaeger:
-    image: jaegertracing/all-in-one:${JAEGER_VERSION}
+    image: jaegertracing/all-in-one:${JAEGER_VERSION:-1.70.0}
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:

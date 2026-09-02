@@ -42,6 +42,9 @@ editing the YAML file:
 | `RESTITCH_ADMIN_BIND` | `admin.bind` |
 | `RESTITCH_ADMIN_ENABLED` | `admin.enabled` |
 | `RESTITCH_ADMIN_API_KEY` | `admin.api_key` |
+| `RESTITCH_REGISTRY_URL` | `-registry-url` (registry mode) |
+| `RESTITCH_REGISTRY_KEY` | `-registry-key` (registry auth) |
+| `RESTITCH_POLL_INTERVAL` | `-poll-interval` |
 
 ## Duration Format
 

@@ -169,6 +169,10 @@ func BreakerStateValue(state string) float64 {
 	}
 }
 
+// Global metrics instance. This singleton (finding L34) is deliberate: the
+// Prometheus registry is a process-wide namespace and the codebase predates
+// dependency injection for it. SetDefaultMetrics runs once at startup; tests
+// that need isolation construct their own Metrics and never call it.
 var defaultMetrics *Metrics
 
 // SetDefaultMetrics sets the global metrics instance (called once from main).
