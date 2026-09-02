@@ -1,0 +1,73 @@
+# HARD.P0-8 — H8: fix the four vacuous gate scripts
+
+## Fixes applied (scripts/gates/)
+
+- m02.sh: the M2.gate TODO check called h_pass in BOTH branches, so it could
+  never fail. The else branch now calls h_fail.
+- m11.sh: the unknown-command exit code was captured after `|| true`, so it
+  was always 0 and never asserted. The exit code is now captured in an `if`
+  guard (set -e safe) and asserted to equal 2.
+- m16a.sh: the CORS check passed when the Access-Control-Allow-Origin header
+  was ABSENT (an empty string fails the grep -qF '*' test, so the pass branch
+  fired). The gate now fails when the header is absent and passes only when
+  the header is present and not a wildcard.
+- m19.sh: the M19.gate task recorded an unconditional h_pass. It now rolls up
+  the task statuses recorded by this run (m24 pattern) and fails when any
+  T19.x task failed.
+
+## Normal runs (assertions hold)
+
+### scripts/verify.sh M2
+RESULT M2: PASS (8 pass, 0 fail, 0 manual, 0 skip)
+
+### scripts/verify.sh M11
+RESULT M11: PASS (6 pass, 0 fail, 0 manual, 0 skip)
+
+### scripts/verify.sh M16a
+RESULT M16a: PASS (11 pass, 0 fail, 0 manual, 0 skip)
+
+### scripts/verify.sh M19
+RESULT M19: PASS (7 pass, 0 fail, 0 manual, 0 skip)
+
+## Seeded failures (assertions CAN fail now)
+
+### M2 — temporary TODO added to internal/composition/tmp_todo_check.go
+FAIL M2.gate TODOs present in composition package: ...tmp_todo_check.go:1:// TODO(hardening-negative-check): temporary marker for gate verification
+(tmp file removed afterwards; the gate re-passes)
+
+### M11 — assertion logic driven with the old vacuous capture (rc=0):
+The new if-guard captures the real exit code; the assertion compares it
+against 2. With rc=0 (what the old `|| true` always produced) the check
+reports FAIL; with the real run rc=2 and the gate PASSes.
+
+### M16a — header-absence branch driven live:
+- Origin present + key:  cors_header=Access-Control-Allow-Origin: https://evil.example -> PASS branch
+- No Origin:            FAIL branch: no Access-Control-Allow-Origin header emitted
+
+### M19 — ci.yml temporarily stripped of every 'e2e' occurrence
+FAIL T19.1 e2e job in ci.yml
+FAIL M19.gate one or more T19.x task checks failed (see evidence above)
+RESULT M19: FAIL (5 pass, 2 fail, 0 manual, 0 skip)
+(ci.yml restored afterwards; the gate re-passes)
+
+## Collateral fixes committed with this item
+
+- scripts/gates/m21.sh: corrected a stale assertion that backoff.go exists;
+  the custom module was replaced by cenkalti/backoff inside poller.go. The
+  assertion now greps poller.go for 'backoff'. M21 was already failing this
+  check before this session (backoff.go absent at the review commit).
+- scripts/gates/{m08,m10,m12,m18,m20,m21,m24,final}.sh: added admin.api_key to
+  gate configs and X-Admin-Key headers to admin API calls; m20/m21 use
+  -registry-key on studio + gateway; final/m12 pass -admin-key to the studio.
+  Required because the admin and registry APIs now require keys (C1/C2/C3).
+  All affected gates re-run green: M8, M10, M12, M18, M20, M21, M24, final.
+- studio/vitest.config.ts: the localStorage workaround probed the global at
+  config load time; Node 26 no longer installs it lazily, so the flag was
+  never set and 6 preference tests failed. Keyed on the Node major instead.
+- deploy/docker-compose.yml + .env.example: the studio and gateway admin now
+  bind 0.0.0.0 inside containers (loopback default would make them
+  unreachable), shared RESTITCH_REGISTRY_KEY/RESTITCH_ADMIN_API_KEY wire the
+  poller and proxy through the key checks, gateway gets restart: on-failure
+  for the studio-startup race on the fatal initial fetch.
+- tests/loadtest/m24_baseline.js: the k6 studio scenario sends X-Admin-Key
+  when STUDIO_KEY is set.
