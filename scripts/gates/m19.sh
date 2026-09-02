@@ -36,7 +36,7 @@ if [[ -d "${REPO_ROOT}/studio/src" ]]; then
 
     if [[ -f "${REPO_ROOT}/studio/package.json" ]]; then
         h_run "T19.3 npm test passes" -- \
-            bash -c "cd '${REPO_ROOT}/studio' && npm ci --silent && npm run test -- --passWithNoTests"
+            bash -c "cd '${REPO_ROOT}/studio' && npm ci --silent && npm run test"
     fi
 else
     h_skip "T19.3 studio source not found"
