@@ -17,7 +17,9 @@ export function inferDeps(step: DagStep, allStepNames: string[]): string[] {
     let match: RegExpExecArray | null
     const re = new RegExp(STEP_REF_PATTERN.source, "g")
     while ((match = re.exec(text)) !== null) {
-      const ref = match[1]
+      // match[1] is undefined only if the pattern has no capture group,
+      // which the constant above guarantees it does.
+      const ref = match[1] ?? ""
       if (nameSet.has(ref) && ref !== step.name) {
         inferred.add(ref)
       }

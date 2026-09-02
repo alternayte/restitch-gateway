@@ -71,7 +71,9 @@ jobs:
         working-directory: studio
 
       - name: Test
-        run: npm run test -- --passWithNoTests
+        # --passWithNoTests was dropped (finding M18): the Studio now has
+        # real tests, and an empty suite must fail rather than pass.
+        run: npm run test
         working-directory: studio
 
       - run: npm run build

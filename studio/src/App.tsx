@@ -8,6 +8,7 @@ import { useState } from "react"
 import { usePoll } from "./hooks/usePoll"
 import { PreferencesProvider, usePreferences } from "./hooks/usePreferences"
 import { api } from "./lib/api"
+import ErrorBoundary from "./components/ErrorBoundary"
 import Dashboard from "./pages/Dashboard"
 import Compositions from "./pages/Compositions"
 import CompositionDetail from "./pages/CompositionDetail"
@@ -137,14 +138,16 @@ function Shell() {
         </nav>
 
         <main className="flex-1 overflow-auto bg-canvas">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/compositions" element={<Compositions />} />
-            <Route path="/compositions/:name" element={<CompositionDetail />} />
-            <Route path="/requests" element={<Requests />} />
-            <Route path="/builder" element={<Builder />} />
-            <Route path="/config" element={<Config />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/compositions" element={<Compositions />} />
+              <Route path="/compositions/:name" element={<CompositionDetail />} />
+              <Route path="/requests" element={<Requests />} />
+              <Route path="/builder" element={<Builder />} />
+              <Route path="/config" element={<Config />} />
+            </Routes>
+          </ErrorBoundary>
         </main>
       </div>
     </BrowserRouter>

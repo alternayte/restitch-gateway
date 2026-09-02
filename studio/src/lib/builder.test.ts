@@ -34,9 +34,9 @@ describe("buildYaml", () => {
 
     const steps = comp.steps as Array<Record<string, unknown>>
     expect(steps).toHaveLength(2)
-    expect(steps[0].name).toBe("fetch")
-    expect(steps[1].optional).toBe(true)
-    expect(steps[1].depends_on).toEqual(["fetch"])
+    expect(steps[0]?.name).toBe("fetch")
+    expect(steps[1]?.optional).toBe(true)
+    expect(steps[1]?.depends_on).toEqual(["fetch"])
   })
 
   it("skips empty upstream names", () => {

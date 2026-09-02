@@ -60,7 +60,7 @@ describe("Compositions", () => {
   it("does not navigate when the pin is clicked", () => {
     render(<MemoryRouter><Compositions /></MemoryRouter>)
     const pinButtons = screen.getAllByRole("button", { name: /pin/i })
-    fireEvent.click(pinButtons[0])
+    fireEvent.click(pinButtons[0]!)
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 })

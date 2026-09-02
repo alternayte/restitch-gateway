@@ -19,15 +19,19 @@ import { TimeRangeSelector, type TimeRange } from "../components/charts/TimeRang
 import { StepBreakdownChart } from "../components/charts/StepBreakdownChart"
 import { StepComparisonChart } from "../components/charts/StepComparisonChart"
 import { TimelineWaterfall } from "../components/waterfall/TimelineWaterfall"
+import PollError from "../components/PollError"
 
 export default function CompositionDetail() {
   const { name } = useParams<{ name: string }>()
-  const { data: compositions } = usePoll(() => api.compositions(), 10000)
+  const { data: compositions, error, refresh } = usePoll(() => api.compositions(), 10000)
   const [tab, setTab] = useState<"metrics" | "graph" | "steps" | "route">("metrics")
 
   const comp = compositions?.find((c) => c.name === name)
 
   if (!compositions) {
+    if (error) {
+      return <PollError message={error.message} onRetry={refresh} />
+    }
     return (
       <div className="p-8">
         <div className="h-6 w-48 bg-surface-1 rounded-md animate-pulse" />

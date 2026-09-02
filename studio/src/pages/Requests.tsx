@@ -2,6 +2,7 @@ import { useState } from "react"
 import { usePoll } from "../hooks/usePoll"
 import { api, type RequestRecord, type StepRecord } from "../lib/api"
 import { ChevronDown, ChevronRight } from "lucide-react"
+import PollError from "../components/PollError"
 import { RequestFilters } from "../components/filters/RequestFilters"
 import { TimelineWaterfall } from "../components/waterfall/TimelineWaterfall"
 import { StepDetailPanel } from "../components/waterfall/StepDetailPanel"
@@ -28,7 +29,7 @@ export default function Requests() {
   const [partialOnly, setPartialOnly] = useState(false)
 
   const { data: compositions } = usePoll(() => api.compositions(), 10000)
-  const { data: requests } = usePoll(() => api.requests(limit), 3000)
+  const { data: requests, error, refresh } = usePoll(() => api.requests(limit), 3000)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [selectedStep, setSelectedStep] = useState<StepRecord | null>(null)
 
@@ -56,6 +57,9 @@ export default function Requests() {
   })
 
   if (!requests) {
+    if (error) {
+      return <PollError message={error.message} onRetry={refresh} />
+    }
     return (
       <div className="p-8">
         <div className="h-6 w-48 bg-surface-1 rounded-md animate-pulse" />

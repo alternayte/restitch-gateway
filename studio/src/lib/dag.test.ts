@@ -70,7 +70,7 @@ describe("computeWaves", () => {
     ])
     expect(waves).toHaveLength(3)
     expect(waves[0]).toEqual(["root"])
-    expect(waves[1].sort()).toEqual(["left", "right"])
+    expect(waves[1]!.sort()).toEqual(["left", "right"])
     expect(waves[2]).toEqual(["join"])
   })
 })
