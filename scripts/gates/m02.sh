@@ -52,8 +52,7 @@ todo_output=$(grep -rn 'TODO' "${REPO_ROOT}/internal/composition/" --include='*.
 if [[ -z "${todo_output}" ]]; then
     h_pass "M2.gate no TODOs in composition package"
 else
-    # TODOs may be acceptable if they're comments about future work, not unfinished code
-    h_pass "M2.gate TODOs present but may be informational"
+    h_fail "M2.gate TODOs present in composition package: ${todo_output}"
 fi
 
 # Path escaping smoke test

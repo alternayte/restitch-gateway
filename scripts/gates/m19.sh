@@ -84,6 +84,19 @@ fi
 
 # ── M19 Verification gate ───────────────────────────────────────────────────
 h_task M19.gate
-h_pass "M19.gate all task checks passed (see above)"
+# Roll up the task assertions from this run: the gate must fail when any
+# T19.x task failed. The previous unconditional h_pass recorded PASS even
+# when assertions above failed (finding H8).
+m19_rollup_failed=0
+for i in "${!H_TASK_NAMES[@]}"; do
+    if [[ "${H_TASK_STATUS[$i]}" == "FAIL" ]]; then
+        m19_rollup_failed=1
+    fi
+done
+if [[ "${m19_rollup_failed}" -eq 1 ]]; then
+    h_fail "M19.gate one or more T19.x task checks failed (see evidence above)"
+else
+    h_pass "M19.gate all T19.x task checks passed (see evidence above)"
+fi
 
 h_finish

@@ -7,13 +7,23 @@ h_init M11
 h_task T11.1
 h_build
 h_run "T11.1 version prints" -- "${REPO_ROOT}/bin/restitch" version
-# Unknown command → exit 2
-"${REPO_ROOT}/bin/restitch" nonsense > "${H_TMP}/nonsense.log" 2>&1 || true
-nonsense_exit=$?
+# Unknown command → exit 2. The exit code is captured BEFORE any `|| true`
+# so the assertion below cannot be vacuously satisfied (finding H8). The `if`
+# guard keeps the command off the set -e path while preserving its exit code.
+if "${REPO_ROOT}/bin/restitch" nonsense > "${H_TMP}/nonsense.log" 2>&1; then
+    nonsense_exit=0
+else
+    nonsense_exit=$?
+fi
 {
     echo "$ bin/restitch nonsense → exit ${nonsense_exit}"
     cat "${H_TMP}/nonsense.log"
 } >> "${H_EVIDENCE_FILE}"
+if [[ "${nonsense_exit}" -eq 2 ]]; then
+    h_pass "T11.1 unknown command exits 2 (got ${nonsense_exit})"
+else
+    h_fail "T11.1 unknown command exit = ${nonsense_exit}, want 2"
+fi
 
 # ── T11.2 restitch check ────────────────────────────────────────────────────
 h_task T11.2
