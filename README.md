@@ -502,12 +502,12 @@ make ledger-check   # Check every plan task has green evidence
 `build-all` builds the frontend automatically when `cmd/restitch-studio/dist`
 has no assets, since that directory is a build artifact and is not committed.
 
-### Internal process files
+### Repository notes
 
-`PLAN.md`, `docs/plan-progress/`, `docs/superpowers/`, and
-`.superpowers/` are the maintainers' planning and verification records, not
-user documentation. They track milestone gates and the evidence ledger; the
-user-facing docs are `docs/` and this README.
+`PLAN.md` is the maintainers' planning record, not user documentation. The
+verification gates under `scripts/gates/` and their evidence ledger are
+maintained locally by the maintainers; the ledger directories are not part
+of the public tree. The user-facing docs are `docs/` and this README.
 
 ### Project Structure
 
