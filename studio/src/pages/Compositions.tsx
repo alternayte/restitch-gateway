@@ -3,13 +3,17 @@ import { Pin, PinOff } from "lucide-react"
 import { usePoll } from "../hooks/usePoll"
 import { usePreferences } from "../hooks/usePreferences"
 import { api } from "../lib/api"
+import PollError from "../components/PollError"
 
 export default function Compositions() {
-  const { data: compositions } = usePoll(() => api.compositions(), 10000)
+  const { data: compositions, error, refresh } = usePoll(() => api.compositions(), 10000)
   const { prefs, togglePin } = usePreferences()
   const navigate = useNavigate()
 
   if (!compositions) {
+    if (error) {
+      return <PollError message={error.message} onRetry={refresh} />
+    }
     return (
       <div className="p-8">
         <div className="h-6 w-48 bg-surface-1 rounded-md animate-pulse" />

@@ -63,8 +63,9 @@ export default function Config() {
 
       const upstreamsMap: Record<string, { url: string; timeout_ms?: number }> = {}
       for (const u of upstreams) {
-        upstreamsMap[u.name] = { url: u.url }
-        if (u.timeout_ms > 0) upstreamsMap[u.name].timeout_ms = u.timeout_ms
+        const entry: { url: string; timeout_ms?: number } = { url: u.url }
+        if (u.timeout_ms > 0) entry.timeout_ms = u.timeout_ms
+        upstreamsMap[u.name] = entry
       }
 
       const compositionsMap: Record<string, unknown> = {}

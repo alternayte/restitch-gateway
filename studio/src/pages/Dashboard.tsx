@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom"
 import { usePoll } from "../hooks/usePoll"
 import { usePreferences } from "../hooks/usePreferences"
 import { api } from "../lib/api"
+import PollError from "../components/PollError"
 import { SparklineCard } from "../components/charts/SparklineCard"
 import { RequestRateChart } from "../components/charts/RequestRateChart"
 import { LatencyChart } from "../components/charts/LatencyChart"
@@ -13,11 +14,14 @@ export default function Dashboard() {
   const range = prefs.defaultTimeRange
   const setRange = setDefaultTimeRange
   const navigate = useNavigate()
-  const { data: stats } = usePoll(() => api.stats(), 5000)
+  const { data: stats, error: statsError, refresh } = usePoll(() => api.stats(), 5000)
   const { data: upstreams } = usePoll(() => api.upstreams(), 10000)
   const { data: timeseries } = usePoll(() => api.timeseries(range, "1m"), 30000)
 
   if (!stats) {
+    if (statsError) {
+      return <PollError message={statsError.message} onRetry={refresh} />
+    }
     return (
       <div className="p-8">
         <div className="h-6 w-48 bg-surface-1 rounded-md animate-pulse" />
