@@ -1,6 +1,6 @@
 module github.com/alternayte/restitch-gateway
 
-go 1.25.7
+go 1.26.0
 
 require (
 	github.com/expr-lang/expr v1.17.7
@@ -26,7 +26,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
-	golang.org/x/time v0.15.0
+	golang.org/x/time v0.16.0
 	modernc.org/sqlite v1.53.0
 )
 
