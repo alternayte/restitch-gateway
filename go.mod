@@ -1,6 +1,6 @@
 module github.com/alternayte/restitch-gateway
 
-go 1.25.7
+go 1.26.0
 
 require (
 	github.com/expr-lang/expr v1.17.7
@@ -9,7 +9,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require golang.org/x/oauth2 v0.36.0
+require golang.org/x/oauth2 v0.37.0
 
 require (
 	github.com/MicahParks/keyfunc/v3 v3.8.0
