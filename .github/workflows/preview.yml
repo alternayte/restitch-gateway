@@ -51,7 +51,7 @@ jobs:
             -d "{\"host\":\"ghcr.io\",\"username\":\"${{ github.actor }}\",\"token\":\"${{ secrets.GITHUB_TOKEN }}\"}" \
             -o /dev/null -w 'registry stored: %{http_code}\n'
 
-      - uses: alternayte/kiln/.github/actions/preview@main
+      - uses: alternayte/kiln/.github/actions/preview@v0.5.1
         with:
           url: ${{ vars.KILN_URL }}
           api-key: ${{ secrets.KILN_API_KEY }}
@@ -59,3 +59,24 @@ jobs:
           port: "8080"
           start: '/restitch run --config /restitch.yaml --port 8080'
           egress-allow: jsonplaceholder.typicode.com dummyjson.com
+
+      # ghcr keeps every version this pull request pushed, and nothing else
+      # removes them. Kiln's own cleanup ends at the sandbox and the template.
+      - name: Delete the preview images
+        if: github.event.action == 'closed'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: ${{ github.event.repository.name }}-preview
+        run: |
+          set -uo pipefail
+          for scope in orgs users; do
+            ids=$(gh api "/$scope/$OWNER/packages/container/$PACKAGE/versions" --jq '.[].id' 2>/dev/null) || continue
+            for id in $ids; do
+              gh api --method DELETE "/$scope/$OWNER/packages/container/$PACKAGE/versions/$id" >/dev/null 2>&1 \
+                && echo "deleted image version $id" \
+                || echo "could not delete version $id"
+            done
+            break
+          done
