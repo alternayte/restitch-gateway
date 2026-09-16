@@ -1,0 +1,61 @@
+name: preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, closed]
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Log in to ghcr
+        if: github.event.action != 'closed'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build and push the preview image
+        if: github.event.action != 'closed'
+        env:
+          SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          base="ghcr.io/${REPO,,}-preview-base:${SHA}"
+          image="ghcr.io/${REPO,,}-preview:${SHA}"
+          docker build -t "$base" .
+          docker build -t "$image" --build-arg BASE="$base" -f .github/preview/Dockerfile .
+          docker push "$image"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+
+      # The host pulls the image, so it needs a credential for ghcr. The run's
+      # own token reads this repository's packages and expires with the job,
+      # so nothing long-lived is stored.
+      - name: Give Kiln a pull credential
+        if: github.event.action != 'closed'
+        run: |
+          curl -sS -X POST "${{ vars.KILN_URL }}/v1/registries" \
+            -H "Authorization: Bearer ${{ secrets.KILN_API_KEY }}" \
+            -H 'Content-Type: application/json' \
+            -d "{\"host\":\"ghcr.io\",\"username\":\"${{ github.actor }}\",\"token\":\"${{ secrets.GITHUB_TOKEN }}\"}" \
+            -o /dev/null -w 'registry stored: %{http_code}\n'
+
+      - uses: alternayte/kiln/.github/actions/preview@main
+        with:
+          url: ${{ vars.KILN_URL }}
+          api-key: ${{ secrets.KILN_API_KEY }}
+          image: ${{ env.IMAGE }}
+          port: "8080"
+          start: '/restitch run --config /restitch.yaml --port 8080'
+          egress-allow: jsonplaceholder.typicode.com dummyjson.com
