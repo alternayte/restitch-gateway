@@ -1,23 +1,23 @@
 # Handover
 
-Updated: 2026-10-23, session 3
+Updated: 2026-10-23, session 3 (closed)
 
 ## Where we are
 
-C01-C13 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
+C01-C15 and C17 are done; the whole Go side of the spec except the delivery chunks exists. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The frontend in `studio/` is still the old v1 SPA and talks to APIs that no longer exist. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
 
 ## Prove it
 
 Run: `docker run -d --rm --name restitch-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=restitch_test -p 55432:5432 postgres:17-alpine`, then `RESTITCH_TEST_DATABASE_URL="postgres://postgres:test@localhost:55432/restitch_test?sslmode=disable" make ci && make e2e && (cd studio && npm run test)`
-Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its postgres subtests), `make e2e` ok, Studio: 9 files, 28 tests passed. Seen at commit 28c29f3.
+Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its postgres subtests), `make e2e` ok, Studio: 9 files, 28 tests passed. Seen at commit 751221b.
 
 ## Active chunk
 
-None. Unblocked next: C14 (CLI publish and import/export), C15 (dev mode), C16 (UI shell), C17 (schema).
+None. Unblocked next: C16 (UI shell). Every remaining chunk except C26/C27 is frontend and depends on C16.
 
 ## Next action
 
-Start C14: write "TestExportThenImportRoundTrips" in `internal/studio/importexport_test.go`. Import replaces the draft through `artifactResources` and `replaceDraft` in `internal/studio/publish.go`; `restitch publish` calls import then publish with an auth-all API key (Authorization: Bearer). Check what `cmd/restitch/importcmd.go` does first.
+Start C16. Read `../sluice/ui/package.json`, `../sluice/ui/openapi-ts.config.ts`, `../sluice/ui/src/components/data-state.tsx`, `ui/toast.tsx`, `confirm-dialog.tsx`, `lib/theme.tsx` and `app/app-shell.tsx` first. Generate the client from `api/openapi.yaml` (it is committed and current). Write "redirects to sign-in without a session" in `studio/src/routes/login.test.tsx`. Verify the shell by driving it in a browser with the verify-ui skill against `restitch dev`, not with an e2e suite. The Go embed lives in `cmd/restitch-studio`; `restitch studio` serves no SPA yet, so C16 must embed the new build into `internal/studio` and serve it on /.
 
 ## Decisions
 
