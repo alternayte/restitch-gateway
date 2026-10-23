@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Fix:** `request_schema` validation can no longer be bypassed. A non-empty body with a missing or non-JSON Content-Type returns 415, an empty or `null` body is validated as JSON `null`, and a body read error returns 400 instead of executing the composition. JSON detection now parses the media type (`application/json` or `+json`) instead of matching the substring "json".
+
 ## v1.2.0 — 2026-09-02
 
 First public release. Everything below this entry — the composition-engine

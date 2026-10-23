@@ -17,10 +17,14 @@ package composition
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"testing/iotest"
 
 	"github.com/alternayte/restitch-gateway/internal/server"
 )
@@ -887,6 +891,127 @@ compositions:
 	_ = json.NewDecoder(w4.Body).Decode(&malformedResp)
 	if malformedResp["error"] != "invalid JSON body" {
 		t.Errorf("error = %q, want \"invalid JSON body\"", malformedResp["error"])
+	}
+}
+
+// TestHandler_RequestSchemaBypass pins that request_schema validation cannot
+// be skipped by a non-JSON or missing Content-Type, a literal null body, an
+// empty body, or a body read error.
+func TestHandler_RequestSchemaBypass(t *testing.T) {
+	var upstreamCalls atomic.Int32
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	}))
+	defer mockServer.Close()
+
+	configYAML := `
+upstreams:
+  mock:
+    url: ` + mockServer.URL + `
+
+compositions:
+  validated:
+    path: /validated
+    method: POST
+    request_schema:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+    steps:
+      - name: s
+        upstream: mock
+        path: /ok
+    response:
+      status: 200
+      body:
+        data: "{{ steps.s.body }}"
+  open:
+    path: /open
+    method: POST
+    steps:
+      - name: s
+        upstream: mock
+        path: /ok
+    response:
+      status: 200
+      body:
+        data: "{{ steps.s.body }}"
+`
+
+	cfg, err := ParseConfig([]byte(configYAML))
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+	compiled, err := CompileConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("CompileConfig: %v", err)
+	}
+	handler := NewHandler(compiled, nil)
+	router := server.NewRouter()
+	handler.RegisterRoutes(router)
+	router.Finalize()
+
+	const validJSON = `{"name":"Alice"}`
+
+	tests := []struct {
+		name        string
+		path        string
+		body        io.Reader
+		contentType string // "" means no Content-Type header
+		wantStatus  int
+		wantError   string // "" means do not check the error field
+	}{
+		{"text/plain with JSON body", "/validated", strings.NewReader(`{"age":1}`), "text/plain", http.StatusUnsupportedMediaType, "unsupported media type"},
+		{"text/plain with valid JSON body", "/validated", strings.NewReader(validJSON), "text/plain", http.StatusUnsupportedMediaType, "unsupported media type"},
+		{"json substring is not JSON", "/validated", strings.NewReader(validJSON), "application/jsonp", http.StatusUnsupportedMediaType, "unsupported media type"},
+		{"no content type with body", "/validated", strings.NewReader(`{"age":1}`), "", http.StatusUnsupportedMediaType, "unsupported media type"},
+		{"literal null body", "/validated", strings.NewReader(`null`), "application/json", http.StatusBadRequest, "request validation failed"},
+		{"empty body", "/validated", http.NoBody, "application/json", http.StatusBadRequest, "request validation failed"},
+		{"empty body no content type", "/validated", http.NoBody, "", http.StatusBadRequest, "request validation failed"},
+		{"read error", "/validated", iotest.ErrReader(errors.New("boom")), "application/json", http.StatusBadRequest, "invalid request body"},
+		{"+json suffix invalid body", "/validated", strings.NewReader(`{"age":1}`), "application/merge-patch+json", http.StatusBadRequest, "request validation failed"},
+		{"+json suffix valid body", "/validated", strings.NewReader(validJSON), "application/vnd.api+json; charset=utf-8", http.StatusOK, ""},
+		{"valid body", "/validated", strings.NewReader(validJSON), "application/json; charset=utf-8", http.StatusOK, ""},
+		{"no schema: text/plain still executes", "/open", strings.NewReader("hello"), "text/plain", http.StatusOK, ""},
+		{"no schema: empty body still executes", "/open", http.NoBody, "", http.StatusOK, ""},
+		{"no schema: read error rejected", "/open", iotest.ErrReader(errors.New("boom")), "application/json", http.StatusBadRequest, "invalid request body"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before := upstreamCalls.Load()
+			req := httptest.NewRequest("POST", tt.path, tt.body)
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tt.wantStatus, w.Body.String())
+			}
+			executed := upstreamCalls.Load() != before
+			if wantExec := tt.wantStatus == http.StatusOK; executed != wantExec {
+				t.Errorf("composition executed = %v, want %v", executed, wantExec)
+			}
+			if tt.wantError != "" {
+				if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+					t.Errorf("Content-Type = %q, want application/json", ct)
+				}
+				var resp map[string]any
+				if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+					t.Fatalf("decode error body: %v", err)
+				}
+				if resp["error"] != tt.wantError {
+					t.Errorf("error = %v, want %q", resp["error"], tt.wantError)
+				}
+			}
+		})
 	}
 }
 

@@ -295,7 +295,7 @@ a DAG of upstream steps and a response template.
 | `public` | bool | `false` | When `true`, skip inbound auth for this route |
 | `rate_limit` | object | — | Per-composition rate limiter. Same fields as `server.rate_limit`. |
 | `max_request_bytes` | int | `1048576` | Maximum request body size in bytes (default 1 MiB). Requests exceeding this are rejected with 413. |
-| `request_schema` | object | — | JSON Schema for request body validation. Invalid requests are rejected with 400. |
+| `request_schema` | object | — | JSON Schema for request body validation. Invalid requests are rejected with 400. A non-empty body must have a JSON Content-Type (`application/json` or a `+json` type), otherwise the request is rejected with 415. An empty body or a literal `null` is validated as JSON `null`, so a `type: object` schema rejects it. |
 
 ### compositions.*.steps
 

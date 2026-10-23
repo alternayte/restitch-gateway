@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"regexp"
 	"strings"
@@ -137,7 +138,11 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 		maxBytes = comp.MaxRequestBytes
 	}
 
-	// Read and parse request body once
+	compiledComp := h.config.Compositions[compositionName]
+	hasSchema := compiledComp.RequestSchema != nil
+
+	// Read and parse request body once. body stays nil when the body is
+	// absent, empty, or a literal null; all three validate as JSON null.
 	var body any
 	if r.Body != nil && r.ContentLength != 0 {
 		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
@@ -148,20 +153,30 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 				h.writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
 				return
 			}
-			// other read error; continue with nil body
-		} else if len(raw) > 0 && strings.Contains(r.Header.Get("Content-Type"), "json") {
-			if err := json.Unmarshal(raw, &body); err != nil {
-				// Malformed JSON must not slip past schema validation with a
-				// nil body and execute with empty input (finding H11).
-				h.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			h.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if len(raw) > 0 {
+			switch {
+			case isJSONMediaType(r.Header.Get("Content-Type")):
+				if err := json.Unmarshal(raw, &body); err != nil {
+					// Malformed JSON must not slip past schema validation with a
+					// nil body and execute with empty input (finding H11).
+					h.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+					return
+				}
+			case hasSchema:
+				// A schema-validated route only accepts JSON; any other (or a
+				// missing) Content-Type would otherwise skip validation.
+				h.writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "unsupported media type"})
 				return
 			}
 		}
 	}
 
-	// Validate request body against JSON schema if configured.
-	compiledComp := h.config.Compositions[compositionName]
-	if compiledComp.RequestSchema != nil && body != nil {
+	// Validate request body against JSON schema if configured. An absent body
+	// is validated as JSON null so `type: object` schemas reject it.
+	if hasSchema {
 		if err := compiledComp.RequestSchema.Validate(body); err != nil {
 			details := extractValidationErrors(err)
 			h.writeJSON(w, http.StatusBadRequest, map[string]any{
@@ -379,4 +394,14 @@ func extractValidationErrors(err error) []string {
 		}
 	}
 	return []string{err.Error()}
+}
+
+// isJSONMediaType reports whether a Content-Type header names JSON:
+// application/json or any structured-syntax +json suffix type.
+func isJSONMediaType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
 }
