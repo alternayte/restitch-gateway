@@ -188,3 +188,26 @@ func TestListAndDeleteResources(t *testing.T) {
 		}
 	})
 }
+
+func TestSchemaRouteNamesEveryKind(t *testing.T) {
+	s := newTestServer(t, "sqlite:"+t.TempDir()+"/studio.db")
+	c := signIn(t, s)
+	rec := do(t, s, http.MethodGet, "/api/v1/schema", "", c, nil)
+	var out struct {
+		Artifact struct {
+			Defs map[string]any `json:"$defs"`
+		} `json:"artifact"`
+		Definitions map[string]string `json:"definitions"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("schema: %d %v", rec.Code, err)
+	}
+	for kind, def := range out.Definitions {
+		if _, ok := out.Artifact.Defs[def]; !ok {
+			t.Errorf("kind %s names %s, which the schema lacks", kind, def)
+		}
+	}
+	if len(out.Definitions) != 4 {
+		t.Errorf("definitions = %v", out.Definitions)
+	}
+}

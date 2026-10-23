@@ -309,6 +309,22 @@ components:
         - created_at
         - created_by
       type: object
+    GetArtifactSchemaResponse:
+      additionalProperties: false
+      properties:
+        artifact: {}
+        definitions:
+          additionalProperties:
+            type: string
+          type: object
+        settings:
+          additionalProperties: {}
+          type: object
+      required:
+        - artifact
+        - definitions
+        - settings
+      type: object
     ImportDraftRequest:
       additionalProperties: false
       properties:
@@ -2623,3 +2639,23 @@ paths:
       summary: Replace the signed-in user's UI preferences
       tags:
         - me
+  /api/v1/schema:
+    get:
+      description: Generated from the gateway's Go config types. definitions names the $defs entry of each kind's body.
+      operationId: getArtifactSchema
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetArtifactSchemaResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: The JSON Schema of the artifact and of each resource kind
+      tags:
+        - draft

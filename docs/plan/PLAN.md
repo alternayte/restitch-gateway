@@ -27,7 +27,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### Studio UI
 - [ ] C16 — The new UI shell signs in and renders environments through the generated client
-- [ ] C17 — Studio serves a JSON Schema of the artifact that covers every config field
+- [x] C17 — Studio serves a JSON Schema of the artifact that covers every config field
 - [ ] C18 — A resource form generated from the schema saves a resource, with a YAML tab
 - [ ] C19 — The step graph widget edits depends_on
 - [ ] C20 — Expression fields show server lint errors as the user types
@@ -265,13 +265,14 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C17 — Studio serves a JSON Schema of the artifact that covers every config field
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C03, C05
 - **Files:** `internal/composition/schema.go`, `internal/composition/schema_test.go`, `internal/studio/server.go`
 - **Goal:** A JSON Schema generated from the Go artifact types describes every resource kind and field, and Studio serves it.
 - **First failing test:** `internal/composition/schema_test.go` — "TestSchemaCoversEveryYAMLField"
 - **Done when:** the test command passes and the test walks the Go types by reflection, so a new field without schema coverage fails it.
 - **Spec:** Decision on forms from JSON Schema.
+- **Notes:** Done: `composition.ArtifactSchema` uses github.com/invopop/jsonschema with yaml tags, package-qualified definition names (`composition.Upstream`, `auth.Config`, `ratelimit.Config`), durations as strings with a pattern, additionalProperties false like the strict decoder, and no required fields. `TestSchemaAcceptsTheShippedExamples` validates every example artifact against it. GET /api/v1/schema returns the artifact schema, the $defs name of each resource kind's body, and the settings schema.
 
 ---
 

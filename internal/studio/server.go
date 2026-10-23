@@ -179,6 +179,7 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	s.registerUsage()
 	s.registerRequests()
 	s.registerImportExport()
+	s.registerSchema()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST "+auth.BasePath()+signUpPath, http.NotFoundHandler())
