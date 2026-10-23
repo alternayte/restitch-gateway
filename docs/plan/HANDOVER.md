@@ -1,10 +1,10 @@
 # Handover
 
-Updated: 2026-10-24, session 5 (closed after C27 docs)
+Updated: 2026-10-24, session 5 (closed; every chunk done)
 
 ## Where we are
 
-C01-C18, C20, C22-C24 and C26 are done and merged to main (PR #34). C27 is done on branch c27-docs (PR #35), AGENTS.md included. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The new frontend in `studio/` (TanStack, generated client, sluice UI layer) signs in and lists and creates environments; `restitch studio` serves it from `internal/studio/dist`. The old Studio binary, registry and session packages are gone. One image holds only /restitch and needs a role command; `deploy/` has a Compose stack (Postgres, Studio, two gateways, mock upstream, Prometheus) with a two-step bring-up, and plain Kubernetes manifests; `make deploy-lint` lints both. Studio answers GET /health and GET /ready. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
+Every chunk C01-C27 is done. C01-C24, C26 and C27 are merged to main (PRs #34-#37); C25 is PR #38, merged when its CI passed. The v2 control plane described in `docs/specs/studio-control-plane.md` is built: Studio with environments, drafts, publish, rollback, promote, gateway tokens, users, dashboards, the step graph, the secret picker and the command palette; managed and standalone gateways; one image; Compose and Kubernetes files; docs for v2.
 
 ## Prove it
 
@@ -13,11 +13,17 @@ Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its
 
 ## Active chunk
 
-None. Unblocked next: C25 (command palette), C19 (step graph), C21 (secret picker).
+None. The plan has no open chunk.
 
 ## Next action
 
-Start C25 (command palette and keyboard shortcuts), then C19 (step graph) and C21 (secret picker). Each comes off `main` on its own branch.
+Ask the user what comes next. Open items, none of them in the plan:
+- The spec's manual check: a gateway with two env vars and Studio with three on Postgres serve traffic on one container platform from docs/deployment.md. Only the user can run it.
+- Release v2.0.0: no tag is cut. `.github/workflows/release.yml` publishes the image on a v* tag.
+- The step graph does not draw dependencies from {{ steps.X }} references; that needs an API that returns the dependencies the gateway computes.
+- Metrics keep the v1 names `restitch_registry_*`; renaming breaks dashboards.
+- The secret picker shows on every free string field, step names and methods included.
+- Jaeger was dropped from deploy/; the gateway still exports OTLP traces when OTEL_EXPORTER_OTLP_ENDPOINT is set.
 
 ## Decisions
 
