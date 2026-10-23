@@ -54,7 +54,7 @@ jobs:
           cache: npm
           cache-dependency-path: studio/package-lock.json
 
-      # cmd/restitch-studio embeds dist/, which is a build artifact and not
+      # internal/studio embeds dist/, which is a build artifact and not
       # committed (finding M36); a fresh clone needs the frontend first.
       - run: npm ci && npm run build
         working-directory: studio

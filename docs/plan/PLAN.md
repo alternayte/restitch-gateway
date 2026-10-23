@@ -26,7 +26,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C15 — `restitch dev` runs both roles in one process on SQLite
 
 ### Studio UI
-- [ ] C16 — The new UI shell signs in and renders environments through the generated client
+- [x] C16 — The new UI shell signs in and renders environments through the generated client
 - [x] C17 — Studio serves a JSON Schema of the artifact that covers every config field
 - [ ] C18 — A resource form generated from the schema saves a resource, with a YAML tab
 - [ ] C19 — The step graph widget edits depends_on
@@ -252,7 +252,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C16 — The new UI shell signs in and renders environments through the generated client
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C06
 - **Files:** `studio/package.json`, `studio/openapi-ts.config.ts`, `studio/src/routes/`, `studio/src/app/`, `studio/src/components/data-state.tsx`
 - **Goal:** The UI uses TanStack Router and Query with a hey-api client generated from `openapi.yaml`; sign-in, sign-out, the environment list, light and dark themes, DataState and toasts work.
@@ -260,6 +260,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and `npm run build` succeeds with no react-router-dom dependency.
 - **Spec:** Decision on the Studio API and UI stack.
 - **Notes:** Copy patterns from `../sluice/ui/src` (data-state, toast, confirm-dialog, theme, app-shell); keep the Restitch accent. shadcn on Radix replaces base-ui. Delete pages as their replacements land, not before.
+  Done: `studio/` is a new Vite + TanStack Router/Query app; the client is generated into `studio/src/api` by `npm run gen:api` from `api/openapi.yaml`. Ported from sluice: index.css tokens, components/ui, DataState, ConfirmDialog, theme, toasts, app and root shells, sign-in and change-password; the command palette, shortcuts and AI drawer were left out (C25 adds the palette). `api-client.ts` maps both error shapes (auth-all {error:{code,message}} and huma problem details) onto ApiError. The build lands in `internal/studio/dist` and `internal/studio/spa.go` serves it on / with an index.html fallback; /api/* that matches nothing answers 404. The old v1 pages could not run against v2, so they went now instead of one by one; their chart, waterfall and DAG components are in git at 751221b (`studio/src/components`, `studio/src/lib/dag.ts`) for C19 and C24. `cmd/restitch-studio`, `internal/registry` and `internal/session` are deleted (pulled forward from C26) because the old binary embedded the old build. Verified in a browser against `restitch dev`: sign-in, the environment list, create with a toast, light and dark themes, 390px width.
 
 ---
 

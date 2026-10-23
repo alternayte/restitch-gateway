@@ -28,7 +28,7 @@ jobs:
           cache: npm
           cache-dependency-path: studio/package-lock.json
 
-      # cmd/restitch-studio embeds dist/, which is a build artifact and not
+      # internal/studio embeds dist/, which is a build artifact and not
       # committed (finding M36); the image build needs the frontend first.
       - name: Build frontend
         run: npm ci && npm run build
@@ -51,9 +51,6 @@ jobs:
             GOOS=$1 GOARCH=$2 CGO_ENABLED=0 go build \
               -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" \
               -o "dist/restitch-${{ github.ref_name }}-$1-$2" ./cmd/restitch
-            GOOS=$1 GOARCH=$2 CGO_ENABLED=0 go build \
-              -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" \
-              -o "dist/restitch-studio-${{ github.ref_name }}-$1-$2" ./cmd/restitch-studio
           done
           ls -la dist
 

@@ -195,3 +195,22 @@ func TestOpenAPIUpToDate(t *testing.T) {
 		t.Fatal("the OpenAPI document must not offer public sign-up")
 	}
 }
+
+func TestSPAServesClientRoutesAndNeverShadowsTheAPI(t *testing.T) {
+	s := newTestServer(t, "sqlite:"+filepath.Join(t.TempDir(), "studio.db"))
+	for path, want := range map[string]int{
+		"/":                     http.StatusOK,
+		"/environments/staging": http.StatusOK,
+		"/api/v1/unknown":       http.StatusUnauthorized,
+		"/api/elsewhere":        http.StatusNotFound,
+		"/gateway/v1/artifact":  http.StatusUnauthorized,
+	} {
+		rec := do(t, s, http.MethodGet, path, "", nil, nil)
+		if rec.Code != want {
+			t.Errorf("GET %s: got %d, want %d", path, rec.Code, want)
+		}
+		if want == http.StatusOK && !strings.Contains(rec.Body.String(), `<div id="root">`) {
+			t.Errorf("GET %s did not serve index.html", path)
+		}
+	}
+}

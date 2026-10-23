@@ -29,17 +29,15 @@ e2e:
 studio:
 	cd studio && npm ci && npm run build
 
-# cmd/restitch-studio/dist is embedded into the binary, but nothing under it
-# is committed (finding M36) — the whole directory is a build artifact that
-# `npm run build` produces. Fresh clones must build the frontend before any
-# Go command that compiles ./... (for example `make build-all` or a plain
-# `go build ./...`); CI builds it explicitly in the go job.
-build-all: build
-	@if [ ! -d cmd/restitch-studio/dist/assets ]; then \
+# internal/studio/dist is embedded into the binary, but nothing under it is
+# committed: `npm run build` produces it. Fresh clones must build the
+# frontend before any Go command that compiles ./... (CI builds it first).
+build-all:
+	@if [ ! -f internal/studio/dist/index.html ]; then \
 		echo "==> studio assets missing; building frontend first"; \
 		$(MAKE) studio; \
 	fi
-	go build $(LDFLAGS) -o bin/restitch-studio ./cmd/restitch-studio
+	$(MAKE) build
 
 docker:
 	docker build -t restitch:dev .
