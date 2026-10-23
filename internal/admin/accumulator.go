@@ -25,6 +25,9 @@ type Accumulator struct {
 	mu      sync.Mutex
 	global  *accBucket
 	perComp map[string]*accBucket
+	// start is when the current window opened. Buckets carry it, so a
+	// request lands in the minute it happened, not the minute of the flush.
+	start time.Time
 }
 
 type accBucket struct {
@@ -46,6 +49,7 @@ func NewAccumulator() *Accumulator {
 	return &Accumulator{
 		global:  newAccBucket(),
 		perComp: make(map[string]*accBucket),
+		start:   time.Now(),
 	}
 }
 
@@ -96,7 +100,8 @@ func (a *Accumulator) Flush() []Bucket {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	now := time.Now().Truncate(time.Minute)
+	now := a.start.Truncate(time.Minute)
+	a.start = time.Now()
 	var buckets []Bucket
 
 	buckets = append(buckets, toBucket(now, "", a.global))

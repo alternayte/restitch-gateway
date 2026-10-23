@@ -103,3 +103,16 @@ func TestHeartbeatNeedsAGatewayToken(t *testing.T) {
 		t.Fatalf("unknown token: got %d, want 401", code)
 	}
 }
+
+func TestInstanceSilentForADayLeavesTheList(t *testing.T) {
+	s := newTestServer(t, "sqlite:"+t.TempDir()+"/studio.db")
+	c := signIn(t, s)
+	createEnvironment(t, s, c, "prod")
+	tok := issueToken(t, s, c, "prod")
+	heartbeat(s, tok.Token, map[string]any{"instance_id": "gw-old", "binary_version": "v2", "applied_version": 1})
+
+	s.now = func() time.Time { return time.Now().Add(forgetAfter + time.Minute) }
+	if got := listInstances(t, s, c, "prod"); len(got) != 0 {
+		t.Fatalf("instances = %+v, want none after a day of silence", got)
+	}
+}

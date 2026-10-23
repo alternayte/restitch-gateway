@@ -28,6 +28,10 @@ import (
 // Gateways send one every 15 seconds.
 const staleAfter = time.Minute
 
+// forgetAfter drops an instance from the list: replicas come and go, and
+// one silent for a day is gone, not stale.
+const forgetAfter = 24 * time.Hour
+
 // Heartbeat is what a gateway instance reports about itself.
 type Heartbeat struct {
 	InstanceID     string `json:"instance_id"`
@@ -100,7 +104,8 @@ func (s *Server) registerInstances() {
 		}
 		rows, err := s.db.db.QueryContext(ctx, s.db.rebind(`
 			SELECT instance_id, binary_version, applied_version, last_pull_error, first_seen_at, last_seen_at
-			FROM studio_gateway_instances WHERE environment = ? ORDER BY instance_id`), in.Environment)
+			FROM studio_gateway_instances WHERE environment = ? AND last_seen_at >= ? ORDER BY instance_id`),
+			in.Environment, s.now().UTC().Add(-forgetAfter))
 		if err != nil {
 			return nil, err
 		}

@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { DraftPage } from "@/features/resources/DraftPage";
+import { OverviewPage } from "@/features/dashboard/OverviewPage";
 
 export const Route = createFileRoute("/environments/$env/")({
-  component: function DraftRoute() {
+  component: function OverviewRoute() {
     const { env } = Route.useParams();
-    return <DraftPage env={env} />;
+    return <OverviewPage env={env} />;
   },
 });

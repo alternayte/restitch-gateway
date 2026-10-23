@@ -124,7 +124,7 @@ function EditorForm({
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: listResourcesQueryKey({ path: { env } }) });
       toast({ title: "Deleted", description: `${kindLabel(kind)} ${name}` });
-      void navigate({ to: "/environments/$env", params: { env } });
+      void navigate({ to: "/environments/$env/draft", params: { env } });
     },
   });
   const stale = save.error instanceof ApiError && save.error.status === 409;

@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { FileCode2, KeyRound, Plus, Rocket } from "lucide-react";
+import { FileCode2, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { listResourcesOptions } from "@/api/@tanstack/react-query.gen";
 import { DataState } from "@/components/data-state";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonClass } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -27,25 +27,12 @@ export function DraftPage({ env }: { env: string }) {
       New resource
     </Button>
   ) : undefined;
-  const actions = (
-    <>
-      <Link to="/environments/$env/versions" params={{ env }} className={buttonClass("secondary")}>
-        <Rocket className="h-4 w-4" aria-hidden />
-        Publish and history
-      </Link>
-      {can(me.role, "owner") && (
-        <Link to="/environments/$env/tokens" params={{ env }} className={buttonClass("secondary")}>
-          <KeyRound className="h-4 w-4" aria-hidden />
-          Gateway tokens
-        </Link>
-      )}
-      {add}
-    </>
-  );
+  const actions = add;
+
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title={env} description="The draft: edit resources here, then publish a version." actions={actions} />
+      <PageHeader title="Draft" description="Edit resources here, then publish a version." actions={actions} />
       <DataState
         query={query}
         empty={(d) => (d.resources ?? []).length === 0}

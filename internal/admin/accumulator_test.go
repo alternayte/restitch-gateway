@@ -16,6 +16,7 @@ package admin
 
 import (
 	"testing"
+	"time"
 )
 
 func TestAccumulator_Flush(t *testing.T) {
@@ -81,4 +82,15 @@ func TestAccumulator_LatencyBuckets(t *testing.T) {
 		}
 	}
 	t.Fatal("comp bucket not found")
+}
+
+func TestAccumulatorStampsTheWindowStart(t *testing.T) {
+	acc := NewAccumulator()
+	opened := time.Now().Truncate(time.Minute)
+	acc.Record("orders", 5, false, false, nil)
+	for _, b := range acc.Flush() {
+		if !b.Timestamp.Equal(opened) {
+			t.Fatalf("bucket stamped %v, want the window start %v", b.Timestamp, opened)
+		}
+	}
 }

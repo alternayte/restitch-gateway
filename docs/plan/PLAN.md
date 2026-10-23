@@ -34,7 +34,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [ ] C21 — The secret picker inserts ${VAR} names and the environment lists required names
 - [x] C22 — The publish screen shows the diff, history, rollback and promote
 - [x] C23 — Owners manage gateway tokens and users in settings
-- [ ] C24 — Environment dashboards show aggregates, sampled requests and instances
+- [x] C24 — Environment dashboards show aggregates, sampled requests and instances
 - [ ] C25 — The command palette and keyboard shortcuts reach every page and action
 
 ### Delivery
@@ -354,13 +354,14 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C24 — Environment dashboards show aggregates, sampled requests and instances
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C13, C16
 - **Files:** `studio/src/features/dashboard/`, `studio/src/components/charts/`, `studio/src/components/waterfall/`
 - **Goal:** Each environment shows usage charts, a sampled request list with the waterfall view, and the instances table.
 - **First failing test:** `studio/src/features/dashboard/dashboard.test.tsx` — "shows the empty state before any gateway reports"
 - **Done when:** the test command passes and the old Dashboard, Requests, Builder and Config pages are deleted.
 - **Notes:** Reuse the chart and waterfall components; feed them from the new usage and request endpoints.
+  Done: the environment landing page (/environments/$env) is the overview (`studio/src/features/dashboard/OverviewPage.tsx`): range switch, KPI tiles, requests-per-minute and p95 charts (sluice's lazy Recharts wrapper with data tables, `studio/src/components/charts`), upstreams with breaker states, instances with version lag, stale flag and last pull error, and sampled requests that expand into a step waterfall. An environment layout route adds sub-navigation (Overview, Draft at /environments/$env/draft, Publish and history, Gateway tokens for owners). The v1 pages were already deleted in C16; the v1 chart components were not reused because sluice's are accessible and themed. Found while verifying with live traffic: buckets were stamped with the flush time, so requests showed one minute late (the accumulator now stamps the window start), and instances of earlier dev runs never left the list (instances silent for a day are now hidden).
 
 ---
 
