@@ -18,5 +18,15 @@ if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.sho
   };
 }
 
+// React Flow measures its nodes; jsdom has no layout, so these only need to exist.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+globalThis.DOMMatrixReadOnly ??= class {
+  m22 = 1;
+} as unknown as typeof DOMMatrixReadOnly;
+
 // Without vitest globals, Testing Library does not unmount between tests.
 afterEach(() => cleanup());
