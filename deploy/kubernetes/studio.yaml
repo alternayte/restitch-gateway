@@ -1,0 +1,86 @@
+# Restitch Studio. It reads three values from the Secret restitch-studio,
+# which you create before you apply this file (see deploy/README.md):
+#   database-url        postgres://USER:PASSWORD@HOST:5432/DB?sslmode=require
+#   bootstrap-email     the first owner
+#   bootstrap-password
+# Set RESTITCH_PUBLIC_URL to the URL people use to reach Studio.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restitch-studio
+  labels:
+    app.kubernetes.io/name: restitch-studio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: restitch-studio
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: restitch-studio
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: studio
+          image: ghcr.io/alternayte/restitch-gateway:latest
+          args: ["studio"]
+          ports:
+            - name: http
+              containerPort: 3080
+          env:
+            - name: RESTITCH_PUBLIC_URL
+              value: https://studio.example.com
+            - name: RESTITCH_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: restitch-studio
+                  key: database-url
+            - name: RESTITCH_BOOTSTRAP_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: restitch-studio
+                  key: bootstrap-email
+            - name: RESTITCH_BOOTSTRAP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: restitch-studio
+                  key: bootstrap-password
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restitch-studio
+  labels:
+    app.kubernetes.io/name: restitch-studio
+spec:
+  selector:
+    app.kubernetes.io/name: restitch-studio
+  ports:
+    - name: http
+      port: 3080
+      targetPort: http

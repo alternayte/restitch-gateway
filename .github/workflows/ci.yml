@@ -142,6 +142,17 @@ jobs:
       - name: Build Docker image
         run: docker build -t restitch:ci .
 
+      - name: Build the Compose demo upstream
+        run: docker build --target mockupstream -t restitch-mockupstream:ci .
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      # docker compose config and kubeconform over deploy/.
+      - name: Lint deployment files
+        run: make deploy-lint
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30

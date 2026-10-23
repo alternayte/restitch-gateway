@@ -1,5 +1,5 @@
 # Docker Compose example — uses mockupstream as the backend.
-# Start with: docker-compose up --build
+# Start with: docker compose up --build
 
 upstreams:
   mock:

@@ -20,15 +20,10 @@ rule_files:
 
 scrape_configs:
   # The job name is load-bearing: alerts.yml matches up{job="restitch-gateway"}.
-  # /metrics is served on the ADMIN port and sits outside requireKey, so no
-  # credentials are needed here even when RESTITCH_ADMIN_API_KEY is set.
+  # Each gateway serves /metrics on RESTITCH_OPS_PORT, apart from the data port.
   - job_name: restitch-gateway
     static_configs:
-      - targets: ['gateway:9090']
-
-  - job_name: restitch-studio
-    static_configs:
-      - targets: ['studio:3080']
+      - targets: ['gateway-1:9090', 'gateway-2:9090']
 
   - job_name: prometheus
     static_configs:

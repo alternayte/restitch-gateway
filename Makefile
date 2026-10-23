@@ -1,4 +1,4 @@
-.PHONY: build test race vet lint run ci e2e studio build-all docker verify verify-all ledger-check
+.PHONY: build test race vet lint run ci e2e studio build-all docker deploy-lint verify verify-all ledger-check
 
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
@@ -41,6 +41,14 @@ build-all:
 
 docker:
 	docker build -t restitch:dev .
+
+# Lints the deployment files. The placeholder values satisfy the variables
+# that deploy/docker-compose.yml demands; they are never used to run.
+KUBECONFORM_VERSION := v0.7.0
+deploy-lint:
+	POSTGRES_PASSWORD=lint RESTITCH_BOOTSTRAP_EMAIL=lint@example.com RESTITCH_BOOTSTRAP_PASSWORD=lint \
+		docker compose -f deploy/docker-compose.yml config -q
+	go run github.com/yannh/kubeconform/cmd/kubeconform@$(KUBECONFORM_VERSION) -strict -summary deploy/kubernetes
 
 verify:
 	scripts/verify.sh $(GATE)

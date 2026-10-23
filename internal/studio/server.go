@@ -188,6 +188,10 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	mux.Handle("/api/v1/", auth.RequireAuth(apiMux))
 	mux.Handle("/gateway/v1/", s.gatewayHandler())
 	mux.Handle("/api/", http.NotFoundHandler())
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("GET /ready", s.ready)
 	mux.Handle("/", spaHandler())
 	s.handler = mux
 	return nil
@@ -207,6 +211,18 @@ func dropOperation(doc *huma.OpenAPI, path, method string) {
 		item.Patch == nil && item.Head == nil && item.Options == nil && item.Trace == nil {
 		delete(doc.Paths, path)
 	}
+}
+
+// ready answers 200 while the database answers a ping, so a container
+// platform holds traffic back from a replica that lost its database.
+func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := s.db.db.PingContext(ctx); err != nil {
+		http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 // Handler serves the Studio routes.

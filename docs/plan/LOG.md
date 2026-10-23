@@ -57,3 +57,12 @@ Append only. Newest entry at the bottom. Never edit an older entry.
 - **Did:** replaced the v1 SPA with a TanStack app ported from sluice's UI layer; generated client from api/openapi.yaml; Studio serves the build; deleted cmd/restitch-studio, internal/registry and internal/session.
 - **Decided:** the old pages went all at once, because none of them could run against v2 APIs; their chart, waterfall and DAG code stays reachable in git at 751221b. The generated client needs an absolute base URL in tests only (`studio/src/test-setup.ts`).
 - **Blocked:** none. Session closed past the context budget.
+
+---
+
+## 2026-10-24 — session 5
+
+- **Chunks:** C26 done locally; CI has not run it.
+- **Did:** Dockerfile with a `mockupstream` target and a release stage holding only /restitch with no default command; `deploy/docker-compose.yml`, `deploy/.env.example`, `deploy/kubernetes/{studio,gateway}.yaml`, `deploy/README.md`; `make deploy-lint` and a CI step for it; Studio /health and /ready; examples/registry deleted, examples/docker-compose made standalone.
+- **Decided (user):** two-step Compose bring-up with the token from the UI, documented; the mock upstream is a separate build target; Prometheus stays, Jaeger goes. The handover's Studio test count (9 files, 28 tests) was stale since C16 deleted the v1 tests; the true count is 5 files, 11 tests.
+- **Blocked:** the CI half of the done condition needs a push or PR, which needs the user's go-ahead.

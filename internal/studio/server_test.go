@@ -214,3 +214,20 @@ func TestSPAServesClientRoutesAndNeverShadowsTheAPI(t *testing.T) {
 		}
 	}
 }
+
+func TestProbesNeedNoSessionAndReadyChecksTheDatabase(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s *Server) {
+		for _, path := range []string{"/health", "/ready"} {
+			if rec := do(t, s, http.MethodGet, path, "", nil, nil); rec.Code != http.StatusOK {
+				t.Fatalf("GET %s: got %d, want 200", path, rec.Code)
+			}
+		}
+		_ = s.db.db.Close()
+		if rec := do(t, s, http.MethodGet, "/ready", "", nil, nil); rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("GET /ready with the database closed: got %d, want 503", rec.Code)
+		}
+		if rec := do(t, s, http.MethodGet, "/health", "", nil, nil); rec.Code != http.StatusOK {
+			t.Fatalf("GET /health with the database closed: got %d, want 200", rec.Code)
+		}
+	})
+}

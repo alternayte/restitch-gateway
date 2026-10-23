@@ -38,7 +38,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [ ] C25 — The command palette and keyboard shortcuts reach every page and action
 
 ### Delivery
-- [ ] C26 — One image runs every role, with Compose and Kubernetes files linted in CI
+- [x] C26 — One image runs every role, with Compose and Kubernetes files linted in CI
 - [ ] C27 — The docs describe v2: container platforms, configuration, Studio, CHANGELOG
 
 ---
@@ -379,13 +379,14 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C26 — One image runs every role, with Compose and Kubernetes files linted in CI
 
-- **Status:** todo
+- **Status:** done locally; the CI lint steps have not run, because the branch is not pushed
 - **Depends on:** C15
 - **Files:** `Dockerfile`, `deploy/docker-compose.yml`, `deploy/kubernetes/`, `.github/workflows/ci.yml`, `Makefile`
 - **Goal:** The image has entrypoint `/restitch`; Compose and plain manifests run Studio on Postgres and two gateways.
 - **First failing test:** a CI step — `docker compose -f deploy/docker-compose.yml config` and `kubeconform deploy/kubernetes`
 - **Done when:** the test command passes, both lint steps pass in CI, and `docker compose up` serves a published composition.
 - **Notes:** Delete `cmd/restitch-studio`, `cmd/mockupstream` from the image if only tests need it, and the registry examples. No committed keys; Compose generates or demands them.
+  Done: the release image holds only /restitch and has no default command; the mock upstream is the Dockerfile target `mockupstream`. `deploy/docker-compose.yml` runs Postgres, Studio, gateway-1, gateway-2, the mock upstream and Prometheus. Bring-up has two steps (user decision 2026-10-24): Studio first, then a gateway token from the UI goes into deploy/.env; `deploy/README.md` documents it. Compose demands POSTGRES_PASSWORD and the bootstrap owner with ${VAR:?}; the token uses ${VAR:-}, because a ${VAR:?} fails interpolation of the whole file, step one included. Jaeger was dropped from the stack (user decision); Prometheus scrapes both gateways on the ops port. `deploy/kubernetes/` has Studio and gateway Deployments and Services; Secrets are created with kubectl, never committed. Studio gained GET /health and GET /ready (database ping) for the probes. `make deploy-lint` runs both linters; CI runs it in the docker job. examples/registry deleted; examples/docker-compose is now a standalone gateway. Verified by hand: two-step Compose bring-up, publish through the API, both gateways answered /api/users/42/dashboard, Studio listed two instances on version 1, Prometheus had both targets up.
 
 ---
 

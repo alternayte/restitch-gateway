@@ -45,3 +45,6 @@ studio.db-wal
 docs/plan-progress/
 docs/superpowers/
 .superpowers/
+
+# Local Compose secrets
+deploy/.env

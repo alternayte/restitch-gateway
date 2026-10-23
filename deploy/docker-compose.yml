@@ -1,111 +1,94 @@
-# Production-shaped stack: gateway in REGISTRY mode against Studio, with
-# Prometheus and Jaeger. This is the only place in the repo that exercises the
-# M20 + M21 centralized-config loop as an operator would actually deploy it.
-# examples/docker-compose/ remains the simple file-config quickstart.
-name: restitch-deploy
+# Studio on Postgres, two managed gateways in one environment, a mock
+# upstream and Prometheus. deploy/README.md describes the two-step bring-up:
+# Studio first, then the gateways once a gateway token exists.
+#
+# No secret is committed. POSTGRES_PASSWORD and the bootstrap owner must be
+# set in deploy/.env; the gateways stay down until RESTITCH_GATEWAY_TOKEN is.
+name: restitch
+
+x-restitch-build: &restitch-build
+  context: ..
+  dockerfile: Dockerfile
+  args:
+    VERSION: ${RESTITCH_IMAGE_TAG:-dev}
+
+x-gateway: &gateway
+  build: *restitch-build
+  image: restitch:${RESTITCH_IMAGE_TAG:-dev}
+  command: ["gateway"]
+  environment: &gateway-env
+    RESTITCH_STUDIO_URL: http://studio:3080
+    # Empty until step two of the bring-up. The gateway exits with an error
+    # that names the variable, and restarts give up after five attempts.
+    RESTITCH_GATEWAY_TOKEN: ${RESTITCH_GATEWAY_TOKEN:-}
+    RESTITCH_OPS_PORT: "9090"
+  restart: on-failure:5
+  depends_on:
+    studio:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "/restitch", "healthcheck", "http://localhost:8080/ready"]
+    interval: 10s
+    timeout: 3s
+    retries: 5
+    start_period: 10s
 
 services:
-  studio:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      args:
-        VERSION: ${RESTITCH_IMAGE_TAG:-dev}
-    # The Dockerfile's ENTRYPOINT is /restitch, so the studio binary must be
-    # selected with `entrypoint`, NOT `command` — a `command` override would
-    # run `/restitch /restitch-studio` and fail.
-    entrypoint: ["/restitch-studio"]
-    command:
-      - "-port=3080"
-      # The studio defaults to loopback (hardening C2); inside a container
-      # that makes the SPA unreachable from the host and the registry
-      # unreachable from the gateway, so the stack binds all interfaces.
-      - "-bind=0.0.0.0"
-      - "-db-path=/data/studio.db"
-      - "-gateway-admin-url=http://gateway:9090"
-      - "-registry-key=${RESTITCH_REGISTRY_KEY:-restitch-dev}"
-      - "-admin-key=${RESTITCH_ADMIN_API_KEY:-restitch-dev}"
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-17-alpine}
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
-      OTEL_SERVICE_NAME: restitch-studio
+      POSTGRES_DB: restitch
+      POSTGRES_USER: restitch
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
     volumes:
-      - studio-data:/data
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "restitch", "-d", "restitch"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  studio:
+    build: *restitch-build
+    image: restitch:${RESTITCH_IMAGE_TAG:-dev}
+    command: ["studio"]
+    environment:
+      RESTITCH_DATABASE_URL: postgres://restitch:${POSTGRES_PASSWORD}@postgres:5432/restitch?sslmode=disable
+      RESTITCH_PUBLIC_URL: ${STUDIO_PUBLIC_URL:-http://localhost:3080}
+      RESTITCH_BOOTSTRAP_EMAIL: ${RESTITCH_BOOTSTRAP_EMAIL:?set RESTITCH_BOOTSTRAP_EMAIL in deploy/.env}
+      RESTITCH_BOOTSTRAP_PASSWORD: ${RESTITCH_BOOTSTRAP_PASSWORD:?set RESTITCH_BOOTSTRAP_PASSWORD in deploy/.env}
     ports:
       - "${STUDIO_PORT:-3080}:3080"
     depends_on:
-      studio-data-init:
-        condition: service_completed_successfully
-    # Real HTTP probe (finding M17): the old `-h` probe always exited 0. The
-    # SPA root answers 200 only when the studio is actually serving.
-    healthcheck:
-      test: ["CMD", "/restitch-studio", "-healthcheck", "http://localhost:3080/"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
-
-  gateway:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      args:
-        VERSION: ${RESTITCH_IMAGE_TAG:-dev}
-    entrypoint: ["/restitch"]
-    command:
-      - "gateway"
-      - "-registry-url=http://studio:3080"
-      - "-registry-key=${RESTITCH_REGISTRY_KEY:-restitch-dev}"
-      - "-poll-interval=10s"
-      - "-port=8080"
-      - "-log-format=json"
-    environment:
-      # In registry mode the whole gateway config comes from the registry
-      # bundle, and a fresh Studio has no configs. Setting the admin server
-      # through env vars means /metrics is up regardless of bundle contents,
-      # so Prometheus has something to scrape from the first second.
-      # The admin key is required since hardening C3; the studio proxy sends
-      # the same value as X-Admin-Key.
-      RESTITCH_ADMIN_ENABLED: "true"
-      RESTITCH_ADMIN_PORT: "9090"
-      # The admin server defaults to loopback (hardening C3); inside a
-      # container that would make /metrics unreachable from Prometheus and
-      # the host port mapping dead, so the stack binds all interfaces.
-      RESTITCH_ADMIN_BIND: "0.0.0.0"
-      RESTITCH_ADMIN_API_KEY: ${RESTITCH_ADMIN_API_KEY:-restitch-dev}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
-      OTEL_SERVICE_NAME: restitch-gateway
-    ports:
-      - "${GATEWAY_PORT:-8080}:8080"
-      - "${GATEWAY_ADMIN_PORT:-9090}:9090"
-    depends_on:
-      studio:
+      postgres:
         condition: service_healthy
-    # The initial registry fetch is fatal if the studio is not yet listening
-    # (a startup race), so the gateway retries until it succeeds.
-    restart: on-failure
-    # Real HTTP probe (finding M17): the gateway had no probe at all.
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "/restitch", "healthcheck", "http://localhost:8080/health"]
+      test: ["CMD", "/restitch", "healthcheck", "http://localhost:3080/ready"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 10s
 
-  # The image runs as the distroless nonroot user (finding H7). Docker
-  # initializes a fresh named volume with a root-owned 0755 root directory,
-  # which that user cannot write; this one-shot step fixes the ownership
-  # before the studio opens its database.
-  studio-data-init:
-    image: alpine:3.20
-    command: ["chown", "-R", "65532:65532", "/data"]
-    volumes:
-      - studio-data:/data
-    restart: "no"
+  gateway-1:
+    <<: *gateway
+    ports:
+      - "${GATEWAY_1_PORT:-8080}:8080"
+
+  gateway-2:
+    <<: *gateway
+    ports:
+      - "${GATEWAY_2_PORT:-8082}:8080"
+
+  # Demo backend, reachable from the gateways as http://mockupstream:8081.
+  mockupstream:
+    build:
+      <<: *restitch-build
+      target: mockupstream
+    image: restitch-mockupstream:${RESTITCH_IMAGE_TAG:-dev}
+    command: ["-port", "8081"]
 
   prometheus:
-    # The :-defaults keep `docker compose up` working without a .env file
-    # (finding L27); deploy/.env.example remains the version source of truth
-    # for verification.
     image: prom/prometheus:${PROMETHEUS_VERSION:-v3.13.1}
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -114,21 +97,9 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
-    # Prometheus binds its conventional 9090 INSIDE the network, but the
-    # gateway admin server already owns 9090 on the host, so the host side
-    # comes from PROMETHEUS_PORT (9091 by default).
     ports:
       - "${PROMETHEUS_PORT:-9091}:9090"
-    depends_on:
-      - gateway
-
-  jaeger:
-    image: jaegertracing/all-in-one:${JAEGER_VERSION:-1.70.0}
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-    ports:
-      - "${JAEGER_UI_PORT:-16686}:16686"
 
 volumes:
-  studio-data:
+  postgres-data:
   prometheus-data:
