@@ -90,3 +90,44 @@ describe("the resource form", () => {
     expect(await screen.findByRole("button", { name: "Reload" })).toBeInTheDocument();
   });
 });
+
+describe("template fields", () => {
+  it("show the lint error from Studio", async () => {
+    const compositionSchema = {
+      artifact: {
+        $defs: {
+          "composition.Composition": {
+            type: "object",
+            additionalProperties: false,
+            properties: { path: { type: "string" }, steps: { type: "array", items: { $ref: "#/$defs/composition.Step" } } },
+          },
+          "composition.Step": {
+            type: "object",
+            additionalProperties: false,
+            properties: { name: { type: "string" }, path: { type: "string" } },
+          },
+        },
+      },
+      definitions: { composition: "composition.Composition" },
+      settings: {},
+    };
+    const linted: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request) => {
+        if (input.url.endsWith("/api/v1/me")) return json(200, { id: "u", email: "e@x", role: "editor" });
+        if (input.url.endsWith("/api/v1/schema")) return json(200, compositionSchema);
+        if (input.url.endsWith("/api/v1/lint")) {
+          linted.push(await input.json());
+          return json(200, { errors: ['expression "req.path.id": req.path is a string and has no member "id"'] });
+        }
+        return json(200, { kind: "composition", name: "c", revision: 1, body: { steps: [{ name: "u" }] }, updated_at: "2026-10-24T00:00:00Z", updated_by: "x" });
+      }),
+    );
+    renderAt("/environments/staging/resources/composition/c");
+    const paths = await screen.findAllByLabelText("Path");
+    fireEvent.change(paths[1]!, { target: { value: "/x/{{ req.path.id }}" } });
+    expect(await screen.findByText(/req.path is a string/)).toBeInTheDocument();
+    expect(linted).toEqual([{ template: "/x/{{ req.path.id }}", steps: ["u"] }]);
+  });
+});

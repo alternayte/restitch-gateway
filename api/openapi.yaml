@@ -389,6 +389,34 @@ components:
       required:
         - token
       type: object
+    LintTemplateRequest:
+      additionalProperties: false
+      properties:
+        steps:
+          items:
+            type: string
+          maxItems: 500
+          type:
+            - array
+            - "null"
+        template:
+          maxLength: 65536
+          type: string
+      required:
+        - template
+      type: object
+    LintTemplateResponse:
+      additionalProperties: false
+      properties:
+        errors:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - errors
+      type: object
     ListEnvironmentsResponse:
       additionalProperties: false
       properties:
@@ -2577,6 +2605,32 @@ paths:
       summary: Publish an old version again as a new version
       tags:
         - publish
+  /api/v1/lint:
+    post:
+      description: Compiles the template against the steps of its composition, with the same checks as gateway load.
+      operationId: lintTemplate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LintTemplateRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LintTemplateResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Check one template string the way publish does
+      tags:
+        - draft
   /api/v1/me:
     get:
       operationId: getMe

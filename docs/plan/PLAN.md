@@ -30,7 +30,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C17 — Studio serves a JSON Schema of the artifact that covers every config field
 - [x] C18 — A resource form generated from the schema saves a resource, with a YAML tab
 - [ ] C19 — The step graph widget edits depends_on
-- [ ] C20 — Expression fields show server lint errors as the user types
+- [x] C20 — Expression fields show server lint errors as the user types
 - [ ] C21 — The secret picker inserts ${VAR} names and the environment lists required names
 - [x] C22 — The publish screen shows the diff, history, rollback and promote
 - [ ] C23 — Owners manage gateway tokens and users in settings
@@ -305,7 +305,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C20 — Expression fields show server lint errors as the user types
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C18
 - **Files:** `internal/studio/lint.go`, `internal/studio/lint_test.go`, `studio/src/features/resources/expression-field.tsx`
 - **Goal:** Expression and template fields post to a lint endpoint after typing stops and show errors inline.
@@ -313,6 +313,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **First failing test:** `internal/studio/lint_test.go` — "TestLintReportsUnknownStepReference"
 - **Done when:** the test command passes.
 - **Notes:** The lint endpoint calls the same compile code as C03.
+  Done: the gap was not an unknown root (request is a valid alias of req) but a member of a scalar: req.path is a string. `internal/composition/references.go` walks each compiled expression and checks dotted names against the executor's environment shape: req/request fields, no member on req.method, req.path or steps.<name>.status, steps.<name> fields, and unknown bare names. Template compilation runs it, so publish, `restitch check` and gateway load refuse those expressions. `composition.LintTemplate` also checks that steps.<name> names a step (compilation leaves that to the DAG check, whose wording existing tests pin). POST /api/v1/lint {template, steps} returns errors; text fields that hold {{ are linted 400ms after typing stops, against the composition's step names (`studio/src/features/resources/lint.tsx`). The check caught the same wrong fixture in `internal/studio/publish_test.go`.
 
 ---
 

@@ -149,6 +149,9 @@ func parseSegments(raw string, env map[string]any) ([]Segment, error) {
 		if err != nil {
 			return nil, fmt.Errorf("expression %q: %w", exprText, err)
 		}
+		if err := checkReferences(program.Node(), env, false); err != nil {
+			return nil, fmt.Errorf("expression %q: %w", exprText, err)
+		}
 
 		segments = append(segments, Segment{
 			Program: program,

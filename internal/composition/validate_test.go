@@ -16,6 +16,7 @@ package composition
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -133,5 +134,49 @@ compositions:
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/orders", nil))
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("a non-public route with no authenticator must fail closed, got %d", rec.Code)
+	}
+}
+
+func TestValidateRejectsUnknownReferences(t *testing.T) {
+	base := `
+upstreams:
+  a:
+    url: http://localhost:8081
+compositions:
+  c:
+    path: /c/{id}
+    public: true
+    steps:
+      - name: s
+        upstream: a
+        path: "%s"
+    response: {body: "{{ steps.s.body }}"}
+`
+	for expr, want := range map[string]string{
+		"/u/{{ req.path.id }}":      "req.path is a string",
+		"/u/{{ request.method.x }}": "request.method is a string",
+		"/u/{{ req.nope }}":         `req has no field "nope"`,
+		"/u/{{ foo }}":              `unknown name "foo"`,
+	} {
+		err := Validate(context.Background(), []byte(fmt.Sprintf(base, expr)))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: got %v, want an error containing %q", expr, err, want)
+		}
+	}
+	resp := strings.Replace(base, `response: {body: "{{ steps.s.body }}"}`, `response: {body: "{{ steps.s.status.code }} {{ steps.s.bogus }}"}`, 1)
+	err := Validate(context.Background(), []byte(fmt.Sprintf(resp, "/u")))
+	if err == nil || !strings.Contains(err.Error(), "steps.s.status is a number") {
+		t.Errorf("steps.s.status.code: got %v", err)
+	}
+	for _, ok := range []string{
+		"/u/{{ req.params.id }}",
+		"/u/{{ request.query.page }}",
+		"/u/{{ len(req.headers) }}",
+		"/u/{{ upper(req.method) }}",
+		"/u/{{ req.body.items[0].id }}",
+	} {
+		if err := Validate(context.Background(), []byte(fmt.Sprintf(base, ok))); err != nil {
+			t.Errorf("%s: unexpected error %v", ok, err)
+		}
 	}
 }

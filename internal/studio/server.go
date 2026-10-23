@@ -180,6 +180,7 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	s.registerRequests()
 	s.registerImportExport()
 	s.registerSchema()
+	s.registerLint()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST "+auth.BasePath()+signUpPath, http.NotFoundHandler())

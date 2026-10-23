@@ -21,6 +21,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { CodeField } from "@/features/resources/code-field";
 import { kindLabel, type Kind } from "@/features/resources/kinds";
+import { StepNames } from "@/features/resources/lint";
 import { ObjectFields, type Schema } from "@/features/resources/schema-form";
 import { useCurrentUser } from "@/lib/auth";
 import { errorMessage } from "@/lib/errors";
@@ -67,6 +68,12 @@ export function ResourceEditor({ env, kind, name }: { env: string; kind: Kind; n
       }}
     </DataState>
   );
+}
+
+/** stepNamesOf lists the named steps of a composition body. */
+function stepNamesOf(body: Body): string[] {
+  const steps = Array.isArray(body.steps) ? body.steps : [];
+  return steps.flatMap((s) => (s && typeof s === "object" && typeof (s as Body).name === "string" ? [(s as Body).name as string] : []));
 }
 
 function EditorForm({
@@ -167,7 +174,9 @@ function EditorForm({
       />
       <fieldset disabled={!canEdit} className="min-w-0">
         {view === "form" ? (
-          <ObjectFields schema={schema} defs={defs} value={body} onChange={setBody} path={kind} />
+          <StepNames.Provider value={kind === "composition" ? stepNamesOf(body) : null}>
+            <ObjectFields schema={schema} defs={defs} value={body} onChange={setBody} path={kind} />
+          </StepNames.Provider>
         ) : (
           <div className="flex flex-col gap-1.5">
             <CodeField

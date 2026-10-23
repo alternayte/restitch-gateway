@@ -46,7 +46,7 @@ func seedValidDraft(t *testing.T, s *Server, c []*http.Cookie) {
 	saveResource(t, s, c, stagingRes+"upstream/users", 0, map[string]any{"url": "https://${USERS_HOST}/v1"})
 	saveResource(t, s, c, stagingRes+"composition/user", 0, map[string]any{
 		"path": "/users/{id}", "public": true,
-		"steps":    []any{map[string]any{"name": "u", "upstream": "users", "path": "/users/{{ request.path.id }}"}},
+		"steps":    []any{map[string]any{"name": "u", "upstream": "users", "path": "/users/{{ req.params.id }}"}},
 		"response": map[string]any{"body": "{{ steps.u.body }}"},
 	})
 }

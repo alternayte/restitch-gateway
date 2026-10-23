@@ -4,6 +4,7 @@ import YAML from "yaml";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CodeField } from "@/features/resources/code-field";
+import { useTemplateLint } from "@/features/resources/lint";
 
 /** Schema is the subset of JSON Schema that the artifact schema uses. */
 export type Schema =
@@ -230,14 +231,26 @@ function ScalarField({
   type?: string;
 }) {
   const invalid = pattern !== undefined && value !== "" && !new RegExp(pattern).test(value);
+  const lintError = useTemplateLint(type === "text" ? value : "");
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-sm font-medium">
         {label(name)}
       </label>
-      <Input id={id} type={type} value={value} aria-invalid={invalid || undefined} onChange={(e) => onChange(e.target.value)} />
+      <Input
+        id={id}
+        type={type}
+        value={value}
+        aria-invalid={invalid || lintError !== "" || undefined}
+        onChange={(e) => onChange(e.target.value)}
+      />
       {invalid && <p className="text-xs text-destructive">{hint ?? "This value has the wrong format."}</p>}
-      {!invalid && hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {!invalid && lintError && (
+        <p role="alert" className="font-mono text-xs break-words text-destructive">
+          {lintError}
+        </p>
+      )}
+      {!invalid && !lintError && hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
