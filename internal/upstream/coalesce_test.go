@@ -15,6 +15,7 @@
 package upstream
 
 import (
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -74,15 +75,30 @@ func TestCoalescer_DifferentKeysNotCoalesced(t *testing.T) {
 	}
 }
 
-func TestCoalesceKey(t *testing.T) {
-	k1 := CoalesceKey("GET", "http://example.com/users/1", "Bearer abc")
-	k2 := CoalesceKey("GET", "http://example.com/users/1", "Bearer abc")
-	k3 := CoalesceKey("GET", "http://example.com/users/1", "Bearer xyz")
-
-	if k1 != k2 {
-		t.Error("same inputs should produce same key")
+func TestRequestKey(t *testing.T) {
+	key := func(url, auth string, headers map[string]string) string {
+		req := httptest.NewRequest("GET", url, nil)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		k, err := RequestKey(req, auth)
+		if err != nil {
+			t.Fatalf("RequestKey: %v", err)
+		}
+		return k
 	}
-	if k1 == k3 {
+
+	base := key("http://example.com/users/1", "Bearer abc", map[string]string{"Accept": "application/json"})
+	if k := key("http://example.com/users/1", "Bearer abc", map[string]string{"Accept": "application/json", "X-Request-ID": "r2", "traceparent": "00-x"}); k != base {
+		t.Error("same request with different per-request IDs should produce same key")
+	}
+	if k := key("http://example.com/users/1", "Bearer xyz", map[string]string{"Accept": "application/json"}); k == base {
 		t.Error("different auth should produce different key")
+	}
+	if k := key("http://example.com/users/1", "Bearer abc", map[string]string{"Accept": "text/html"}); k == base {
+		t.Error("different header value should produce different key")
+	}
+	if key("http://example.com/x%2Fy/z", "", nil) == key("http://example.com/x/y%2Fz", "", nil) {
+		t.Error("different escaped URLs should produce different keys")
 	}
 }

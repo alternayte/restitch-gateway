@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -241,36 +240,21 @@ func (e *Executor) executeStepWithErrorHandling(
 		"upstream", up.BaseURL,
 		"optional", step.Optional)
 
-	// Compute the full request URL for observability (best-effort; evaluation
-	// errors are surfaced later when the step actually executes).
+	// Build the outgoing request once. The cache and coalesce key is derived
+	// from it, so two steps share an entry only if the gateway would send the
+	// same request upstream.
+	req, err := buildStepRequest(ctx, step, up, env)
 	stepURL := ""
-	if evalPath, pathErr := step.PathPart.EvalString(env, EscapePath); pathErr == nil {
-		if step.QueryPart != nil {
-			if q, queryErr := step.QueryPart.EvalString(env, EscapeQuery); queryErr == nil {
-				evalPath += "?" + q
-			}
-		}
-		stepURL = strings.TrimRight(up.BaseURL, "/") + "/" + strings.TrimLeft(evalPath, "/")
-	}
-
-	// Build cache/coalesce key from evaluated URL + auth identity + evaluated
-	// step headers. Headers are part of the request semantics: two requests
-	// that differ only in a templated header (for example X-Tenant) must not
-	// share a cache entry (finding H1).
 	var cacheKey string
-	if step.Step.Cache != nil || step.Step.Coalesce {
-		evalPath, _ := step.PathPart.EvalString(env, EscapeNone)
-		if step.QueryPart != nil {
-			q, _ := step.QueryPart.EvalString(env, EscapeNone)
-			evalPath += "?" + q
+	if err == nil {
+		stepURL = req.URL.String()
+		if step.Step.Cache != nil || step.Step.Coalesce {
+			cacheKey, err = upstreampkg.RequestKey(req, auth.ClientAuthorization(ctx))
 		}
-		fullURL := strings.TrimRight(up.BaseURL, "/") + "/" + strings.TrimLeft(evalPath, "/")
-		authID := auth.ClientAuthorization(ctx)
-		cacheKey = upstreampkg.CoalesceKey(step.Step.Method, fullURL, authID) + "|" + evaluatedHeadersFingerprint(step.Headers, env)
 	}
 
 	// Cache check (before coalesce and execute)
-	if step.Step.Cache != nil && step.Step.Method == "GET" {
+	if err == nil && step.Step.Cache != nil && step.Step.Method == "GET" {
 		if cached, ok := e.cache.Get(cacheKey); ok {
 			if m := observability.DefaultMetrics(); m != nil {
 				m.CacheHitsTotal.WithLabelValues(compositionName, stepName).Inc()
@@ -316,14 +300,18 @@ func (e *Executor) executeStepWithErrorHandling(
 
 	// Execute step (with optional coalescing)
 	var result *StepResult
-	var err error
 
 	executeStep := func() (*StepResult, error) {
-		return ExecuteStep(ctx, step, up, env)
+		return sendStepRequest(req, step, up, resolveTimeout(step, up))
 	}
 
-	if step.Step.Coalesce && step.Step.Method == "GET" {
+	switch {
+	case err != nil:
+		// Request build or key derivation failed; reported below.
+	case step.Step.Coalesce && step.Step.Method == "GET":
+		ran := false
 		v, shared, coalesceErr := e.coalescer.Do(cacheKey, func() (any, error) {
+			ran = true
 			return executeStep()
 		})
 		if coalesceErr != nil {
@@ -331,12 +319,17 @@ func (e *Executor) executeStepWithErrorHandling(
 		} else if v != nil {
 			result = v.(*StepResult)
 		}
-		if shared {
+		// A response the cache would refuse (Set-Cookie, private, no-store)
+		// is user specific: a caller that joined another caller's flight
+		// sends its own request instead of reusing it.
+		if !ran && result != nil && !isCacheable(result.Headers) {
+			result, err = executeStep()
+		} else if shared {
 			if m := observability.DefaultMetrics(); m != nil {
 				m.CoalescedTotal.WithLabelValues(compositionName, stepName).Inc()
 			}
 		}
-	} else {
+	default:
 		result, err = executeStep()
 	}
 
@@ -449,37 +442,10 @@ func countSteps(waves [][]string) int {
 	return total
 }
 
-// evaluatedHeadersFingerprint renders the evaluated step header values into
-// a deterministic string for cache keys. Evaluation errors render as a fixed
-// marker; the request would fail later with the real error anyway.
-func evaluatedHeadersFingerprint(headers map[string]*Template, env map[string]interface{}) string {
-	if len(headers) == 0 {
-		return ""
-	}
-	keys := make([]string, 0, len(headers))
-	for k := range headers {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	var sb strings.Builder
-	for _, k := range keys {
-		v, err := headers[k].EvalString(env, EscapeNone)
-		if err != nil {
-			v = "<eval-error>"
-		}
-		sb.WriteString(k)
-		sb.WriteString("=")
-		sb.WriteString(v)
-		sb.WriteString("\x00")
-	}
-	return sb.String()
-}
-
 // isCacheable reports whether a step response may be stored in the shared
-// cache. A Set-Cookie header or a Cache-Control of private or no-store marks
-// the response as user-specific; serving it to another request leaks state
-// (finding H1).
+// cache or handed to another coalesced caller. A Set-Cookie header or a
+// Cache-Control of private or no-store marks the response as user-specific;
+// serving it to another request leaks state (finding H1).
 func isCacheable(headers http.Header) bool {
 	if headers == nil {
 		return true

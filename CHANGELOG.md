@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Fix: the per-step cache and coalesce key is derived from the outgoing
+  upstream request (method, escaped URL, headers including forwarded
+  `Accept`/`Accept-Language`, body, inbound `Authorization`). Path params
+  that differ only in `/` placement and requests with different forwarded
+  headers no longer share an entry. Coalesced callers no longer share a
+  response that carries `Set-Cookie` or `Cache-Control: private`/`no-store`.
+
 ## v1.2.0 — 2026-09-02
 
 First public release. Everything below this entry — the composition-engine

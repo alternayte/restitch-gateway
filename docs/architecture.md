@@ -51,6 +51,8 @@ share no memory; Studio talks to the gateway's admin API over HTTP.
 - Expressions compile once at startup, never at request time.
 - All upstream and request bodies are read through `io.LimitReader`; JSON
   schema validation guards composition request bodies.
-- The per-step cache keys include the evaluated step headers; responses with
-  `Set-Cookie` or a private `Cache-Control` are never cached.
+- The per-step cache and coalesce key is derived from the outgoing upstream
+  request (method, escaped URL, headers, body, inbound `Authorization`);
+  responses with `Set-Cookie` or a private `Cache-Control` are never cached
+  and never shared between coalesced callers.
 - The pipeline swap uses an `atomic.Pointer`; reload never blocks requests.
