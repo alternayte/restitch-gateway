@@ -207,22 +207,34 @@ func (s *Server) gatewayHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /gateway/v1/artifact", s.serveArtifact)
 	mux.HandleFunc("GET /gateway/v1/artifact/versions/{number}", s.serveArtifact)
+	mux.HandleFunc("POST /gateway/v1/heartbeat", s.serveHeartbeat)
 	return mux
+}
+
+// requireGatewayToken answers 401 unless r carries a live gateway token,
+// and returns the token's environment.
+func (s *Server) requireGatewayToken(w http.ResponseWriter, r *http.Request) (string, bool) {
+	env, err := s.gatewayEnvironment(r.Context(), r)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return "", false
+	}
+	if env == "" {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="restitch-gateway"`)
+		http.Error(w, "a valid gateway token is required", http.StatusUnauthorized)
+		return "", false
+	}
+	return env, true
 }
 
 // serveArtifact answers the current version, or the immutable version the
 // path names, as YAML with an ETag.
 func (s *Server) serveArtifact(w http.ResponseWriter, r *http.Request) {
-	env, err := s.gatewayEnvironment(r.Context(), r)
-	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+	env, ok := s.requireGatewayToken(w, r)
+	if !ok {
 		return
 	}
-	if env == "" {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="restitch-gateway"`)
-		http.Error(w, "a valid gateway token is required", http.StatusUnauthorized)
-		return
-	}
+	var err error
 
 	var v *artifactVersion
 	immutable := r.PathValue("number") != ""

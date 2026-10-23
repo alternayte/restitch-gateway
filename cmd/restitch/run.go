@@ -247,10 +247,24 @@ func gatewayCmd(args []string) int {
 		// until its first pull; a Studio outage never crash-loops it.
 		srv.SetConfigured(false)
 		metrics.RegisterRegistryMetrics()
-		poller := hotreload.NewPoller(hotreload.NewClient(opts.studioURL, opts.gatewayToken), opts.pollInterval, reloadFromBytes, metrics)
+		client := hotreload.NewClient(opts.studioURL, opts.gatewayToken)
+		poller := hotreload.NewPoller(client, opts.pollInterval, reloadFromBytes, metrics)
+		applied := make(chan struct{}, 1)
 		poller.OnApplied(func(v int) {
 			srv.SetConfigured(true)
 			slog.Info("artifact version applied", "version", v)
+			select {
+			case applied <- struct{}{}:
+			default:
+			}
+		})
+		instanceID := hotreload.NewInstanceID()
+		go hotreload.RunHeartbeat(bgCtx, client, hotreload.HeartbeatInterval, applied, func() hotreload.Heartbeat {
+			st := poller.Status()
+			return hotreload.Heartbeat{
+				InstanceID: instanceID, BinaryVersion: version,
+				AppliedVersion: st.Version, LastPullError: st.LastError,
+			}
 		})
 		go func() {
 			if err := poller.Run(bgCtx); err != nil && !errors.Is(err, context.Canceled) {

@@ -16,11 +16,13 @@ package hotreload
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 )
@@ -89,5 +91,41 @@ func TestClient_FetchRefusesOversizedArtifact(t *testing.T) {
 	defer srv.Close()
 	if _, err := NewClient(srv.URL, "rgt_x").Fetch(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRunHeartbeatReportsStatus(t *testing.T) {
+	got := make(chan Heartbeat, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/gateway/v1/heartbeat" || r.Header.Get("Authorization") != "Bearer rgt_abc" {
+			http.Error(w, "nope", http.StatusUnauthorized)
+			return
+		}
+		var hb Heartbeat
+		_ = json.NewDecoder(r.Body).Decode(&hb)
+		got <- hb
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	now := make(chan struct{}, 1)
+	version := 1
+	go RunHeartbeat(ctx, NewClient(srv.URL, "rgt_abc"), time.Hour, now, func() Heartbeat {
+		return Heartbeat{InstanceID: "gw-1", BinaryVersion: "v2", AppliedVersion: version}
+	})
+	if hb := <-got; hb.InstanceID != "gw-1" || hb.AppliedVersion != 1 {
+		t.Fatalf("first heartbeat = %+v", hb)
+	}
+	version = 2
+	now <- struct{}{}
+	select {
+	case hb := <-got:
+		if hb.AppliedVersion != 2 {
+			t.Fatalf("second heartbeat = %+v", hb)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no heartbeat after the trigger")
 	}
 }

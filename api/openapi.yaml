@@ -283,6 +283,35 @@ components:
         - created_at
         - created_by
       type: object
+    Instance:
+      additionalProperties: false
+      properties:
+        applied_version:
+          format: int64
+          type: integer
+        binary_version:
+          type: string
+        first_seen_at:
+          format: date-time
+          type: string
+        instance_id:
+          type: string
+        last_pull_error:
+          type: string
+        last_seen_at:
+          format: date-time
+          type: string
+        stale:
+          description: No heartbeat for a minute or more.
+          type: boolean
+      required:
+        - first_seen_at
+        - last_seen_at
+        - stale
+        - instance_id
+        - binary_version
+        - applied_version
+      type: object
     IssueGatewayTokenRequest:
       additionalProperties: false
       properties:
@@ -324,6 +353,22 @@ components:
             - "null"
       required:
         - tokens
+      type: object
+    ListInstancesResponse:
+      additionalProperties: false
+      properties:
+        current_version:
+          format: int64
+          type: integer
+        instances:
+          items:
+            $ref: "#/components/schemas/Instance"
+          type:
+            - array
+            - "null"
+      required:
+        - current_version
+        - instances
       type: object
     ListResourcesResponse:
       additionalProperties: false
@@ -1671,6 +1716,31 @@ paths:
       summary: Revoke a gateway token
       tags:
         - gateway-tokens
+  /api/v1/environments/{env}/instances:
+    get:
+      operationId: listInstances
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListInstancesResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List the gateway instances of an environment and the version each applied
+      tags:
+        - instances
   /api/v1/environments/{env}/promote:
     post:
       description: Replaces this environment's draft with the version's resources and returns the diff. Publish to apply it.

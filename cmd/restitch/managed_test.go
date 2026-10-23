@@ -174,4 +174,19 @@ func TestManagedGatewaySurvivesStudioOutage(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "ada") {
 		t.Fatalf("GET /user: %d %s", resp.StatusCode, body)
 	}
+
+	// The heartbeat after the first applied version names it.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		list := sc.call(http.MethodGet, "/api/v1/environments/prod/instances", nil)
+		if inst, _ := list["instances"].([]any); len(inst) == 1 {
+			if v, _ := inst[0].(map[string]any)["applied_version"].(float64); v == 1 {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Studio never listed the instance on version 1: %v", list)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

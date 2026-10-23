@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"time"
 
 	authall "github.com/alternayte/auth-all"
 	"github.com/alternayte/auth-all/humaauth"
@@ -67,6 +68,7 @@ type Server struct {
 	db      *database
 	auth    *authall.Auth
 	admin   *admin.Plugin
+	now     func() time.Time
 	api     huma.API
 	handler http.Handler
 }
@@ -89,7 +91,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{db: db}
+	s := &Server{db: db, now: time.Now}
 	if err := s.build(ctx, cfg, public); err != nil {
 		_ = db.db.Close()
 		return nil, err
@@ -171,6 +173,7 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	s.registerPublish()
 	s.registerHistory()
 	s.registerGatewayTokens()
+	s.registerInstances()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST "+auth.BasePath()+signUpPath, http.NotFoundHandler())

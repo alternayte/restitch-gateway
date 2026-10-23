@@ -19,7 +19,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C08 — Rollback and promote write new versions and drafts without changing history
 - [x] C09 — A gateway token pulls its environment's artifact version with an ETag
 - [x] C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
-- [ ] C11 — Studio lists each gateway instance with its applied artifact version
+- [x] C11 — Studio lists each gateway instance with its applied artifact version
 - [ ] C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
 - [ ] C13 — Gateways push sampled requests with redacted headers and no bodies
 - [ ] C14 — `restitch publish` and YAML import and export use the publish path
@@ -184,13 +184,14 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C11 — Studio lists each gateway instance with its applied artifact version
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C10
 - **Files:** `internal/hotreload/heartbeat.go`, `internal/studio/instances.go`, `internal/studio/instances_test.go`
 - **Goal:** Each gateway posts a heartbeat with instance ID, binary version, applied version and last pull result; Studio lists instances per environment and marks silent ones stale.
 - **First failing test:** `internal/studio/instances_test.go` — "TestHeartbeatRecordsAppliedVersion"
 - **Done when:** the test command passes and two gateways in one environment appear as two instances.
 - **Spec:** Decision on the heartbeat.
+- **Notes:** Done: POST /gateway/v1/heartbeat upserts `studio_gateway_instances`; GET /api/v1/environments/{env}/instances lists them with current_version and stale (no heartbeat for `staleAfter`, one minute). The gateway sends `hotreload.Heartbeat` every 15s and at once after each applied version (`hotreload.RunHeartbeat`); the instance ID is the host name plus a random suffix. `Server.now` is the clock, so tests can age instances. The heartbeat carries the last pull error, so a stale config shows in Studio.
 
 ---
 
