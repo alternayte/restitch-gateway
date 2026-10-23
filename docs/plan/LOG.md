@@ -19,3 +19,12 @@ Append only. Newest entry at the bottom. Never edit an older entry.
 - **Did:** module path `/v2`; `restitch gateway` replaces `restitch run`; `gwconfig.EnvName` and `gwconfig.BindEnv` bind every flag to RESTITCH_ plus its name; `-cert`/`-key` renamed `-tls-cert`/`-tls-key`; compose files, CI load test and Dockerfile CMD call `gateway`.
 - **Decided:** bare `restitch` prints usage and exits 2, because a default role hides which role a container runs. `TestApplyEnvOverrides` now covers admin env only, because server env moved to `BindEnv`.
 - **Blocked:** none. The SA5011 lint issues seen earlier did not recur on a clean `make ci`.
+
+---
+
+## 2026-10-23 — session 2
+
+- **Chunks:** C05, C02, C03 done.
+- **Did:** `internal/studio` with auth-all on huma v2 (sign-in, roles, bootstrap owner, API keys plugin, OIDC option, store rate limiter, per-user preferences) and `restitch studio`; CI Postgres service. Loader refuses server:/admin: with the replacement env var; auth and rate_limit became top-level artifact keys owned by `composition.Config`; strict decoding; one validator; the fail-open route is refused at parse and fails closed in the handler; reserved probe paths.
+- **Decided:** C02 moved auth to the top level in the same change, because removing server: first would leave gateways with no auth between chunks. Read and write timeouts became flags because the YAML values were parsed but never used. Studio binds every interface by default, because it now authenticates every API call.
+- **Blocked:** none. auth-all#17 (disable public sign-up) is open; Studio routes the path to 404 meanwhile.
