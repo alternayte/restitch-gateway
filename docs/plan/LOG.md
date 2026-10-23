@@ -28,3 +28,12 @@ Append only. Newest entry at the bottom. Never edit an older entry.
 - **Did:** `internal/studio` with auth-all on huma v2 (sign-in, roles, bootstrap owner, API keys plugin, OIDC option, store rate limiter, per-user preferences) and `restitch studio`; CI Postgres service. Loader refuses server:/admin: with the replacement env var; auth and rate_limit became top-level artifact keys owned by `composition.Config`; strict decoding; one validator; the fail-open route is refused at parse and fails closed in the handler; reserved probe paths.
 - **Decided:** C02 moved auth to the top level in the same change, because removing server: first would leave gateways with no auth between chunks. Read and write timeouts became flags because the YAML values were parsed but never used. Studio binds every interface by default, because it now authenticates every API call.
 - **Blocked:** none. auth-all#17 (disable public sign-up) is open; Studio routes the path to 404 meanwhile.
+
+---
+
+## 2026-10-23 — session 3
+
+- **Chunks:** C06, C07, C08, C09, C04, C10 done.
+- **Did:** draft resources (`internal/studio/draft.go`), publish/versions/rollback/promote (`publish.go`), gateway tokens and the pull endpoint (`gatewayapi.go`), removal of the gateway admin API and storage, the ops port, managed mode with readiness gated on the first pull.
+- **Decided:** a gateway token on a user route answers 401 (it is no user credential), not 403 as the plan said; the plan row now says 401. The managed-mode end-to-end test lives in `cmd/restitch` as a helper-process test, because it needs `gatewayCmd` and an in-process Studio. `composition.MaxArtifactBytes` is the one size limit for publish and pull.
+- **Blocked:** none.

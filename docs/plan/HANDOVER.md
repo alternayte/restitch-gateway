@@ -1,23 +1,23 @@
 # Handover
 
-Updated: 2026-10-23, session 2 (closed)
+Updated: 2026-10-23, session 3
 
 ## Where we are
 
-C01, C02, C03 and C05 are done. The gateway runs as `restitch gateway` under the `/v2` module, reads process settings only from flags and RESTITCH_ env vars, refuses v1 server:/admin: blocks, and refuses any non-public composition when the artifact has no top-level auth block. `restitch studio` runs huma v2 with auth-all sign-in (roles viewer, editor, owner; bootstrap owner; store-backed rate limits) on SQLite or Postgres. The old `cmd/restitch-studio` binary and the registry still exist and still work.
+C01-C10 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. Nothing pushes telemetry yet.
 
 ## Prove it
 
 Run: `docker run -d --rm --name restitch-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=restitch_test -p 55432:5432 postgres:17-alpine`, then `RESTITCH_TEST_DATABASE_URL="postgres://postgres:test@localhost:55432/restitch_test?sslmode=disable" make ci && make e2e && (cd studio && npm run test)`
-Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its postgres subtests), `make e2e` ok, Studio: 9 files, 28 tests passed. Seen at commit cee1e5b.
+Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its postgres subtests), `make e2e` ok, Studio: 9 files, 28 tests passed. Seen at commit a32223a.
 
 ## Active chunk
 
-None. Unblocked next: C04 (depends C01), C06 (depends C05), C17 (depends C03, C05).
+None. Unblocked next: C11 (heartbeat), C14 (CLI publish and import/export), C15 (dev mode), C16 (UI shell), C17 (schema).
 
 ## Next action
 
-Start C06: write "TestStaleSaveReturns409" in `internal/studio/draft_test.go`. Follow the patterns in `internal/studio/me.go` (huma.Register with humaauth.RequireRole, `s.db.rebind` for placeholders) and add the tables as a goose migration in `internal/studio/migrations/`.
+Start C11: write "TestHeartbeatRecordsAppliedVersion" in `internal/studio/instances_test.go`. The heartbeat is a POST to a new /gateway/v1/heartbeat route in `internal/studio/gatewayapi.go` (same bearer-token check as `serveArtifact`); the gateway sends it from a goroutine started next to the poller in `cmd/restitch/run.go` managed branch, with the version from `Poller.Status()`.
 
 ## Decisions
 
@@ -28,14 +28,17 @@ Start C06: write "TestStaleSaveReturns409" in `internal/studio/draft_test.go`. F
 - auth-all migrates its own tables (`Auth.Migrate`); Studio's tables are goose migrations. The two sets never share a version table.
 - `api/openapi.yaml` is generated and committed; `TestOpenAPIUpToDate` fails on drift. Refresh with `go test ./internal/studio -run TestOpenAPIUpToDate -update`.
 - Bare `restitch` prints usage and exits 2, so every container names its role.
+- Studio validates unexpanded YAML by expanding every ${VAR} to "x" (`gwconfig.ExpandWith` in `validateArtifact`). A ${VAR} belongs in a string field; a URL writes its scheme out (https://${HOST}). Defaults in ${VAR:default} are ignored in Studio validation.
+- Gateway routes live under /gateway/v1 outside /api/v1, with a bearer gateway token (rgt_...). A gateway token on a user route gets 401, not 403: auth-all rejects it before any role check.
+- huma reads path parameters only from fields declared on the input struct itself, never from an embedded struct.
 - Fixtures and examples that relied on the old open default now say public: true. A test that needs auth declares a top-level auth block; testenv builds the authenticator from it.
 
 ## Open questions
 
 - The form library for C18 is open. Assumption: try `@rjsf/core` with a shadcn theme first; drop it for a small hand-written renderer over the C17 schema if it cannot render the custom widgets. Record the choice here.
 - `cmd/mockupstream` is in the image today. Assumption: tests need it, the image does not (C26).
-- Studio-side validation (C07) runs on unexpanded YAML, but `composition.Validate` expects env-expanded YAML. Assumption: C07 adds a check that validates ${VAR} name syntax and substitutes typed placeholders before Validate. Decide the placeholder rule in C07 and record it here.
-- README, docs and `deploy/` still show v1 server:/admin: blocks. C27 and C26 rewrite them; do not patch them piecemeal.
+- README, docs, `deploy/` and `examples/registry` still show v1 server:/admin: blocks and the removed -registry-url/-registry-key flags. C26 and C27 rewrite them; do not patch them piecemeal.
+- The old `cmd/restitch-studio` binary, `internal/registry` and `internal/devmode` still build and pass their tests, but their dashboards fail against a v2 gateway. C15, C24 and C26 delete them.
 
 ## Environment
 
