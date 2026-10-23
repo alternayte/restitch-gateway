@@ -1,23 +1,23 @@
 # Handover
 
-Updated: 2026-10-23, session 1
+Updated: 2026-10-23, session 1 (closed)
 
 ## Where we are
 
-The spec is cut into 27 chunks in `docs/plan/PLAN.md`. No chunk has started. The code is v1.2.0 plus three review fixes (schema bypass, cache key, shutdown order) on branch `fix/review-5-6-7`.
+C01 is done: the module is `/v2`, `restitch gateway` replaced `restitch run`, and every gateway flag reads its RESTITCH_ env twin. The rest of the code is v1.2.0 plus three review fixes (schema bypass, cache key, shutdown order).
 
 ## Prove it
 
 Run: `make ci && make e2e && (cd studio && npm run test)`
-Expect: `make ci` fails in lint with 6 staticcheck SA5011 issues in `internal/registry/store_test.go` and `internal/registry/validator_test.go` (local golangci-lint 2.12.2). `go test -race ./...` passes when run alone. `make e2e` passes. Studio: 9 files, 28 tests passed.
+Expect: `make ci` exits 0 with "0 issues." from golangci-lint and every Go package ok; `make e2e` ok; Studio: 9 files, 28 tests passed. Seen after commit 7778ebf.
 
 ## Active chunk
 
-None. Start with C01, then C05: C05 carries the highest risk (auth-all through humaauth on huma v2, SQLite and Postgres).
+None. C01 is done. Unblocked next: C02, C04, C05.
 
 ## Next action
 
-Create branch `v2-control-plane` from `fix/review-5-6-7`, then write "TestGatewayFlagOverEnvOverDefault" in `cmd/restitch/run_test.go` for C01.
+Start C05 (highest risk): write "TestAnonymousAPICallReturns401" in `internal/studio/server_test.go`, with auth-all mounted through `github.com/alternayte/auth-all/humaauth` on huma v2. Read `../auth-all/docs/guides/huma.md` and `../auth-all/docs/guides/bootstrap.md` first.
 
 ## Decisions
 
@@ -28,12 +28,11 @@ Create branch `v2-control-plane` from `fix/review-5-6-7`, then write "TestGatewa
 
 ## Open questions
 
-- The 6 staticcheck SA5011 issues come from a newer local linter than CI. Assumption: leave them; C09 and C10 delete `internal/registry`. Fix them earlier only if CI fails on them.
 - The form library for C18 is open. Assumption: try `@rjsf/core` with a shadcn theme first; drop it for a small hand-written renderer over the C17 schema if it cannot render the custom widgets. Record the choice here.
 - `cmd/mockupstream` is in the image today. Assumption: tests need it, the image does not (C26).
 
 ## Environment
 
-- Branch: `fix/review-5-6-7` (not yet merged to `main`)
+- Branch: `v2-control-plane`, cut from `fix/review-5-6-7`; neither is merged to `main`
 - Setup: `make studio`
 - Reference app for UI patterns: `../sluice/ui/src`. Auth library: `../auth-all`.
