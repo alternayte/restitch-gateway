@@ -3,6 +3,12 @@
 ## Unreleased
 
 - **Fix:** `request_schema` validation can no longer be bypassed. A non-empty body with a missing or non-JSON Content-Type returns 415, an empty or `null` body is validated as JSON `null`, and a body read error returns 400 instead of executing the composition. JSON detection now parses the media type (`application/json` or `+json`) instead of matching the substring "json".
+- Fix: the per-step cache and coalesce key is derived from the outgoing
+  upstream request (method, escaped URL, headers including forwarded
+  `Accept`/`Accept-Language`, body, inbound `Authorization`). Path params
+  that differ only in `/` placement and requests with different forwarded
+  headers no longer share an entry. Coalesced callers no longer share a
+  response that carries `Set-Cookie` or `Cache-Control: private`/`no-store`.
 
 ## v1.2.0 — 2026-09-02
 

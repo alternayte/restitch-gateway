@@ -16,7 +16,13 @@ package upstream
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
+	"hash"
+	"io"
+	"net/http"
+	"sort"
 
 	"golang.org/x/sync/singleflight"
 )
@@ -31,13 +37,75 @@ func NewCoalescer() *Coalescer {
 	return &Coalescer{}
 }
 
-// CoalesceKey builds a cache/coalesce key from method, URL, and auth identity.
-// The identity hash uses the full SHA-256 digest; truncating to 8 bytes
-// gives a 50 percent collision chance at roughly 77k distinct identities
-// (finding L4).
-func CoalesceKey(method, url, authIdentity string) string {
-	h := sha256.Sum256([]byte(authIdentity))
-	return fmt.Sprintf("%s %s %x", method, url, h[:])
+// perRequestHeaders are set on every outgoing request with a value unique to
+// that request (request IDs and trace context). They carry no request
+// semantics; keying on them would give every request its own cache entry.
+var perRequestHeaders = map[string]bool{
+	"X-Request-Id":     true,
+	"X-Correlation-Id": true,
+	"Traceparent":      true,
+	"Tracestate":       true,
+	"Baggage":          true,
+}
+
+// RequestKey derives the cache and coalesce key from the outgoing upstream
+// request: method, final URL as sent, every header except perRequestHeaders,
+// the body, and the inbound client Authorization. The client Authorization
+// is a separate input because the passthrough auth RoundTripper adds it to
+// the request after the key is taken. Fields are length-prefixed and hashed
+// with the full SHA-256 digest (finding L4).
+func RequestKey(req *http.Request, clientAuthorization string) (string, error) {
+	h := sha256.New()
+	writeField(h, req.Method)
+	writeField(h, req.URL.String())
+
+	names := make([]string, 0, len(req.Header))
+	for name := range req.Header {
+		canonical := http.CanonicalHeaderKey(name)
+		if !perRequestHeaders[canonical] {
+			names = append(names, name)
+		}
+	}
+	sort.Slice(names, func(i, j int) bool {
+		return http.CanonicalHeaderKey(names[i]) < http.CanonicalHeaderKey(names[j])
+	})
+	writeLen(h, len(names))
+	for _, name := range names {
+		writeField(h, http.CanonicalHeaderKey(name))
+		values := req.Header[name]
+		writeLen(h, len(values))
+		for _, v := range values {
+			writeField(h, v)
+		}
+	}
+
+	var body []byte
+	if req.GetBody != nil {
+		rc, err := req.GetBody()
+		if err != nil {
+			return "", fmt.Errorf("read request body for key: %w", err)
+		}
+		body, err = io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			return "", fmt.Errorf("read request body for key: %w", err)
+		}
+	}
+	writeField(h, string(body))
+	writeField(h, clientAuthorization)
+
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func writeLen(h hash.Hash, n int) {
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], uint64(n))
+	h.Write(buf[:])
+}
+
+func writeField(h hash.Hash, s string) {
+	writeLen(h, len(s))
+	h.Write([]byte(s))
 }
 
 // Do executes fn once per key among concurrent callers.
