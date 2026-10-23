@@ -36,6 +36,8 @@ export function resolve(schema: Schema, defs: Defs): Exclude<Schema, boolean> | 
 }
 
 const label = (key: string) => key.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+// The object arrays in the schema are plural nouns (steps, error_rules).
+const singular = (key: string) => label(key).replace(/s$/, "");
 
 /**
  * setKey returns obj with key set, or removed when the value is empty. An
@@ -141,13 +143,14 @@ export function SchemaField({
             <div key={i} className="flex flex-col gap-3 rounded-panel border p-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground">
-                  {label(name)} {i + 1}
+                  {singular(name)} {i + 1}
+                  {typeof (item as Obj)?.name === "string" && (item as Obj).name ? `: ${(item as Obj).name}` : ""}
                 </span>
                 <Button
                   type="button"
                   size="sm"
                   variant="ghost"
-                  aria-label={`Remove ${label(name)} ${i + 1}`}
+                  aria-label={`Remove ${singular(name).toLowerCase()} ${i + 1}`}
                   onClick={() => onChange(list.filter((_, j) => j !== i))}
                 >
                   <X className="h-3.5 w-3.5" aria-hidden />
@@ -164,7 +167,7 @@ export function SchemaField({
           ))}
           <Button type="button" variant="secondary" size="sm" className="self-start" onClick={() => onChange([...list, {}])}>
             <Plus className="h-3.5 w-3.5" aria-hidden />
-            Add {label(name).toLowerCase()}
+            Add {singular(name).toLowerCase()}
           </Button>
         </fieldset>
       );
