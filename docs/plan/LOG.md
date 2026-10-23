@@ -37,3 +37,4 @@ Append only. Newest entry at the bottom. Never edit an older entry.
 - **Did:** draft resources (`internal/studio/draft.go`), publish/versions/rollback/promote (`publish.go`), gateway tokens and the pull endpoint (`gatewayapi.go`), removal of the gateway admin API and storage, the ops port, managed mode with readiness gated on the first pull.
 - **Decided:** a gateway token on a user route answers 401 (it is no user credential), not 403 as the plan said; the plan row now says 401. The managed-mode end-to-end test lives in `cmd/restitch` as a helper-process test, because it needs `gatewayCmd` and an in-process Studio. `composition.MaxArtifactBytes` is the one size limit for publish and pull.
 - **Blocked:** none.
+- **Chunks (continued):** C11 done: heartbeats and the instances list. Session closed near the context budget the user set.

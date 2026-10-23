@@ -1,23 +1,23 @@
 # Handover
 
-Updated: 2026-10-23, session 3
+Updated: 2026-10-23, session 3 (closed)
 
 ## Where we are
 
-C01-C10 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. Nothing pushes telemetry yet.
+C01-C11 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Usage aggregates and sampled requests are not pushed yet.
 
 ## Prove it
 
 Run: `docker run -d --rm --name restitch-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=restitch_test -p 55432:5432 postgres:17-alpine`, then `RESTITCH_TEST_DATABASE_URL="postgres://postgres:test@localhost:55432/restitch_test?sslmode=disable" make ci && make e2e && (cd studio && npm run test)`
-Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its postgres subtests), `make e2e` ok, Studio: 9 files, 28 tests passed. Seen at commit a32223a.
+Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its postgres subtests), `make e2e` ok, Studio: 9 files, 28 tests passed. Seen at commit 7cced27.
 
 ## Active chunk
 
-None. Unblocked next: C11 (heartbeat), C14 (CLI publish and import/export), C15 (dev mode), C16 (UI shell), C17 (schema).
+None. Unblocked next: C12 (usage aggregates), C14 (CLI publish and import/export), C15 (dev mode), C16 (UI shell), C17 (schema).
 
 ## Next action
 
-Start C11: write "TestHeartbeatRecordsAppliedVersion" in `internal/studio/instances_test.go`. The heartbeat is a POST to a new /gateway/v1/heartbeat route in `internal/studio/gatewayapi.go` (same bearer-token check as `serveArtifact`); the gateway sends it from a goroutine started next to the poller in `cmd/restitch/run.go` managed branch, with the version from `Poller.Status()`.
+Start C12: write "TestAggregatesSumAcrossInstances" in `internal/studio/usage_test.go`. The gateway side wires `admin.MultiRecorder{Accumulator: ...}` back into `reloadFromBytes` in `cmd/restitch/run.go` (managed mode only), pushes `acc.Flush()` once a minute to a new POST /gateway/v1/usage next to /gateway/v1/heartbeat, and puts the last flush in `shutdown.final`. Follow `internal/hotreload/heartbeat.go` for the sender and `internal/studio/instances.go` for the receiver.
 
 ## Decisions
 
