@@ -134,6 +134,15 @@ components:
         - user
         - session
       type: object
+    CreateEnvironmentRequest:
+      additionalProperties: false
+      properties:
+        name:
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+          type: string
+      required:
+        - name
+      type: object
     DeleteResponse:
       properties:
         confirmationRequired:
@@ -142,6 +151,21 @@ components:
           type: boolean
       required:
         - success
+      type: object
+    Environment:
+      additionalProperties: false
+      properties:
+        created_at:
+          format: date-time
+          type: string
+        created_by:
+          type: string
+        name:
+          type: string
+      required:
+        - name
+        - created_at
+        - created_by
       type: object
     ErrorDetail:
       additionalProperties: false
@@ -210,6 +234,30 @@ components:
       required:
         - error
       type: object
+    ListEnvironmentsResponse:
+      additionalProperties: false
+      properties:
+        environments:
+          items:
+            $ref: "#/components/schemas/Environment"
+          type:
+            - array
+            - "null"
+      required:
+        - environments
+      type: object
+    ListResourcesResponse:
+      additionalProperties: false
+      properties:
+        resources:
+          items:
+            $ref: "#/components/schemas/Resource"
+          type:
+            - array
+            - "null"
+      required:
+        - resources
+      type: object
     MeOutputBody:
       additionalProperties: false
       properties:
@@ -262,12 +310,59 @@ components:
             - system
           type: string
       type: object
+    Resource:
+      additionalProperties: false
+      properties:
+        body:
+          additionalProperties: {}
+          type: object
+        kind:
+          enum:
+            - upstream
+            - composition
+            - auth
+            - rate_limit
+            - settings
+          type: string
+        name:
+          type: string
+        revision:
+          description: Increases by one on every save.
+          format: int64
+          type: integer
+        updated_at:
+          format: date-time
+          type: string
+        updated_by:
+          type: string
+      required:
+        - kind
+        - name
+        - revision
+        - body
+        - updated_at
+        - updated_by
+      type: object
     RevokeAllResponse:
       properties:
         revoked:
           type: integer
       required:
         - revoked
+      type: object
+    SaveResourceRequest:
+      additionalProperties: false
+      properties:
+        base_revision:
+          format: int64
+          minimum: 0
+          type: integer
+        body:
+          additionalProperties: {}
+          type: object
+      required:
+        - base_revision
+        - body
       type: object
     Session:
       properties:
@@ -1302,6 +1397,206 @@ paths:
       summary: Complete an account delete with a token
       tags:
         - user
+  /api/v1/environments:
+    get:
+      operationId: listEnvironments
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvironmentsResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List environments
+      tags:
+        - draft
+    post:
+      operationId: createEnvironment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEnvironmentRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Environment"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create an environment with an empty draft
+      tags:
+        - draft
+  /api/v1/environments/{env}/resources:
+    get:
+      operationId: listResources
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListResourcesResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List the resources in an environment's draft
+      tags:
+        - draft
+  /api/v1/environments/{env}/resources/{kind}/{name}:
+    delete:
+      operationId: deleteResource
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: kind
+          required: true
+          schema:
+            enum:
+              - upstream
+              - composition
+              - auth
+              - rate_limit
+              - settings
+            type: string
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: base_revision
+          required: true
+          schema:
+            format: int64
+            minimum: 1
+            type: integer
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Delete one resource
+      tags:
+        - draft
+    get:
+      operationId: getResource
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: kind
+          required: true
+          schema:
+            enum:
+              - upstream
+              - composition
+              - auth
+              - rate_limit
+              - settings
+            type: string
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Read one resource
+      tags:
+        - draft
+    put:
+      description: base_revision 0 creates the resource. Any other value updates it, and a value that is not the current revision gets 409, so a stale copy never overwrites a newer save.
+      operationId: saveResource
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: kind
+          required: true
+          schema:
+            enum:
+              - upstream
+              - composition
+              - auth
+              - rate_limit
+              - settings
+            type: string
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveResourceRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create or update one resource
+      tags:
+        - draft
   /api/v1/me:
     get:
       operationId: getMe

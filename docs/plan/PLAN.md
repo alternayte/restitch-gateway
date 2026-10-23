@@ -14,7 +14,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### Studio core
 - [x] C05 — `restitch studio` signs in a bootstrap owner and refuses anonymous API calls
-- [ ] C06 — An editor saves resources in an environment draft, and a stale save gets 409
+- [x] C06 — An editor saves resources in an environment draft, and a stale save gets 409
 - [ ] C07 — Publish validates the draft, returns a diff and writes an artifact version
 - [ ] C08 — Rollback and promote write new versions and drafts without changing history
 - [ ] C09 — A gateway token pulls its environment's artifact version with an ETag
@@ -114,7 +114,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C06 — An editor saves resources in an environment draft, and a stale save gets 409
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C05
 - **Files:** `internal/studio/draft.go`, `internal/studio/draft_test.go`, `internal/studio/migrations/`, `internal/studio/server.go`
 - **Goal:** Owners create environments; editors create, update and delete typed resources in a draft; each save carries a base revision.
@@ -122,6 +122,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes, a duplicate name in one environment fails on the database constraint, and a viewer gets 403 on save.
 - **Spec:** Decisions on typed resources, the shared draft, base revision.
 - **Notes:** A resource row holds environment, kind, name, revision and the body as JSON. Save validates the single resource with the C03 rules that apply to it.
+  Done: `internal/studio/draft.go`. Kinds: upstream, composition, auth, rate_limit, settings (block_private_upstreams); the last three are singletons named "default". Bodies are JSON in `studio_resources.body`; save decodes them strictly into the artifact types, and upstream/auth/rate_limit run through `composition.ParseConfig` as one-resource artifacts. base_revision 0 creates (INSERT ON CONFLICT DO NOTHING), any other value updates WHERE revision matches; DELETE takes ?base_revision. huma reads path params only from fields on the input struct, not from an embedded struct.
 
 ---
 

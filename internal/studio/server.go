@@ -66,6 +66,7 @@ type Config struct {
 type Server struct {
 	db      *database
 	auth    *authall.Auth
+	admin   *admin.Plugin
 	api     huma.API
 	handler http.Handler
 }
@@ -99,6 +100,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	rolePlugin := roles.New(roles.Hierarchy(RoleViewer, RoleEditor, RoleOwner), roles.Default(RoleViewer))
 	adminPlugin := admin.New(admin.AdminRole(RoleOwner))
+	s.admin = adminPlugin
 
 	// A browser refuses a Secure cookie over plain HTTP, so a public URL
 	// on http:// (restitch dev, a local quickstart) turns Secure off.
@@ -165,6 +167,7 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	}
 	dropOperation(s.api.OpenAPI(), auth.BasePath()+signUpPath, http.MethodPost)
 	s.registerMe()
+	s.registerDraft()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST "+auth.BasePath()+signUpPath, http.NotFoundHandler())
