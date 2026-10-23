@@ -311,11 +311,11 @@ Failed step references evaluate to `null` in templates (no 500).
 | `restitch_cache_misses_total` | counter | composition, step |
 | `restitch_coalesced_total` | counter | composition, step |
 | `restitch_telemetry_dropped_total` | counter | kind |
-| `restitch_registry_polls_total` | counter | result |
-| `restitch_registry_poll_duration_seconds` | histogram | — |
-| `restitch_registry_last_success_timestamp` | gauge | — |
+| `restitch_studio_pulls_total` | counter | result |
+| `restitch_studio_pull_duration_seconds` | histogram | — |
+| `restitch_studio_last_pull_success_timestamp` | gauge | — |
 
-The `restitch_registry_*` metrics count the pulls of a managed gateway from
+The `restitch_studio_*` metrics count the pulls of a managed gateway from
 Studio.
 
 **Probes** are on the data port. `GET /health` answers 200 while the process

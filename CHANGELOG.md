@@ -35,6 +35,13 @@ move from a v1 file.
   one environment. The config registry, its bundle and `/api/v1/configs` are
   removed. `RESTITCH_CONFIG` and `RESTITCH_STUDIO_URL` together exit with
   status 2.
+- **Pull metrics are renamed for Studio.** `restitch_registry_polls_total`
+  is now `restitch_studio_pulls_total`,
+  `restitch_registry_poll_duration_seconds` is now
+  `restitch_studio_pull_duration_seconds`, and
+  `restitch_registry_last_success_timestamp` is now
+  `restitch_studio_last_pull_success_timestamp`. Labels and meaning do not
+  change. Update dashboards and alert rules that query the old names.
 - **A composition that is not public needs an auth policy.** Publish,
   `restitch check` and the gateway refuse an artifact with a composition
   that is not `public: true` when the artifact has no top-level `auth`

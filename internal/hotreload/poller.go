@@ -207,18 +207,18 @@ func classifyError(err error) string {
 }
 
 func (p *Poller) recordMetricsResult(result string) {
-	if p.metrics == nil || p.metrics.RegistryPollsTotal == nil {
+	if p.metrics == nil || p.metrics.StudioPullsTotal == nil {
 		return
 	}
-	p.metrics.RegistryPollsTotal.WithLabelValues(result).Inc()
+	p.metrics.StudioPullsTotal.WithLabelValues(result).Inc()
 	if result != "error" {
-		p.metrics.RegistryLastSuccess.SetToCurrentTime()
+		p.metrics.StudioLastPullSuccess.SetToCurrentTime()
 	}
 }
 
 func (p *Poller) recordMetricsDuration(d time.Duration) {
-	if p.metrics == nil || p.metrics.RegistryPollDuration == nil {
+	if p.metrics == nil || p.metrics.StudioPullDuration == nil {
 		return
 	}
-	p.metrics.RegistryPollDuration.Observe(d.Seconds())
+	p.metrics.StudioPullDuration.Observe(d.Seconds())
 }

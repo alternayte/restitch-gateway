@@ -11,6 +11,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C02 — A v1 file with server: or admin: is refused with the replacement env var named
 - [x] C03 — An artifact with a non-public composition and no auth policy is refused
 - [x] C04 — The gateway has no admin API; probes on the data port, metrics on the ops port
+- [x] C30 — Pull metrics are named for Studio, not the v1 registry
 
 ### Studio core
 - [x] C05 — `restitch studio` signs in a bootstrap owner and refuses anonymous API calls
@@ -404,3 +405,16 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and AGENTS.md lines for registry and bundle are replaced by an accepted agents-audit item.
 - **Notes:** The test reads the env names from the C01 derivation function, so docs cannot drift.
   Done: `TestDocsListEveryEnvVar` parses `cmd/restitch/*.go`, takes every flag of each flag set passed to `gwconfig.BindEnv`, names it with `gwconfig.EnvName`, and checks one `| \`RESTITCH_X\` | commands |` row per name in `docs/configuration.md`, with the right commands and no unknown name. README, configuration, deployment (generic container platforms), studio, architecture, observability, resilience, SECURITY, VERSIONING and CONTRIBUTING describe v2; CHANGELOG has a v2.0.0 entry. deploy/README.md no longer claims an import button: the UI has none, import is the API and `restitch publish`.
+
+---
+
+### C30 — Pull metrics are named for Studio, not the v1 registry
+
+- **Status:** done
+- **Depends on:** C10
+- **Files:** `internal/observability/metrics.go`, `internal/hotreload/poller.go`, `internal/hotreload/poller_test.go`, `cmd/restitch/run.go`, `cmd/restitch/shutdown.go`, `deploy/prometheus/rules/alerts.yml`, `deploy/prometheus/rules/alerts_test.yml`, `docs/observability.md`, `README.md`, `CHANGELOG.md`
+- **Goal:** A managed gateway exposes `restitch_studio_pulls_total{result}`, `restitch_studio_pull_duration_seconds` and `restitch_studio_last_pull_success_timestamp` in place of the v1 `restitch_registry_*` names, with the same labels and meaning.
+- **First failing test:** `internal/hotreload/poller_test.go` — "TestPullMetricsAreNamedForStudio"
+- **Done when:** the test command passes, `make deploy-lint` passes and the promtool rule tests print SUCCESS.
+- **Notes:** User decision 2026-10-24: v2.0.0 is not tagged and already breaks, so the rename goes in now. CHANGELOG lists it under the v2.0.0 breaking changes.
+  Done: `Metrics.RegisterStudioPullMetrics` replaces `RegisterRegistryMetrics`; the fields are `StudioPullsTotal`, `StudioPullDuration` and `StudioLastPullSuccess`. `TestPullMetricsAreNamedForStudio` scrapes `/metrics` after one pull and checks the three names and that no `restitch_registry_` name remains. The alert keeps the name `RestitchConfigReloadFailing`, so alert routes do not change; its summary and description now say pulls from Studio, and `alerts_test.yml` asserts the new text.

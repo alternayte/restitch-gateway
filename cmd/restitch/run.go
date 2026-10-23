@@ -270,7 +270,7 @@ func gatewayCmd(args []string) int {
 		// A managed gateway starts without a config and stays not ready
 		// until its first pull; a Studio outage never crash-loops it.
 		srv.SetConfigured(false)
-		metrics.RegisterRegistryMetrics()
+		metrics.RegisterStudioPullMetrics()
 		poller := hotreload.NewPoller(client, opts.pollInterval, reloadFromBytes, metrics)
 		applied := make(chan struct{}, 1)
 		poller.OnApplied(func(v int) {
