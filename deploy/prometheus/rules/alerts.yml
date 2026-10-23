@@ -33,7 +33,7 @@ groups:
       # behaviour. Alerting at 5m would page on something the system is
       # designed to absorb.
       - alert: RestitchConfigReloadFailing
-        expr: rate(restitch_studio_pulls_total{result!="success"}[5m]) > 0
+        expr: rate(restitch_studio_pulls_total{result="error"}[5m]) > 0
         for: 10m
         labels:
           severity: warning

@@ -90,6 +90,10 @@ move from a v1 file.
 
 ### Bug Fixes
 
+- **`RestitchConfigReloadFailing` no longer fires on healthy gateways.** It
+  matched every pull result except `success`, so the `not_modified` pulls of
+  an unchanged version made it fire. It now matches `result="error"` only.
+
 - `request_schema` validation can no longer be bypassed. A non-empty body
   with a missing or non-JSON Content-Type returns 415, an empty or `null`
   body is validated as JSON `null`, and a body read error returns 400

@@ -147,6 +147,18 @@ tests:
         alertname: RestitchConfigReloadFailing
         exp_alerts: []
 
+  # --- RestitchConfigReloadFailing: NEGATIVE (a healthy gateway whose pulls
+  #     answer 304) --- A managed gateway records not_modified on every poll
+  #     while the version is unchanged; that is steady state, not a failure.
+  - interval: 1m
+    input_series:
+      - series: 'restitch_studio_pulls_total{result="not_modified"}'
+        values: '0+6x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchConfigReloadFailing
+        exp_alerts: []
+
   # --- RestitchConfigReloadFailing: TRANSIENT (failures for ~6m, then the
   #     poller recovers, checked before the 10m `for:` window elapses) ---
   # This is the case alerts.yml:31-34 documents: a transient fetch failure is
