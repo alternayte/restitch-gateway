@@ -15,7 +15,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 ### Studio core
 - [x] C05 — `restitch studio` signs in a bootstrap owner and refuses anonymous API calls
 - [x] C06 — An editor saves resources in an environment draft, and a stale save gets 409
-- [ ] C07 — Publish validates the draft, returns a diff and writes an artifact version
+- [x] C07 — Publish validates the draft, returns a diff and writes an artifact version
 - [ ] C08 — Rollback and promote write new versions and drafts without changing history
 - [ ] C09 — A gateway token pulls its environment's artifact version with an ETag
 - [ ] C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
@@ -128,7 +128,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C07 — Publish validates the draft, returns a diff and writes an artifact version
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C06, C03
 - **Files:** `internal/studio/publish.go`, `internal/studio/publish_test.go`, `internal/studio/server.go`
 - **Goal:** A publish preview returns the diff against the current version; publish runs the C03 validator on the whole draft and writes an immutable numbered version with author and message.
@@ -136,6 +136,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and two publishes produce versions 1 and 2 with the artifact YAML stored verbatim.
 - **Spec:** Decision on publish.
 - **Notes:** The stored artifact is the YAML format that standalone mode reads. Author comes from the session, never from the request body.
+  Done: `internal/studio/publish.go`. `assembleArtifact` renders the draft deterministically; `validateArtifact` expands every ${VAR} to "x" with `gwconfig.ExpandWith`, then runs `composition.Validate`. Versions live in `studio_artifact_versions` (PK environment, number); the current version is the highest number. Preview returns valid, errors, yaml and a unified diff (go-difflib).
 
 ---
 

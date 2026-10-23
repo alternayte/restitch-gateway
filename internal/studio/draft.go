@@ -30,6 +30,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/alternayte/restitch-gateway/v2/internal/composition"
+	"github.com/alternayte/restitch-gateway/v2/internal/gwconfig"
 )
 
 // The resource kinds. auth, rate_limit and settings are singletons named
@@ -87,7 +88,11 @@ func parseArtifact(doc map[string]any) error {
 	if err != nil {
 		return err
 	}
-	_, err = composition.ParseConfig(data)
+	expanded, err := gwconfig.ExpandWith(string(data), func(string) (string, bool) { return secretPlaceholder, true })
+	if err != nil {
+		return err
+	}
+	_, err = composition.ParseConfig([]byte(expanded))
 	return err
 }
 

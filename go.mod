@@ -21,6 +21,7 @@ require (
 	github.com/getkin/kin-openapi v0.140.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/oklog/ulid/v2 v2.1.1
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/pressly/goose/v3 v3.27.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2

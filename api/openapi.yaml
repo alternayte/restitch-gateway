@@ -118,6 +118,27 @@ components:
       required:
         - user
       type: object
+    ArtifactVersion:
+      additionalProperties: false
+      properties:
+        author:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        message:
+          type: string
+        number:
+          format: int64
+          type: integer
+        yaml:
+          type: string
+      required:
+        - number
+        - author
+        - message
+        - created_at
+      type: object
     AuthResponse:
       properties:
         emailVerificationRequired:
@@ -258,6 +279,18 @@ components:
       required:
         - resources
       type: object
+    ListVersionsResponse:
+      additionalProperties: false
+      properties:
+        versions:
+          items:
+            $ref: "#/components/schemas/ArtifactVersion"
+          type:
+            - array
+            - "null"
+      required:
+        - versions
+      type: object
     MeOutputBody:
       additionalProperties: false
       properties:
@@ -309,6 +342,43 @@ components:
             - dark
             - system
           type: string
+      type: object
+    PreviewBody:
+      additionalProperties: false
+      properties:
+        current_version:
+          description: 0 when the environment has no version yet.
+          format: int64
+          type: integer
+        diff:
+          description: Unified diff from the current version to the draft. Empty when they match.
+          type: string
+        errors:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        valid:
+          type: boolean
+        yaml:
+          type: string
+      required:
+        - valid
+        - errors
+        - yaml
+        - diff
+        - current_version
+      type: object
+    PublishRequest:
+      additionalProperties: false
+      properties:
+        message:
+          maxLength: 1000
+          minLength: 1
+          type: string
+      required:
+        - message
       type: object
     Resource:
       additionalProperties: false
@@ -1440,6 +1510,63 @@ paths:
       summary: Create an environment with an empty draft
       tags:
         - draft
+  /api/v1/environments/{env}/publish:
+    post:
+      description: Validates the whole draft with the gateway validator. An invalid draft gets 422 and writes nothing. A valid draft becomes the next numbered version, which gateways pull.
+      operationId: publish
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactVersion"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Publish the draft as a new artifact version
+      tags:
+        - publish
+  /api/v1/environments/{env}/publish/preview:
+    post:
+      operationId: previewPublish
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreviewBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Validate the draft and diff it against the current version
+      tags:
+        - publish
   /api/v1/environments/{env}/resources:
     get:
       operationId: listResources
@@ -1597,6 +1724,63 @@ paths:
       summary: Create or update one resource
       tags:
         - draft
+  /api/v1/environments/{env}/versions:
+    get:
+      operationId: listVersions
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListVersionsResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List artifact versions, newest first
+      tags:
+        - publish
+  /api/v1/environments/{env}/versions/{number}:
+    get:
+      operationId: getVersion
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: number
+          required: true
+          schema:
+            format: int64
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactVersion"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Read one artifact version with its YAML
+      tags:
+        - publish
   /api/v1/me:
     get:
       operationId: getMe

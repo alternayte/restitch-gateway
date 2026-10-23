@@ -57,6 +57,13 @@ func BindEnv(fs *flag.FlagSet, lookup func(string) (string, bool)) error {
 // A "$" not part of "$$" or "${...}" is an error. ${VAR} with VAR unset
 // and no default is an error listing the variable name.
 func ExpandEnvStrict(s string) (string, error) {
+	return ExpandWith(s, os.LookupEnv)
+}
+
+// ExpandWith is ExpandEnvStrict with the variable lookup supplied by the
+// caller. Studio validates an artifact without the gateway's environment
+// by passing a lookup that answers a placeholder for every name.
+func ExpandWith(s string, lookup func(string) (string, bool)) (string, error) {
 	var b strings.Builder
 	i := 0
 
@@ -103,7 +110,7 @@ func ExpandEnvStrict(s string) (string, error) {
 			hasDefault = true
 		}
 
-		val, exists := os.LookupEnv(varName)
+		val, exists := lookup(varName)
 		if !exists || val == "" {
 			if hasDefault {
 				b.WriteString(defaultVal)

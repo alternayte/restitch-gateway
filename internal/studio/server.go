@@ -168,6 +168,7 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	dropOperation(s.api.OpenAPI(), auth.BasePath()+signUpPath, http.MethodPost)
 	s.registerMe()
 	s.registerDraft()
+	s.registerPublish()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST "+auth.BasePath()+signUpPath, http.NotFoundHandler())
