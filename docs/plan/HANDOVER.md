@@ -4,7 +4,7 @@ Updated: 2026-10-23, session 4 (closed)
 
 ## Where we are
 
-C01-C18 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The new frontend in `studio/` (TanStack, generated client, sluice UI layer) signs in and lists and creates environments; `restitch studio` serves it from `internal/studio/dist`. The old Studio binary, registry and session packages are gone. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
+C01-C18 and C22 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The new frontend in `studio/` (TanStack, generated client, sluice UI layer) signs in and lists and creates environments; `restitch studio` serves it from `internal/studio/dist`. The old Studio binary, registry and session packages are gone. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
 
 ## Prove it
 
@@ -13,11 +13,11 @@ Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its
 
 ## Active chunk
 
-None. Unblocked next: C19 (step graph), C20 (expression lint), C21 (secret picker), C22 (publish screen), C23 (tokens and users), C24 (dashboards).
+None. Unblocked next: C20 (expression lint, and the unknown-root validation gap in its chunk notes), C19 (step graph), C21 (secret picker), C23 (tokens and users), C24 (dashboards).
 
 ## Next action
 
-Start C22 (it makes the UI usable end to end): a versions route under /environments/$env with the publish preview diff (previewPublishMutation), a message field and Publish (publishMutation), the history (listVersionsOptions), and rollback and promote behind ConfirmDialog. Write "shows validation errors and blocks publish" in `studio/src/features/publish/publish.test.tsx` first. sluice has a diff view at `../sluice/ui/src/components/diff-view.tsx`.
+Start C20: first make `composition.CompileConfig` reject an expression whose root is unknown (write a failing test in `internal/composition/validate_test.go` with `{{ request.path.id }}`), then add the lint endpoint in `internal/studio/lint.go` and the expression field in the form renderer.
 
 ## Decisions
 

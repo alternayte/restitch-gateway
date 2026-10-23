@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as EnvironmentsEnvIndexRouteImport } from './routes/environments.$env.index'
+import { Route as EnvironmentsEnvVersionsRouteImport } from './routes/environments.$env.versions'
 import { Route as EnvironmentsEnvResourcesKindNameRouteImport } from './routes/environments.$env.resources.$kind.$name'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const EnvironmentsEnvIndexRoute = EnvironmentsEnvIndexRouteImport.update({
   path: '/environments/$env/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EnvironmentsEnvVersionsRoute = EnvironmentsEnvVersionsRouteImport.update({
+  id: '/environments/$env/versions',
+  path: '/environments/$env/versions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EnvironmentsEnvResourcesKindNameRoute =
   EnvironmentsEnvResourcesKindNameRouteImport.update({
     id: '/environments/$env/resources/$kind/$name',
@@ -39,12 +45,14 @@ const EnvironmentsEnvResourcesKindNameRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/environments/$env/versions': typeof EnvironmentsEnvVersionsRoute
   '/environments/$env/': typeof EnvironmentsEnvIndexRoute
   '/environments/$env/resources/$kind/$name': typeof EnvironmentsEnvResourcesKindNameRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/environments/$env/versions': typeof EnvironmentsEnvVersionsRoute
   '/environments/$env': typeof EnvironmentsEnvIndexRoute
   '/environments/$env/resources/$kind/$name': typeof EnvironmentsEnvResourcesKindNameRoute
 }
@@ -52,6 +60,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/environments/$env/versions': typeof EnvironmentsEnvVersionsRoute
   '/environments/$env/': typeof EnvironmentsEnvIndexRoute
   '/environments/$env/resources/$kind/$name': typeof EnvironmentsEnvResourcesKindNameRoute
 }
@@ -60,18 +69,21 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/environments/$env/versions'
     | '/environments/$env/'
     | '/environments/$env/resources/$kind/$name'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
+    | '/environments/$env/versions'
     | '/environments/$env'
     | '/environments/$env/resources/$kind/$name'
   id:
     | '__root__'
     | '/'
     | '/login'
+    | '/environments/$env/versions'
     | '/environments/$env/'
     | '/environments/$env/resources/$kind/$name'
   fileRoutesById: FileRoutesById
@@ -79,6 +91,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  EnvironmentsEnvVersionsRoute: typeof EnvironmentsEnvVersionsRoute
   EnvironmentsEnvIndexRoute: typeof EnvironmentsEnvIndexRoute
   EnvironmentsEnvResourcesKindNameRoute: typeof EnvironmentsEnvResourcesKindNameRoute
 }
@@ -106,6 +119,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EnvironmentsEnvIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/environments/$env/versions': {
+      id: '/environments/$env/versions'
+      path: '/environments/$env/versions'
+      fullPath: '/environments/$env/versions'
+      preLoaderRoute: typeof EnvironmentsEnvVersionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/environments/$env/resources/$kind/$name': {
       id: '/environments/$env/resources/$kind/$name'
       path: '/environments/$env/resources/$kind/$name'
@@ -119,6 +139,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  EnvironmentsEnvVersionsRoute: EnvironmentsEnvVersionsRoute,
   EnvironmentsEnvIndexRoute: EnvironmentsEnvIndexRoute,
   EnvironmentsEnvResourcesKindNameRoute: EnvironmentsEnvResourcesKindNameRoute,
 }

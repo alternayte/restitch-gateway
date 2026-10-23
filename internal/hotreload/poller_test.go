@@ -262,3 +262,22 @@ func TestPoller_ContextCancel_CleansUp(t *testing.T) {
 		t.Fatal("Run did not return after cancel")
 	}
 }
+
+func TestPollerKeepsIntervalWhileNoVersionExists(t *testing.T) {
+	var calls atomic.Int32
+	studio := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		http.Error(w, "no published version", http.StatusNotFound)
+	}))
+	defer studio.Close()
+
+	p := NewPoller(NewClient(studio.URL, "rgt_x"), 20*time.Millisecond, func([]byte) (string, error) { return "", nil }, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	_ = p.Run(ctx)
+	// Exponential backoff from 20ms would allow about 7 polls in 400ms; the
+	// fixed interval allows about 20.
+	if n := calls.Load(); n < 12 {
+		t.Fatalf("polled %d times in 400ms; waiting for a first version must not back off", n)
+	}
+}

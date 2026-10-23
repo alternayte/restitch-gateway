@@ -107,7 +107,12 @@ func (p *Poller) Run(ctx context.Context) error {
 					"consecutive", consecutiveErrors)
 			}
 
-			wait := p.bo.NextBackOff()
+			// No published version yet is a normal state, not a fault:
+			// keep the poll interval, so the first publish arrives quickly.
+			wait := p.interval
+			if !errors.Is(pollErr, ErrNoVersion) {
+				wait = p.bo.NextBackOff()
+			}
 			if !p.sleepOrTrigger(ctx, wait) {
 				return ctx.Err()
 			}

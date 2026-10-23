@@ -32,7 +32,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [ ] C19 — The step graph widget edits depends_on
 - [ ] C20 — Expression fields show server lint errors as the user types
 - [ ] C21 — The secret picker inserts ${VAR} names and the environment lists required names
-- [ ] C22 — The publish screen shows the diff, history, rollback and promote
+- [x] C22 — The publish screen shows the diff, history, rollback and promote
 - [ ] C23 — Owners manage gateway tokens and users in settings
 - [ ] C24 — Environment dashboards show aggregates, sampled requests and instances
 - [ ] C25 — The command palette and keyboard shortcuts reach every page and action
@@ -309,6 +309,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Depends on:** C18
 - **Files:** `internal/studio/lint.go`, `internal/studio/lint_test.go`, `studio/src/features/resources/expression-field.tsx`
 - **Goal:** Expression and template fields post to a lint endpoint after typing stops and show errors inline.
+- **Known gap to close:** `composition.Validate` accepts an expression with an unknown root (seen: `{{ request.path.id }}`; the root is `req`). Make compile reject unknown roots, so publish refuses it too, not only the lint.
 - **First failing test:** `internal/studio/lint_test.go` — "TestLintReportsUnknownStepReference"
 - **Done when:** the test command passes.
 - **Notes:** The lint endpoint calls the same compile code as C03.
@@ -328,10 +329,11 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C22 — The publish screen shows the diff, history, rollback and promote
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C08, C16
 - **Files:** `studio/src/features/publish/`, `studio/src/routes/environments.$env.versions.tsx`
 - **Goal:** An editor previews the diff, enters a message and publishes; the history lists versions; rollback and promote ask for confirmation.
+- **Notes:** Done: /environments/$env/versions (`studio/src/features/publish/VersionsPage.tsx`) with Review changes (preview diff through sluice's DiffView, validation errors block Publish, an unchanged draft says so), a required message, history with View YAML and Roll back behind ConfirmDialog, and a Promote dialog that picks environment and version and shows the draft diff. The draft page links to it. Verified in a browser against `restitch dev`: publish v1, edit, publish v2 (the gateway served it), roll back (v3 = v1, the gateway followed). Found while verifying: the poller backed off exponentially while no version existed, so a first publish could take minutes to arrive; it now keeps the poll interval for that case (`TestPollerKeepsIntervalWhileNoVersionExists`). Also found: validation accepts an unknown expression root (`request.path.id` instead of `req.params.id`), which fails only at request time; C20 must catch it.
 - **First failing test:** `studio/src/features/publish/publish.test.tsx` — "shows validation errors and blocks publish"
 - **Done when:** the test command passes.
 
