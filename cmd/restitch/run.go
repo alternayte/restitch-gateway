@@ -21,14 +21,17 @@ import (
 	"fmt"
 	iofs "io/fs"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/alternayte/restitch-gateway/v2/internal/admin"
 	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 	"github.com/alternayte/restitch-gateway/v2/internal/gwconfig"
 	"github.com/alternayte/restitch-gateway/v2/internal/hotreload"
@@ -156,8 +159,20 @@ func gatewayCmd(args []string) int {
 
 	metrics := observability.NewMetrics()
 	observability.SetDefaultMetrics(metrics)
+	var breakersMu sync.Mutex
+	breakers := map[string]string{}
 	upstream.OnBreakerStateChange = func(name string, from, to string) {
 		metrics.BreakerState.WithLabelValues(name).Set(observability.BreakerStateValue(to))
+		breakersMu.Lock()
+		breakers[name] = to
+		breakersMu.Unlock()
+	}
+
+	// A managed gateway accumulates usage per minute and pushes it to
+	// Studio; a standalone gateway reports through /metrics only.
+	var acc *admin.Accumulator
+	if managed {
+		acc = admin.NewAccumulator()
 	}
 
 	// Every pipeline serves the probes. The first one serves only them:
@@ -218,7 +233,11 @@ func gatewayCmd(args []string) int {
 			Executor: composition.NewExecutor(compiled),
 		}
 		router := server.NewRouter()
-		composition.NewHandler(compiled, authenticator).RegisterRoutes(router)
+		handler := composition.NewHandler(compiled, authenticator)
+		if acc != nil {
+			handler.SetRecorder(&admin.MultiRecorder{Accumulator: acc})
+		}
+		handler.RegisterRoutes(router)
 		withProbes(router)
 		pipe.Handler = pipelineRateLimit(router, cfg.RateLimit)
 
@@ -285,6 +304,17 @@ func gatewayCmd(args []string) int {
 				}
 			}
 		}()
+		pusher := &hotreload.UsagePusher{
+			Client: client, InstanceID: instanceID, Acc: acc, Dropped: metrics.TelemetryDroppedTotal,
+			Breakers: func() map[string]string {
+				breakersMu.Lock()
+				defer breakersMu.Unlock()
+				return maps.Clone(breakers)
+			},
+		}
+		go pusher.Run(bgCtx, hotreload.UsageInterval)
+		// The last minute goes out after traffic stopped.
+		shutdown.final = pusher.Push
 		slog.Info("managed mode", "studio_url", opts.studioURL, "poll_interval", opts.pollInterval.String())
 	} else {
 		raw, err := os.ReadFile(opts.configFile)

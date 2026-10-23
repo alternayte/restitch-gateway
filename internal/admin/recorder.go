@@ -33,6 +33,7 @@ func (mr *MultiRecorder) Record(rec reqlog.Record) {
 			Upstream:   s.Upstream,
 			DurationMS: s.DurationMS,
 			IsError:    s.Status == "failed",
+			Cached:     s.Cached,
 		})
 	}
 	mr.Accumulator.Record(rec.Composition, rec.DurationMS, rec.Status >= 500, rec.Partial, stepSamples)

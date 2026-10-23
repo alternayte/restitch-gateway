@@ -208,6 +208,7 @@ func (s *Server) gatewayHandler() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/artifact", s.serveArtifact)
 	mux.HandleFunc("GET /gateway/v1/artifact/versions/{number}", s.serveArtifact)
 	mux.HandleFunc("POST /gateway/v1/heartbeat", s.serveHeartbeat)
+	mux.HandleFunc("POST /gateway/v1/usage", s.serveUsage)
 	return mux
 }
 

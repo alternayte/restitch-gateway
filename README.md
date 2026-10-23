@@ -283,7 +283,7 @@ Failed step references evaluate to `null` in templates (no 500).
 | `restitch_cache_hits_total` | counter | composition, step |
 | `restitch_cache_misses_total` | counter | composition, step |
 | `restitch_coalesced_total` | counter | composition, step |
-| `restitch_request_records_dropped_total` | counter | reason |
+| `restitch_telemetry_dropped_total` | counter | kind |
 | `restitch_registry_polls_total` | counter | result |
 | `restitch_registry_poll_duration_seconds` | histogram | — |
 | `restitch_registry_last_success_timestamp` | gauge | — |

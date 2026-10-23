@@ -42,7 +42,7 @@ type Server struct {
 	// (managed mode). It is false by default, so standalone mode is ready
 	// once the listener is bound.
 	unconfigured atomic.Bool
-	startTime   time.Time
+	startTime    time.Time
 }
 
 // New creates a new Server with the given configuration.

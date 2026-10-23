@@ -38,6 +38,7 @@ type accBucket struct {
 type accStep struct {
 	latencies []float64
 	errors    int64
+	cacheHits int64
 	upstream  string
 }
 
@@ -85,6 +86,9 @@ func recordBucket(b *accBucket, durationMS float64, isError, isPartial bool, ste
 		if s.IsError {
 			as.errors++
 		}
+		if s.Cached {
+			as.cacheHits++
+		}
 	}
 }
 
@@ -126,9 +130,10 @@ func toBucket(ts time.Time, composition string, ab *accBucket) Bucket {
 		b.StepMetrics = make(map[string]*StepBucket, len(ab.steps))
 		for name, as := range ab.steps {
 			sb := &StepBucket{
-				Requests: int64(len(as.latencies)),
-				Errors:   as.errors,
-				Upstream: as.upstream,
+				Requests:  int64(len(as.latencies)),
+				Errors:    as.errors,
+				CacheHits: as.cacheHits,
+				Upstream:  as.upstream,
 			}
 			if len(as.latencies) > 0 {
 				var sum float64

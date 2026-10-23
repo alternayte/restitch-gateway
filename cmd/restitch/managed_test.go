@@ -189,4 +189,17 @@ func TestManagedGatewaySurvivesStudioOutage(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+
+	// Shutdown pushes the last minute of usage before the process exits.
+	_ = cmd.Process.Signal(syscall.SIGTERM)
+	_ = cmd.Wait()
+	usage := sc.call(http.MethodGet, "/api/v1/environments/prod/usage?composition=user", nil)
+	buckets, _ := usage["buckets"].([]any)
+	var requests float64
+	for _, b := range buckets {
+		requests += b.(map[string]any)["requests"].(float64)
+	}
+	if requests != 1 {
+		t.Fatalf("usage after shutdown = %v, want 1 request for composition user", usage)
+	}
 }

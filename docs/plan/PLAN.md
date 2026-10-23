@@ -20,7 +20,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C09 — A gateway token pulls its environment's artifact version with an ETag
 - [x] C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
 - [x] C11 — Studio lists each gateway instance with its applied artifact version
-- [ ] C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
+- [x] C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
 - [ ] C13 — Gateways push sampled requests with redacted headers and no bodies
 - [ ] C14 — `restitch publish` and YAML import and export use the publish path
 - [ ] C15 — `restitch dev` runs both roles in one process on SQLite
@@ -197,7 +197,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C11
 - **Files:** `internal/admin/accumulator.go`, `internal/hotreload/telemetry.go`, `internal/studio/usage.go`, `internal/studio/usage_test.go`
 - **Goal:** Gateways push per-minute counts, errors, latency histograms, cache hits, breaker state and upstream health per composition, step and upstream; Studio sums replicas and deletes data past the environment's retention.
@@ -205,6 +205,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and the retention default is 7 days.
 - **Spec:** Decision on usage push.
 - **Notes:** A failed push retries the next interval and then drops with a counter metric; it never blocks requests.
+  Done: managed gateways record into `admin.Accumulator` (now with step cache hits) and `hotreload.UsagePusher` posts each minute to POST /gateway/v1/usage with breaker states; a failed window rides along once, then counts in `restitch_telemetry_dropped_total{kind="usage"}` (it replaced the old request-records metric). Shutdown's final step pushes the last minute. Studio stores rows per instance/minute/composition in `studio_usage`, deletes rows older than `studio_environments.usage_retention_days` (default 7) on each push, and GET /api/v1/environments/{env}/usage sums instances per minute with a histogram p95, per-step totals, and per-upstream requests, errors and live breaker states. Upstream health is the per-upstream error count; there is no active health probe in v2.
 
 ---
 

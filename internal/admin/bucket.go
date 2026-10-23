@@ -32,11 +32,12 @@ type Bucket struct {
 }
 
 type StepBucket struct {
-	Requests int64   `json:"requests"`
-	Errors   int64   `json:"errors"`
-	AvgMS    float64 `json:"avg_ms"`
-	P95MS    float64 `json:"p95_ms"`
-	Upstream string  `json:"upstream"`
+	Requests  int64   `json:"requests"`
+	Errors    int64   `json:"errors"`
+	CacheHits int64   `json:"cache_hits"`
+	AvgMS     float64 `json:"avg_ms"`
+	P95MS     float64 `json:"p95_ms"`
+	Upstream  string  `json:"upstream"`
 }
 
 type StepSample struct {
@@ -44,4 +45,5 @@ type StepSample struct {
 	Upstream   string
 	DurationMS float64
 	IsError    bool
+	Cached     bool
 }

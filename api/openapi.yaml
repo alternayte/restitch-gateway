@@ -621,6 +621,120 @@ components:
       required:
         - success
       type: object
+    UsageBody:
+      additionalProperties: false
+      properties:
+        buckets:
+          items:
+            $ref: "#/components/schemas/UsageBucket"
+          type:
+            - array
+            - "null"
+        latency_bounds_ms:
+          items:
+            format: double
+            type: number
+          type:
+            - array
+            - "null"
+        upstreams:
+          items:
+            $ref: "#/components/schemas/UsageUpstream"
+          type:
+            - array
+            - "null"
+      required:
+        - latency_bounds_ms
+        - buckets
+        - upstreams
+      type: object
+    UsageBucket:
+      additionalProperties: false
+      properties:
+        errors:
+          format: int64
+          type: integer
+        latency_buckets:
+          description: Request counts per latency bound in latency_bounds_ms, plus one overflow bucket.
+          items:
+            format: int64
+            type: integer
+          type:
+            - array
+            - "null"
+        p95_ms:
+          description: Upper bound of the latency bucket that holds the 95th percentile.
+          format: double
+          type: number
+        partials:
+          format: int64
+          type: integer
+        requests:
+          format: int64
+          type: integer
+        steps:
+          additionalProperties:
+            $ref: "#/components/schemas/UsageStep"
+          type: object
+        timestamp:
+          format: date-time
+          type: string
+      required:
+        - timestamp
+        - requests
+        - errors
+        - partials
+        - latency_buckets
+        - p95_ms
+        - steps
+      type: object
+    UsageStep:
+      additionalProperties: false
+      properties:
+        avg_ms:
+          description: Mean across instances, weighted by requests.
+          format: double
+          type: number
+        cache_hits:
+          format: int64
+          type: integer
+        errors:
+          format: int64
+          type: integer
+        requests:
+          format: int64
+          type: integer
+        upstream:
+          type: string
+      required:
+        - upstream
+        - requests
+        - errors
+        - cache_hits
+        - avg_ms
+      type: object
+    UsageUpstream:
+      additionalProperties: false
+      properties:
+        breakers:
+          additionalProperties:
+            type: string
+          description: Breaker state per gateway instance.
+          type: object
+        errors:
+          format: int64
+          type: integer
+        name:
+          type: string
+        requests:
+          format: int64
+          type: integer
+      required:
+        - name
+        - requests
+        - errors
+        - breakers
+      type: object
     User:
       properties:
         createdAt:
@@ -1987,6 +2101,54 @@ paths:
       summary: Create or update one resource
       tags:
         - draft
+  /api/v1/environments/{env}/usage:
+    get:
+      operationId: getUsage
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - description: Empty selects the gateway-wide total.
+          explode: false
+          in: query
+          name: composition
+          schema:
+            description: Empty selects the gateway-wide total.
+            type: string
+        - description: "Default: one hour ago."
+          explode: false
+          in: query
+          name: from
+          schema:
+            description: "Default: one hour ago."
+            format: date-time
+            type: string
+        - description: "Default: now."
+          explode: false
+          in: query
+          name: to
+          schema:
+            description: "Default: now."
+            format: date-time
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Usage per minute, summed across the environment's gateway instances
+      tags:
+        - usage
   /api/v1/environments/{env}/versions:
     get:
       operationId: listVersions

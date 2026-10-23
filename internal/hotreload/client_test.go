@@ -21,9 +21,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/alternayte/restitch-gateway/v2/internal/admin"
 	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 )
 
@@ -127,5 +132,49 @@ func TestRunHeartbeatReportsStatus(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("no heartbeat after the trigger")
+	}
+}
+
+func TestUsagePusherRetriesOnceThenDrops(t *testing.T) {
+	var fail atomic.Bool
+	got := make(chan UsagePush, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if fail.Load() {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		var p UsagePush
+		_ = json.NewDecoder(r.Body).Decode(&p)
+		got <- p
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	dropped := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "d"}, []string{"kind"})
+	acc := admin.NewAccumulator()
+	p := &UsagePusher{Client: NewClient(srv.URL, "rgt_x"), InstanceID: "gw-a", Acc: acc, Dropped: dropped,
+		Breakers: func() map[string]string { return map[string]string{"users": "closed"} }}
+
+	fail.Store(true)
+	acc.Record("orders", 5, false, false, nil)
+	p.Push(context.Background()) // fails, kept
+	acc.Record("orders", 5, false, false, nil)
+	p.Push(context.Background()) // fails again: the first window drops
+	if v := testutil.ToFloat64(dropped.WithLabelValues("usage")); v == 0 {
+		t.Fatal("the second failure must count the dropped buckets")
+	}
+
+	fail.Store(false)
+	acc.Record("orders", 5, false, false, nil)
+	p.Push(context.Background())
+	push := <-got
+	var requests int64
+	for _, b := range push.Buckets {
+		if b.Composition == "orders" {
+			requests += b.Requests
+		}
+	}
+	if requests != 2 || push.Breakers["users"] != "closed" || push.InstanceID != "gw-a" {
+		t.Fatalf("push = %+v (orders requests %d, want 2: the kept window plus the new one)", push, requests)
 	}
 }
