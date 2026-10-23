@@ -21,17 +21,18 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/auth"
-	"github.com/alternayte/restitch-gateway/internal/inbound"
-	"github.com/alternayte/restitch-gateway/internal/observability"
-	"github.com/alternayte/restitch-gateway/internal/ratelimit"
-	"github.com/alternayte/restitch-gateway/internal/reqlog"
-	"github.com/alternayte/restitch-gateway/internal/server"
+	"github.com/alternayte/restitch-gateway/v2/internal/auth"
+	"github.com/alternayte/restitch-gateway/v2/internal/inbound"
+	"github.com/alternayte/restitch-gateway/v2/internal/observability"
+	"github.com/alternayte/restitch-gateway/v2/internal/ratelimit"
+	"github.com/alternayte/restitch-gateway/v2/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/v2/internal/server"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -90,8 +91,17 @@ func (h *Handler) RegisterRoutes(router *server.Router) {
 			h.serveComposition(w, r, name, params)
 		})
 
-		if !comp.Public && h.authenticator != nil {
-			handler = h.authenticator.Middleware(handler)
+		if !comp.Public {
+			if h.authenticator != nil {
+				handler = h.authenticator.Middleware(handler)
+			} else {
+				// Validation refuses a non-public route without an auth
+				// policy, so this only runs when auth init was skipped.
+				// Fail closed: never serve the route unauthenticated.
+				handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					h.writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "authentication is not available"})
+				})
+			}
 		}
 
 		if comp.RateLimit != nil {
@@ -137,7 +147,11 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 		maxBytes = comp.MaxRequestBytes
 	}
 
-	// Read and parse request body once
+	compiledComp := h.config.Compositions[compositionName]
+	hasSchema := compiledComp.RequestSchema != nil
+
+	// Read and parse request body once. body stays nil when the body is
+	// absent, empty, or a literal null; all three validate as JSON null.
 	var body any
 	if r.Body != nil && r.ContentLength != 0 {
 		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
@@ -148,20 +162,30 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 				h.writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
 				return
 			}
-			// other read error; continue with nil body
-		} else if len(raw) > 0 && strings.Contains(r.Header.Get("Content-Type"), "json") {
-			if err := json.Unmarshal(raw, &body); err != nil {
-				// Malformed JSON must not slip past schema validation with a
-				// nil body and execute with empty input (finding H11).
-				h.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			h.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if len(raw) > 0 {
+			switch {
+			case isJSONMediaType(r.Header.Get("Content-Type")):
+				if err := json.Unmarshal(raw, &body); err != nil {
+					// Malformed JSON must not slip past schema validation with a
+					// nil body and execute with empty input (finding H11).
+					h.writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+					return
+				}
+			case hasSchema:
+				// A schema-validated route only accepts JSON; any other (or a
+				// missing) Content-Type would otherwise skip validation.
+				h.writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "unsupported media type"})
 				return
 			}
 		}
 	}
 
-	// Validate request body against JSON schema if configured.
-	compiledComp := h.config.Compositions[compositionName]
-	if compiledComp.RequestSchema != nil && body != nil {
+	// Validate request body against JSON schema if configured. An absent body
+	// is validated as JSON null so `type: object` schemas reject it.
+	if hasSchema {
 		if err := compiledComp.RequestSchema.Validate(body); err != nil {
 			details := extractValidationErrors(err)
 			h.writeJSON(w, http.StatusBadRequest, map[string]any{
@@ -303,7 +327,7 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 				DurationMS:    t.DurationMS,
 				HTTPStatus:    httpStatus,
 				Upstream:      t.Upstream,
-				URL:           t.URL,
+				URL:           reqlog.RedactURL(t.URL),
 				StartOffsetMS: t.StartOffsetMS,
 				BodySize:      t.BodySize,
 				Error:         t.Error,
@@ -320,6 +344,7 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 			Status:      response.Status,
 			DurationMS:  durationMS,
 			Partial:     result.IsPartial,
+			Headers:     reqlog.RedactHeaders(r.Header),
 			Steps:       steps,
 		}
 		if sc := trace.SpanFromContext(ctx).SpanContext(); sc.HasTraceID() {
@@ -379,4 +404,14 @@ func extractValidationErrors(err error) []string {
 		}
 	}
 	return []string{err.Error()}
+}
+
+// isJSONMediaType reports whether a Content-Type header names JSON:
+// application/json or any structured-syntax +json suffix type.
+func isJSONMediaType(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
 }

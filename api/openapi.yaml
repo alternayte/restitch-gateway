@@ -1,0 +1,2739 @@
+components:
+  schemas:
+    APIKey:
+      properties:
+        createdAt:
+          format: date-time
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        id:
+          type: string
+        lastUsedAt:
+          format: date-time
+          type: string
+        name:
+          type: string
+        orgId:
+          type: string
+        revokedAt:
+          format: date-time
+          type: string
+        role:
+          type: string
+        start:
+          type: string
+        userId:
+          type: string
+      required:
+        - id
+        - name
+        - start
+        - role
+        - createdAt
+      type: object
+    APIKeyCreateResponse:
+      properties:
+        key:
+          $ref: "#/components/schemas/APIKey"
+        plaintext:
+          type: string
+      required:
+        - key
+        - plaintext
+      type: object
+    APIKeyListResponse:
+      properties:
+        keys:
+          items:
+            $ref: "#/components/schemas/APIKey"
+          type: array
+      required:
+        - keys
+      type: object
+    AdminCreateUserResponse:
+      properties:
+        temporaryPassword:
+          type: string
+        user:
+          $ref: "#/components/schemas/AdminUser"
+      required:
+        - user
+      type: object
+    AdminPasswordResponse:
+      properties:
+        temporaryPassword:
+          type: string
+      type: object
+    AdminUser:
+      properties:
+        createdAt:
+          format: date-time
+          type: string
+        disabledAt:
+          format: date-time
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        id:
+          type: string
+        mustChangePassword:
+          type: boolean
+        name:
+          type: string
+        role:
+          type: string
+        updatedAt:
+          format: date-time
+          type: string
+      required:
+        - id
+        - email
+        - emailVerified
+        - name
+        - role
+        - mustChangePassword
+        - createdAt
+        - updatedAt
+      type: object
+    AdminUserListResponse:
+      properties:
+        nextCursor:
+          type: string
+        users:
+          items:
+            $ref: "#/components/schemas/AdminUser"
+          type: array
+      required:
+        - users
+        - nextCursor
+      type: object
+    AdminUserResponse:
+      properties:
+        user:
+          $ref: "#/components/schemas/AdminUser"
+      required:
+        - user
+      type: object
+    ArtifactVersion:
+      additionalProperties: false
+      properties:
+        author:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        message:
+          type: string
+        number:
+          format: int64
+          type: integer
+        yaml:
+          type: string
+      required:
+        - number
+        - author
+        - message
+        - created_at
+      type: object
+    AuthResponse:
+      properties:
+        emailVerificationRequired:
+          type: boolean
+        mfaRequired:
+          type: boolean
+        mfaToken:
+          type: string
+        session:
+          $ref: "#/components/schemas/Session"
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - user
+        - session
+      type: object
+    CreateEnvironmentRequest:
+      additionalProperties: false
+      properties:
+        name:
+          pattern: ^[a-z][a-z0-9-]{0,62}$
+          type: string
+      required:
+        - name
+      type: object
+    DeleteResponse:
+      properties:
+        confirmationRequired:
+          type: boolean
+        success:
+          type: boolean
+      required:
+        - success
+      type: object
+    Environment:
+      additionalProperties: false
+      properties:
+        created_at:
+          format: date-time
+          type: string
+        created_by:
+          type: string
+        name:
+          type: string
+      required:
+        - name
+        - created_at
+        - created_by
+      type: object
+    EnvironmentSettings:
+      additionalProperties: false
+      properties:
+        request_samples_per_minute:
+          description: Successful requests kept per minute; failed ones are always kept.
+          format: int64
+          maximum: 1000
+          minimum: 0
+          type: integer
+        usage_retention_days:
+          format: int64
+          maximum: 365
+          minimum: 1
+          type: integer
+      required:
+        - usage_retention_days
+        - request_samples_per_minute
+      type: object
+    ErrorDetail:
+      additionalProperties: false
+      properties:
+        location:
+          description: Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id'
+          type: string
+        message:
+          description: Error message text
+          type: string
+        value:
+          description: The value at the given location
+      type: object
+    ErrorModel:
+      additionalProperties: false
+      properties:
+        detail:
+          description: A human-readable explanation specific to this occurrence of the problem.
+          examples:
+            - Property foo is required but is missing.
+          type: string
+        errors:
+          description: Optional list of individual error details
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+          type:
+            - array
+            - "null"
+        instance:
+          description: A URI reference that identifies the specific occurrence of the problem.
+          examples:
+            - https://example.com/error-log/abc123
+          format: uri
+          type: string
+        status:
+          description: HTTP status code
+          examples:
+            - 400
+          format: int64
+          type: integer
+        title:
+          description: A short, human-readable summary of the problem type. This value should not change between occurrences of the error.
+          examples:
+            - Bad Request
+          type: string
+        type:
+          default: about:blank
+          description: A URI reference to human-readable documentation for the error.
+          examples:
+            - https://example.com/errors/example
+          format: uri
+          type: string
+      type: object
+    ErrorResponse:
+      properties:
+        error:
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+          required:
+            - code
+            - message
+          type: object
+      required:
+        - error
+      type: object
+    ExportDraftResponse:
+      additionalProperties: false
+      properties:
+        yaml:
+          type: string
+      required:
+        - yaml
+      type: object
+    GatewayToken:
+      additionalProperties: false
+      properties:
+        created_at:
+          format: date-time
+          type: string
+        created_by:
+          type: string
+        id:
+          type: string
+        last_used_at:
+          format: date-time
+          type: string
+        name:
+          type: string
+        prefix:
+          description: The first characters of the token, to tell tokens apart.
+          type: string
+        revoked_at:
+          format: date-time
+          type: string
+      required:
+        - id
+        - name
+        - prefix
+        - created_at
+        - created_by
+      type: object
+    GetArtifactSchemaResponse:
+      additionalProperties: false
+      properties:
+        artifact: {}
+        definitions:
+          additionalProperties:
+            type: string
+          type: object
+        settings:
+          additionalProperties: {}
+          type: object
+      required:
+        - artifact
+        - definitions
+        - settings
+      type: object
+    ImportDraftRequest:
+      additionalProperties: false
+      properties:
+        yaml:
+          maxLength: 10485760
+          type: string
+      required:
+        - yaml
+      type: object
+    ImportDraftResponse:
+      additionalProperties: false
+      properties:
+        diff:
+          type: string
+      required:
+        - diff
+      type: object
+    Instance:
+      additionalProperties: false
+      properties:
+        applied_version:
+          format: int64
+          type: integer
+        binary_version:
+          type: string
+        first_seen_at:
+          format: date-time
+          type: string
+        instance_id:
+          type: string
+        last_pull_error:
+          type: string
+        last_seen_at:
+          format: date-time
+          type: string
+        stale:
+          description: No heartbeat for a minute or more.
+          type: boolean
+      required:
+        - first_seen_at
+        - last_seen_at
+        - stale
+        - instance_id
+        - binary_version
+        - applied_version
+      type: object
+    IssueGatewayTokenRequest:
+      additionalProperties: false
+      properties:
+        name:
+          maxLength: 100
+          minLength: 1
+          type: string
+      required:
+        - name
+      type: object
+    IssueGatewayTokenResponse:
+      additionalProperties: false
+      properties:
+        created_at:
+          format: date-time
+          type: string
+        created_by:
+          type: string
+        id:
+          type: string
+        last_used_at:
+          format: date-time
+          type: string
+        name:
+          type: string
+        prefix:
+          description: The first characters of the token, to tell tokens apart.
+          type: string
+        revoked_at:
+          format: date-time
+          type: string
+        token:
+          description: The token. Studio keeps only its digest, so this is the only time it is shown.
+          type: string
+      required:
+        - token
+        - id
+        - name
+        - prefix
+        - created_at
+        - created_by
+      type: object
+    LintTemplateRequest:
+      additionalProperties: false
+      properties:
+        steps:
+          items:
+            type: string
+          maxItems: 500
+          type:
+            - array
+            - "null"
+        template:
+          maxLength: 65536
+          type: string
+      required:
+        - template
+      type: object
+    LintTemplateResponse:
+      additionalProperties: false
+      properties:
+        errors:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - errors
+      type: object
+    ListEnvironmentsResponse:
+      additionalProperties: false
+      properties:
+        environments:
+          items:
+            $ref: "#/components/schemas/Environment"
+          type:
+            - array
+            - "null"
+      required:
+        - environments
+      type: object
+    ListGatewayTokensResponse:
+      additionalProperties: false
+      properties:
+        tokens:
+          items:
+            $ref: "#/components/schemas/GatewayToken"
+          type:
+            - array
+            - "null"
+      required:
+        - tokens
+      type: object
+    ListInstancesResponse:
+      additionalProperties: false
+      properties:
+        current_version:
+          format: int64
+          type: integer
+        instances:
+          items:
+            $ref: "#/components/schemas/Instance"
+          type:
+            - array
+            - "null"
+      required:
+        - current_version
+        - instances
+      type: object
+    ListRequestsResponse:
+      additionalProperties: false
+      properties:
+        requests:
+          items:
+            $ref: "#/components/schemas/SampledRequest"
+          type:
+            - array
+            - "null"
+      required:
+        - requests
+      type: object
+    ListResourcesResponse:
+      additionalProperties: false
+      properties:
+        resources:
+          items:
+            $ref: "#/components/schemas/Resource"
+          type:
+            - array
+            - "null"
+      required:
+        - resources
+      type: object
+    ListVersionsResponse:
+      additionalProperties: false
+      properties:
+        versions:
+          items:
+            $ref: "#/components/schemas/ArtifactVersion"
+          type:
+            - array
+            - "null"
+      required:
+        - versions
+      type: object
+    MeOutputBody:
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        role:
+          enum:
+            - viewer
+            - editor
+            - owner
+          type: string
+      required:
+        - id
+        - email
+        - role
+      type: object
+    MessageResponse:
+      properties:
+        message:
+          type: string
+      required:
+        - message
+      type: object
+    PreferencesBody:
+      additionalProperties: false
+      properties:
+        default_range:
+          maxLength: 16
+          type: string
+        last_environment:
+          maxLength: 128
+          type: string
+        pinned_names:
+          items:
+            type: string
+          maxItems: 100
+          type:
+            - array
+            - "null"
+        sidebar_closed:
+          type: boolean
+        theme:
+          enum:
+            - light
+            - dark
+            - system
+          type: string
+      type: object
+    PreviewBody:
+      additionalProperties: false
+      properties:
+        current_version:
+          description: 0 when the environment has no version yet.
+          format: int64
+          type: integer
+        diff:
+          description: Unified diff from the current version to the draft. Empty when they match.
+          type: string
+        errors:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        valid:
+          type: boolean
+        yaml:
+          type: string
+      required:
+        - valid
+        - errors
+        - yaml
+        - diff
+        - current_version
+      type: object
+    PromoteRequest:
+      additionalProperties: false
+      properties:
+        from_environment:
+          type: string
+        version:
+          format: int64
+          minimum: 1
+          type: integer
+      required:
+        - from_environment
+        - version
+      type: object
+    PromoteResponse:
+      additionalProperties: false
+      properties:
+        diff:
+          type: string
+      required:
+        - diff
+      type: object
+    PublishRequest:
+      additionalProperties: false
+      properties:
+        message:
+          maxLength: 1000
+          minLength: 1
+          type: string
+      required:
+        - message
+      type: object
+    Resource:
+      additionalProperties: false
+      properties:
+        body:
+          additionalProperties: {}
+          type: object
+        kind:
+          enum:
+            - upstream
+            - composition
+            - auth
+            - rate_limit
+            - settings
+          type: string
+        name:
+          type: string
+        revision:
+          description: Increases by one on every save.
+          format: int64
+          type: integer
+        updated_at:
+          format: date-time
+          type: string
+        updated_by:
+          type: string
+      required:
+        - kind
+        - name
+        - revision
+        - body
+        - updated_at
+        - updated_by
+      type: object
+    RevokeAllResponse:
+      properties:
+        revoked:
+          type: integer
+      required:
+        - revoked
+      type: object
+    SampledRequest:
+      additionalProperties: false
+      properties:
+        composition:
+          type: string
+        duration_ms:
+          format: double
+          type: number
+        headers:
+          additionalProperties:
+            type: string
+          type: object
+        id:
+          type: string
+        instance_id:
+          type: string
+        method:
+          type: string
+        partial:
+          type: boolean
+        path:
+          type: string
+        status:
+          format: int64
+          type: integer
+        steps:
+          items:
+            $ref: "#/components/schemas/StepRecord"
+          type:
+            - array
+            - "null"
+        time:
+          format: date-time
+          type: string
+        trace_id:
+          type: string
+      required:
+        - instance_id
+        - id
+        - time
+        - composition
+        - method
+        - path
+        - status
+        - duration_ms
+        - partial
+        - steps
+      type: object
+    SaveResourceRequest:
+      additionalProperties: false
+      properties:
+        base_revision:
+          format: int64
+          minimum: 0
+          type: integer
+        body:
+          additionalProperties: {}
+          type: object
+      required:
+        - base_revision
+        - body
+      type: object
+    Session:
+      properties:
+        createdAt:
+          format: date-time
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        id:
+          type: string
+        userId:
+          type: string
+      required:
+        - id
+        - userId
+        - createdAt
+        - expiresAt
+      type: object
+    SessionEntry:
+      properties:
+        createdAt:
+          format: date-time
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        id:
+          type: string
+        lastSeenAt:
+          format: date-time
+          type: string
+      required:
+        - id
+        - createdAt
+        - expiresAt
+        - lastSeenAt
+      type: object
+    SessionListResponse:
+      properties:
+        sessions:
+          items:
+            $ref: "#/components/schemas/SessionEntry"
+          type: array
+      required:
+        - sessions
+      type: object
+    SessionResponse:
+      properties:
+        session:
+          $ref: "#/components/schemas/Session"
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - user
+        - session
+      type: object
+    StepRecord:
+      additionalProperties: false
+      properties:
+        body_size:
+          format: int64
+          type: integer
+        cached:
+          type: boolean
+        duration_ms:
+          format: double
+          type: number
+        error:
+          type: string
+        http_status:
+          format: int64
+          type: integer
+        name:
+          type: string
+        retries:
+          format: int64
+          type: integer
+        start_offset_ms:
+          format: double
+          type: number
+        status:
+          type: string
+        upstream:
+          type: string
+        url:
+          type: string
+        wave:
+          format: int64
+          type: integer
+      required:
+        - name
+        - status
+        - wave
+        - duration_ms
+        - http_status
+        - upstream
+        - url
+        - start_offset_ms
+        - body_size
+        - cached
+        - retries
+      type: object
+    SuccessResponse:
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
+      type: object
+    UpdateEnvironmentSettingsRequest:
+      additionalProperties: false
+      properties:
+        request_samples_per_minute:
+          format: int64
+          maximum: 1000
+          minimum: 0
+          type: integer
+        usage_retention_days:
+          format: int64
+          maximum: 365
+          minimum: 1
+          type: integer
+      type: object
+    UsageBody:
+      additionalProperties: false
+      properties:
+        buckets:
+          items:
+            $ref: "#/components/schemas/UsageBucket"
+          type:
+            - array
+            - "null"
+        latency_bounds_ms:
+          items:
+            format: double
+            type: number
+          type:
+            - array
+            - "null"
+        upstreams:
+          items:
+            $ref: "#/components/schemas/UsageUpstream"
+          type:
+            - array
+            - "null"
+      required:
+        - latency_bounds_ms
+        - buckets
+        - upstreams
+      type: object
+    UsageBucket:
+      additionalProperties: false
+      properties:
+        errors:
+          format: int64
+          type: integer
+        latency_buckets:
+          description: Request counts per latency bound in latency_bounds_ms, plus one overflow bucket.
+          items:
+            format: int64
+            type: integer
+          type:
+            - array
+            - "null"
+        p95_ms:
+          description: Upper bound of the latency bucket that holds the 95th percentile.
+          format: double
+          type: number
+        partials:
+          format: int64
+          type: integer
+        requests:
+          format: int64
+          type: integer
+        steps:
+          additionalProperties:
+            $ref: "#/components/schemas/UsageStep"
+          type: object
+        timestamp:
+          format: date-time
+          type: string
+      required:
+        - timestamp
+        - requests
+        - errors
+        - partials
+        - latency_buckets
+        - p95_ms
+        - steps
+      type: object
+    UsageStep:
+      additionalProperties: false
+      properties:
+        avg_ms:
+          description: Mean across instances, weighted by requests.
+          format: double
+          type: number
+        cache_hits:
+          format: int64
+          type: integer
+        errors:
+          format: int64
+          type: integer
+        requests:
+          format: int64
+          type: integer
+        upstream:
+          type: string
+      required:
+        - upstream
+        - requests
+        - errors
+        - cache_hits
+        - avg_ms
+      type: object
+    UsageUpstream:
+      additionalProperties: false
+      properties:
+        breakers:
+          additionalProperties:
+            type: string
+          description: Breaker state per gateway instance.
+          type: object
+        errors:
+          format: int64
+          type: integer
+        name:
+          type: string
+        requests:
+          format: int64
+          type: integer
+      required:
+        - name
+        - requests
+        - errors
+        - breakers
+      type: object
+    User:
+      properties:
+        createdAt:
+          format: date-time
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        id:
+          type: string
+        image:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        updatedAt:
+          format: date-time
+          type: string
+      required:
+        - id
+        - email
+        - emailVerified
+        - name
+        - image
+        - createdAt
+        - updatedAt
+      type: object
+info:
+  title: Restitch Studio
+  version: dev
+openapi: 3.1.0
+paths:
+  /api/auth/admin/users:
+    get:
+      operationId: adminListUsers
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserListResponse"
+          description: The operation succeeded
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: List the users
+      tags:
+        - admin
+    post:
+      operationId: adminCreateUser
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                email:
+                  type: string
+                name:
+                  type: string
+                password:
+                  type: string
+                role:
+                  type: string
+                temporaryPassword:
+                  type: boolean
+              required:
+                - email
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCreateUserResponse"
+          description: The operation succeeded
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Create a user
+      tags:
+        - admin
+  /api/auth/admin/users/{id}/disable:
+    post:
+      operationId: adminDisableUser
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserResponse"
+          description: The operation succeeded
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Disable a user
+      tags:
+        - admin
+  /api/auth/admin/users/{id}/enable:
+    post:
+      operationId: adminEnableUser
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserResponse"
+          description: The operation succeeded
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Enable a user
+      tags:
+        - admin
+  /api/auth/admin/users/{id}/password:
+    post:
+      operationId: adminResetUserPassword
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                password:
+                  type: string
+                temporary:
+                  type: boolean
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPasswordResponse"
+          description: The operation succeeded
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Set a new password for a user
+      tags:
+        - admin
+  /api/auth/admin/users/{id}/role:
+    post:
+      operationId: adminSetUserRole
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                role:
+                  type: string
+              required:
+                - role
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserResponse"
+          description: The operation succeeded
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Set the role of a user
+      tags:
+        - admin
+  /api/auth/api-keys:
+    get:
+      operationId: listAPIKeys
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKeyListResponse"
+          description: The operation succeeded
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: List the API keys
+      tags:
+        - api-keys
+    post:
+      operationId: createAPIKey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                expiresAt:
+                  format: date-time
+                  type: string
+                name:
+                  type: string
+                orgId:
+                  type: string
+                role:
+                  type: string
+              required:
+                - name
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKeyCreateResponse"
+          description: The operation succeeded
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Create an API key
+      tags:
+        - api-keys
+  /api/auth/api-keys/{id}/revoke:
+    post:
+      operationId: revokeAPIKey
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+          description: The operation succeeded
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Revoke an API key
+      tags:
+        - api-keys
+  /api/auth/email-verification/send:
+    post:
+      operationId: emailVerificationSend
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                email:
+                  type: string
+                redirectTo:
+                  type: string
+              required:
+                - email
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+          description: An enumeration-safe acknowledgement
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Request an email verification message
+      tags:
+        - email-password
+  /api/auth/email-verification/verify:
+    post:
+      operationId: emailVerificationVerify
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                token:
+                  type: string
+              required:
+                - token
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+          description: The address is verified
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Verify an email address with a token
+      tags:
+        - email-password
+  /api/auth/email/change:
+    post:
+      operationId: emailChange
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                currentPassword:
+                  type: string
+                newEmail:
+                  type: string
+              required:
+                - newEmail
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+          description: An enumeration-safe acknowledgement
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Request a change of the email address
+      tags:
+        - email-password
+  /api/auth/email/change/verify:
+    post:
+      operationId: emailChangeVerify
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                token:
+                  type: string
+              required:
+                - token
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+          description: The address is changed
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Complete a change of the email address
+      tags:
+        - email-password
+  /api/auth/password/change:
+    post:
+      operationId: passwordChange
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+                revokeOtherSessions:
+                  type: boolean
+              required:
+                - currentPassword
+                - newPassword
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+          description: The password is changed
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Change the password of the current user
+      tags:
+        - email-password
+  /api/auth/password/forgot:
+    post:
+      operationId: passwordForgot
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                email:
+                  type: string
+                redirectTo:
+                  type: string
+              required:
+                - email
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+          description: An enumeration-safe acknowledgement
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Request a password reset message
+      tags:
+        - email-password
+  /api/auth/password/reset:
+    post:
+      operationId: passwordReset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                password:
+                  type: string
+                token:
+                  type: string
+              required:
+                - token
+                - password
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+          description: The password is changed
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Set a new password with a reset token
+      tags:
+        - email-password
+  /api/auth/session:
+    get:
+      operationId: getSession
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+          description: The current session
+      summary: Return the current session and user
+      tags:
+        - session
+  /api/auth/sessions:
+    get:
+      operationId: listSessions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionListResponse"
+          description: The sessions of the current user
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: List the sessions of the current user
+      tags:
+        - session
+  /api/auth/sessions/revoke-all:
+    post:
+      operationId: revokeAllSessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                includeCurrent:
+                  type: boolean
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevokeAllResponse"
+          description: The number of revoked sessions
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Revoke the other sessions of the current user
+      tags:
+        - session
+  /api/auth/sessions/{id}:
+    delete:
+      description: A session of another user answers with 404, so the endpoint discloses nothing about the existence of that session.
+      operationId: revokeSession
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+          description: The session is revoked
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Revoke one session of the current user
+      tags:
+        - session
+  /api/auth/sign-in/email:
+    post:
+      operationId: signInEmail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+              required:
+                - email
+                - password
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+          description: The session is created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Sign in with an email address and a password
+      tags:
+        - email-password
+  /api/auth/sign-out:
+    post:
+      operationId: signOut
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+          description: The session is revoked
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Revoke the current session
+      tags:
+        - session
+  /api/auth/user/delete:
+    post:
+      operationId: userDelete
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                currentPassword:
+                  type: string
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+          description: The account is deleted, or a confirmation is sent
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Delete the account of the current user
+      tags:
+        - user
+  /api/auth/user/delete/verify:
+    post:
+      operationId: userDeleteVerify
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                token:
+                  type: string
+              required:
+                - token
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+          description: The account is deleted
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Auth-All error
+      summary: Complete an account delete with a token
+      tags:
+        - user
+  /api/v1/environments:
+    get:
+      operationId: listEnvironments
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvironmentsResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List environments
+      tags:
+        - draft
+    post:
+      operationId: createEnvironment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEnvironmentRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Environment"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create an environment with an empty draft
+      tags:
+        - draft
+  /api/v1/environments/{env}:
+    get:
+      operationId: getEnvironmentSettings
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvironmentSettings"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: An environment's telemetry settings
+      tags:
+        - draft
+    patch:
+      operationId: updateEnvironmentSettings
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEnvironmentSettingsRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvironmentSettings"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Change an environment's telemetry settings
+      tags:
+        - draft
+  /api/v1/environments/{env}/export:
+    get:
+      description: The same format that standalone mode reads and that import accepts. A version's YAML is on getVersion.
+      operationId: exportDraft
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportDraftResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: The draft as artifact YAML
+      tags:
+        - draft
+  /api/v1/environments/{env}/gateway-tokens:
+    get:
+      operationId: listGatewayTokens
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListGatewayTokensResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List an environment's gateway tokens
+      tags:
+        - gateway-tokens
+    post:
+      description: The response holds the token. Studio stores only its digest, so this is the only time it is shown.
+      operationId: issueGatewayToken
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueGatewayTokenRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueGatewayTokenResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Issue a gateway token for one environment
+      tags:
+        - gateway-tokens
+  /api/v1/environments/{env}/gateway-tokens/{id}:
+    delete:
+      operationId: revokeGatewayToken
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Revoke a gateway token
+      tags:
+        - gateway-tokens
+  /api/v1/environments/{env}/import:
+    post:
+      description: The file must pass the same validation as publish; a refused file leaves the draft unchanged. Returns the diff from the old draft.
+      operationId: importDraft
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportDraftRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportDraftResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Replace the draft with an artifact YAML file
+      tags:
+        - draft
+  /api/v1/environments/{env}/instances:
+    get:
+      operationId: listInstances
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListInstancesResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List the gateway instances of an environment and the version each applied
+      tags:
+        - instances
+  /api/v1/environments/{env}/promote:
+    post:
+      description: Replaces this environment's draft with the version's resources and returns the diff. Publish to apply it.
+      operationId: promote
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromoteRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromoteResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Copy a published version of another environment into this draft
+      tags:
+        - publish
+  /api/v1/environments/{env}/publish:
+    post:
+      description: Validates the whole draft with the gateway validator. An invalid draft gets 422 and writes nothing. A valid draft becomes the next numbered version, which gateways pull.
+      operationId: publish
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactVersion"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Publish the draft as a new artifact version
+      tags:
+        - publish
+  /api/v1/environments/{env}/publish/preview:
+    post:
+      operationId: previewPublish
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreviewBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Validate the draft and diff it against the current version
+      tags:
+        - publish
+  /api/v1/environments/{env}/requests:
+    get:
+      operationId: listRequests
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: composition
+          schema:
+            type: string
+        - description: Only failed and partial requests.
+          explode: false
+          in: query
+          name: failed
+          schema:
+            description: Only failed and partial requests.
+            type: boolean
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            format: int64
+            maximum: 500
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListRequestsResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Sampled requests, newest first
+      tags:
+        - usage
+  /api/v1/environments/{env}/resources:
+    get:
+      operationId: listResources
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListResourcesResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List the resources in an environment's draft
+      tags:
+        - draft
+  /api/v1/environments/{env}/resources/{kind}/{name}:
+    delete:
+      operationId: deleteResource
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: kind
+          required: true
+          schema:
+            enum:
+              - upstream
+              - composition
+              - auth
+              - rate_limit
+              - settings
+            type: string
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: base_revision
+          required: true
+          schema:
+            format: int64
+            minimum: 1
+            type: integer
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Delete one resource
+      tags:
+        - draft
+    get:
+      operationId: getResource
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: kind
+          required: true
+          schema:
+            enum:
+              - upstream
+              - composition
+              - auth
+              - rate_limit
+              - settings
+            type: string
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Read one resource
+      tags:
+        - draft
+    put:
+      description: base_revision 0 creates the resource. Any other value updates it, and a value that is not the current revision gets 409, so a stale copy never overwrites a newer save.
+      operationId: saveResource
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: kind
+          required: true
+          schema:
+            enum:
+              - upstream
+              - composition
+              - auth
+              - rate_limit
+              - settings
+            type: string
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveResourceRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create or update one resource
+      tags:
+        - draft
+  /api/v1/environments/{env}/usage:
+    get:
+      operationId: getUsage
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - description: Empty selects the gateway-wide total.
+          explode: false
+          in: query
+          name: composition
+          schema:
+            description: Empty selects the gateway-wide total.
+            type: string
+        - description: "Default: one hour ago."
+          explode: false
+          in: query
+          name: from
+          schema:
+            description: "Default: one hour ago."
+            format: date-time
+            type: string
+        - description: "Default: now."
+          explode: false
+          in: query
+          name: to
+          schema:
+            description: "Default: now."
+            format: date-time
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Usage per minute, summed across the environment's gateway instances
+      tags:
+        - usage
+  /api/v1/environments/{env}/versions:
+    get:
+      operationId: listVersions
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListVersionsResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List artifact versions, newest first
+      tags:
+        - publish
+  /api/v1/environments/{env}/versions/{number}:
+    get:
+      operationId: getVersion
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: number
+          required: true
+          schema:
+            format: int64
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactVersion"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Read one artifact version with its YAML
+      tags:
+        - publish
+  /api/v1/environments/{env}/versions/{number}/rollback:
+    post:
+      description: "History stays append-only: version N's YAML becomes the next version. The draft does not change."
+      operationId: rollback
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: number
+          required: true
+          schema:
+            format: int64
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactVersion"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Publish an old version again as a new version
+      tags:
+        - publish
+  /api/v1/lint:
+    post:
+      description: Compiles the template against the steps of its composition, with the same checks as gateway load.
+      operationId: lintTemplate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LintTemplateRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LintTemplateResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Check one template string the way publish does
+      tags:
+        - draft
+  /api/v1/me:
+    get:
+      operationId: getMe
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: The signed-in user and role
+      tags:
+        - me
+  /api/v1/me/preferences:
+    get:
+      operationId: getPreferences
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferencesBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: The signed-in user's UI preferences
+      tags:
+        - me
+    put:
+      operationId: putPreferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreferencesBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferencesBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Replace the signed-in user's UI preferences
+      tags:
+        - me
+  /api/v1/schema:
+    get:
+      description: Generated from the gateway's Go config types. definitions names the $defs entry of each kind's body.
+      operationId: getArtifactSchema
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetArtifactSchemaResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: The JSON Schema of the artifact and of each resource kind
+      tags:
+        - draft

@@ -1,67 +1,23 @@
+# A standalone gateway: one artifact file, no Studio. The gateway reloads the
+# file when it changes. For Studio with managed gateways, see deploy/.
 services:
   mockupstream:
     build:
       context: ../..
       dockerfile: Dockerfile
-    entrypoint: ["/mockupstream"]
+      target: mockupstream
     command: ["-port", "8081"]
-    ports:
-      - "8081:8081"
 
-  restitch:
+  gateway:
     build:
       context: ../..
       dockerfile: Dockerfile
-    command: ["run", "-config", "/etc/restitch/restitch.yaml"]
+    command: ["gateway"]
     environment:
-      # The gateway admin server defaults to loopback (hardening C3); inside
-      # a container that makes :9090 unreachable from the host and the Studio
-      # proxy. The admin key is required, so the Studio proxy gets the same
-      # value via STUDIO_ADMIN_KEY.
-      RESTITCH_ADMIN_BIND: "0.0.0.0"
-      RESTITCH_ADMIN_API_KEY: "restitch-dev"
+      RESTITCH_CONFIG: /etc/restitch/restitch.yaml
     ports:
       - "8080:8080"
-      - "9090:9090"
     volumes:
       - ./restitch.yaml:/etc/restitch/restitch.yaml:ro
     depends_on:
       - mockupstream
-
-  restitch-studio:
-    build:
-      context: ../..
-      dockerfile: Dockerfile
-    entrypoint: ["/restitch-studio"]
-    command:
-      - "-port=3080"
-      - "-db-path=/data/studio.db"
-      - "-gateway-admin-url=http://restitch:9090"
-      - "-admin-key=restitch-dev"
-    environment:
-      # The Studio defaults to loopback (hardening C2); inside a container
-      # that makes the SPA unreachable from the host.
-      STUDIO_BIND: "0.0.0.0"
-    volumes:
-      - studio-data:/data
-    ports:
-      - "3080:3080"
-    depends_on:
-      restitch:
-        condition: service_started
-      studio-data-init:
-        condition: service_completed_successfully
-
-  # The image runs as the distroless nonroot user (finding H7). Docker
-  # initializes a fresh named volume with a root-owned 0755 root directory,
-  # which that user cannot write; this one-shot step fixes the ownership
-  # before the studio opens its database.
-  studio-data-init:
-    image: alpine:3.20
-    command: ["chown", "-R", "65532:65532", "/data"]
-    volumes:
-      - studio-data:/data
-    restart: "no"
-
-volumes:
-  studio-data:

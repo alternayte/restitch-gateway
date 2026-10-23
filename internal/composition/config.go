@@ -31,13 +31,19 @@ package composition
 import (
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/auth"
-	"github.com/alternayte/restitch-gateway/internal/ratelimit"
+	"github.com/alternayte/restitch-gateway/v2/internal/auth"
+	"github.com/alternayte/restitch-gateway/v2/internal/inbound"
+	"github.com/alternayte/restitch-gateway/v2/internal/ratelimit"
 )
 
 // Config represents the complete composition configuration loaded from YAML.
 // It defines all upstreams and compositions available to the gateway.
 type Config struct {
+	// Auth is the inbound auth policy. Every composition that is not
+	// public needs it; validation refuses the artifact otherwise.
+	Auth *inbound.InboundAuthConfig `yaml:"auth"`
+	// RateLimit is the gateway-wide rate limit, applied before routing.
+	RateLimit *ratelimit.Config `yaml:"rate_limit"`
 	// BlockPrivateUpstreams rejects upstream URLs whose host is a literal
 	// private, loopback, or link-local IP address (SSRF guard option,
 	// finding L16). Hostnames are not resolved at parse time and pass.

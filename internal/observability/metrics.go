@@ -39,6 +39,8 @@ type Metrics struct {
 	CacheMissesTotal      *prometheus.CounterVec
 	CoalescedTotal        *prometheus.CounterVec
 
+	TelemetryDroppedTotal *prometheus.CounterVec
+
 	RegistryPollsTotal   *prometheus.CounterVec
 	RegistryPollDuration prometheus.Histogram
 	RegistryLastSuccess  prometheus.Gauge
@@ -105,6 +107,11 @@ func NewMetrics() *Metrics {
 			Name: "restitch_coalesced_total",
 			Help: "Coalesced (deduplicated) step requests",
 		}, []string{"composition", "step"}),
+
+		TelemetryDroppedTotal: f.NewCounterVec(prometheus.CounterOpts{
+			Name: "restitch_telemetry_dropped_total",
+			Help: "Telemetry a managed gateway gave up pushing to Studio after a retry, by kind (usage, requests)",
+		}, []string{"kind"}),
 	}
 }
 

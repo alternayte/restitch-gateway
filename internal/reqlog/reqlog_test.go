@@ -16,6 +16,8 @@ package reqlog
 
 import (
 	"encoding/json"
+	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -66,5 +68,25 @@ func TestStepRecord_ErrorOmitted(t *testing.T) {
 		if _, hasErr := m["error"]; hasErr {
 			t.Error("empty error should be omitted from JSON")
 		}
+	}
+}
+
+func TestRedactHeadersAndURL(t *testing.T) {
+	h := http.Header{
+		"Authorization": {"Bearer secret"}, "Cookie": {"sid=1"}, "X-Api-Key": {"k"},
+		"Accept-Language": {"fr"}, "X-Session-Token": {"t"},
+	}
+	got := RedactHeaders(h)
+	for _, name := range []string{"Authorization", "Cookie", "X-Api-Key", "X-Session-Token"} {
+		if got[name] != Redacted {
+			t.Errorf("%s = %q, want redacted", name, got[name])
+		}
+	}
+	if got["Accept-Language"] != "fr" {
+		t.Errorf("Accept-Language = %q", got["Accept-Language"])
+	}
+	u := RedactURL("https://user:pw@api.example.com/v1/items?token=abc&page=2")
+	if strings.Contains(u, "abc") || strings.Contains(u, "pw") || !strings.Contains(u, "/v1/items") {
+		t.Errorf("RedactURL = %q", u)
 	}
 }

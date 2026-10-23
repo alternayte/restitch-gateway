@@ -25,6 +25,9 @@ type Accumulator struct {
 	mu      sync.Mutex
 	global  *accBucket
 	perComp map[string]*accBucket
+	// start is when the current window opened. Buckets carry it, so a
+	// request lands in the minute it happened, not the minute of the flush.
+	start time.Time
 }
 
 type accBucket struct {
@@ -38,6 +41,7 @@ type accBucket struct {
 type accStep struct {
 	latencies []float64
 	errors    int64
+	cacheHits int64
 	upstream  string
 }
 
@@ -45,6 +49,7 @@ func NewAccumulator() *Accumulator {
 	return &Accumulator{
 		global:  newAccBucket(),
 		perComp: make(map[string]*accBucket),
+		start:   time.Now(),
 	}
 }
 
@@ -85,6 +90,9 @@ func recordBucket(b *accBucket, durationMS float64, isError, isPartial bool, ste
 		if s.IsError {
 			as.errors++
 		}
+		if s.Cached {
+			as.cacheHits++
+		}
 	}
 }
 
@@ -92,7 +100,8 @@ func (a *Accumulator) Flush() []Bucket {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	now := time.Now().Truncate(time.Minute)
+	now := a.start.Truncate(time.Minute)
+	a.start = time.Now()
 	var buckets []Bucket
 
 	buckets = append(buckets, toBucket(now, "", a.global))
@@ -126,9 +135,10 @@ func toBucket(ts time.Time, composition string, ab *accBucket) Bucket {
 		b.StepMetrics = make(map[string]*StepBucket, len(ab.steps))
 		for name, as := range ab.steps {
 			sb := &StepBucket{
-				Requests: int64(len(as.latencies)),
-				Errors:   as.errors,
-				Upstream: as.upstream,
+				Requests:  int64(len(as.latencies)),
+				Errors:    as.errors,
+				CacheHits: as.cacheHits,
+				Upstream:  as.upstream,
 			}
 			if len(as.latencies) > 0 {
 				var sum float64

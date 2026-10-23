@@ -21,8 +21,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/alternayte/restitch-gateway/internal/composition"
-	"github.com/alternayte/restitch-gateway/internal/server"
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
+	"github.com/alternayte/restitch-gateway/v2/internal/server"
 )
 
 func parseAndCompile(yamlBytes []byte) (*composition.CompiledConfig, error) {

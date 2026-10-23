@@ -57,56 +57,54 @@ func TestDuration_UnmarshalYAML(t *testing.T) {
 	}
 }
 
-func TestLoad_FullSchema(t *testing.T) {
-	yaml := `
+func writeConfig(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestLoadRejectsV1ServerBlock(t *testing.T) {
+	path := writeConfig(t, `
 server:
   port: 9000
-  log_format: text
-  log_level: debug
-  read_timeout: 15s
-  write_timeout: 45s
+  tls_cert: /tls/cert.pem
   shutdown_timeout: 20s
+  auth:
+    api_keys: ["k"]
 admin:
-  port: 9091
-  api_key: testkey
-  request_log_size: 200
+  api_key: k
+  storage:
+    type: sqlite
 upstreams:
   test:
     url: "http://localhost:8081"
-compositions:
-  hello:
-    path: /hello
-    steps: []
-    response:
-      status: 200
-      body: {}
-`
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	_ = os.WriteFile(path, []byte(yaml), 0644)
+`)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected a v1 file to be refused")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"server.port moved to RESTITCH_PORT",
+		"server.tls_cert moved to RESTITCH_TLS_CERT",
+		"server.shutdown_timeout moved to RESTITCH_SHUTDOWN_TIMEOUT",
+		"server.auth moved to the top-level auth key",
+		"admin.api_key removed in v2: the gateway has no admin API",
+		"admin.storage removed in v2",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error lacks %q:\n%s", want, msg)
+		}
+	}
+}
 
-	f, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	if f.Server.Port != 9000 {
-		t.Errorf("server.port = %d, want 9000", f.Server.Port)
-	}
-	if f.Server.LogFormat != "text" {
-		t.Errorf("log_format = %s, want text", f.Server.LogFormat)
-	}
-	if f.Server.ReadTimeout.Duration != 15*time.Second {
-		t.Errorf("read_timeout = %v, want 15s", f.Server.ReadTimeout.Duration)
-	}
-	if f.Admin.Port != 9091 {
-		t.Errorf("admin.port = %d, want 9091", f.Admin.Port)
-	}
-	if f.Admin.APIKey != "testkey" {
-		t.Errorf("admin.api_key = %s, want testkey", f.Admin.APIKey)
-	}
-	if f.Hash() == "" {
-		t.Error("hash should not be empty")
+func TestLoadRejectsUnknownTopLevelKey(t *testing.T) {
+	_, err := Load(writeConfig(t, "upstream:\n  a:\n    url: http://x\n"))
+	if err == nil || !strings.Contains(err.Error(), `unknown top-level key "upstream"`) {
+		t.Fatalf("expected an unknown-key error, got %v", err)
 	}
 }
 
@@ -137,12 +135,6 @@ compositions:
 	if f.Server.LogFormat != "json" {
 		t.Errorf("default log_format = %s, want json", f.Server.LogFormat)
 	}
-	if f.Admin.Port != 9090 {
-		t.Errorf("default admin.port = %d, want 9090", f.Admin.Port)
-	}
-	if f.Admin.RequestLogSize != 500 {
-		t.Errorf("default request_log_size = %d, want 500", f.Admin.RequestLogSize)
-	}
 }
 
 func TestValidate_MultipleErrors(t *testing.T) {
@@ -152,9 +144,6 @@ func TestValidate_MultipleErrors(t *testing.T) {
 			LogFormat: "invalid",
 			LogLevel:  "bad",
 		},
-		Admin: AdminConfig{
-			Port: -1,
-		},
 	}
 
 	err := f.Validate()
@@ -163,50 +152,13 @@ func TestValidate_MultipleErrors(t *testing.T) {
 	}
 
 	s := err.Error()
-	if !strings.Contains(s, "server.port") {
-		t.Error("should report server.port error")
+	if !strings.Contains(s, "RESTITCH_PORT") {
+		t.Error("should report the port error")
 	}
-	if !strings.Contains(s, "log_format") {
-		t.Error("should report log_format error")
+	if !strings.Contains(s, "RESTITCH_LOG_FORMAT") {
+		t.Error("should report the log format error")
 	}
-	if !strings.Contains(s, "log_level") {
-		t.Error("should report log_level error")
-	}
-	if !strings.Contains(s, "admin.port") {
-		t.Error("should report admin.port error")
-	}
-}
-
-func TestApplyEnvOverrides(t *testing.T) {
-	f := &File{}
-	applyDefaults(f)
-
-	t.Setenv("RESTITCH_PORT", "9999")
-	t.Setenv("RESTITCH_LOG_FORMAT", "text")
-	t.Setenv("RESTITCH_ADMIN_PORT", "9191")
-
-	ApplyEnvOverrides(f)
-
-	if f.Server.Port != 9999 {
-		t.Errorf("port = %d, want 9999", f.Server.Port)
-	}
-	if f.Server.LogFormat != "text" {
-		t.Errorf("log_format = %s, want text", f.Server.LogFormat)
-	}
-	if f.Admin.Port != 9191 {
-		t.Errorf("admin.port = %d, want 9191", f.Admin.Port)
-	}
-}
-
-func TestAdminConfig_IsEnabled(t *testing.T) {
-	a := AdminConfig{}
-	if !a.IsEnabled() {
-		t.Error("default should be enabled")
-	}
-
-	f := false
-	a.Enabled = &f
-	if a.IsEnabled() {
-		t.Error("should be disabled")
+	if !strings.Contains(s, "RESTITCH_LOG_LEVEL") {
+		t.Error("should report the log level error")
 	}
 }

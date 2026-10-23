@@ -1,5 +1,5 @@
 # Docker Compose example — uses mockupstream as the backend.
-# Start with: docker-compose up --build
+# Start with: docker compose up --build
 
 upstreams:
   mock:
@@ -9,6 +9,7 @@ upstreams:
 compositions:
   user-dashboard:
     path: "/api/users/{id}/dashboard"
+    public: true
     method: GET
     steps:
       - name: user
@@ -24,6 +25,7 @@ compositions:
 
   echo:
     path: "/api/echo"
+    public: true
     method: GET
     steps:
       - name: e

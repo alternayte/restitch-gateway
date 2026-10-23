@@ -21,149 +21,108 @@ import (
 	"fmt"
 	iofs "io/fs"
 	"log/slog"
+	"maps"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync/atomic"
+	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/admin"
-	"github.com/alternayte/restitch-gateway/internal/composition"
-	"github.com/alternayte/restitch-gateway/internal/gwconfig"
-	"github.com/alternayte/restitch-gateway/internal/hotreload"
-	"github.com/alternayte/restitch-gateway/internal/inbound"
-	"github.com/alternayte/restitch-gateway/internal/observability"
-	"github.com/alternayte/restitch-gateway/internal/ratelimit"
-	"github.com/alternayte/restitch-gateway/internal/server"
-	"github.com/alternayte/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/v2/internal/admin"
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
+	"github.com/alternayte/restitch-gateway/v2/internal/gwconfig"
+	"github.com/alternayte/restitch-gateway/v2/internal/hotreload"
+	"github.com/alternayte/restitch-gateway/v2/internal/inbound"
+	"github.com/alternayte/restitch-gateway/v2/internal/observability"
+	"github.com/alternayte/restitch-gateway/v2/internal/ratelimit"
+	"github.com/alternayte/restitch-gateway/v2/internal/server"
+	"github.com/alternayte/restitch-gateway/v2/internal/upstream"
 )
 
-func runCmd(args []string) int {
-	flags := flag.NewFlagSet("run", flag.ExitOnError)
-	port := flags.Int("port", 8080, "HTTP server port")
-	tlsPort := flags.Int("tls-port", 8443, "HTTPS server port")
-	logFormat := flags.String("log-format", "json", "Log format: json or text")
-	logLevel := flags.String("log-level", "info", "Log level: debug, info, warn, error")
-	certFile := flags.String("cert", "", "Path to TLS certificate file")
-	keyFile := flags.String("key", "", "Path to TLS private key file")
-	configFile := flags.String("config", "restitch.yaml", "path to composition config file")
-	registryURL := flags.String("registry-url", "", "Registry URL for polling mode")
-	registryKey := flags.String("registry-key", "", "Admin API key for registry auth")
-	pollInterval := flags.Duration("poll-interval", 10*time.Second, "Registry poll interval")
-	_ = flags.Parse(args)
+// gatewayOptions holds the process settings of `restitch gateway`. set
+// names the flags given on the command line or through their env twin.
+type gatewayOptions struct {
+	port            int
+	tlsPort         int
+	logFormat       string
+	logLevel        string
+	tlsCert         string
+	tlsKey          string
+	readTimeout     time.Duration
+	writeTimeout    time.Duration
+	shutdownTimeout time.Duration
+	configFile      string
+	studioURL       string
+	gatewayToken    string
+	pollInterval    time.Duration
+	opsPort         int
+	set             map[string]bool
+}
 
-	if *registryURL == "" {
-		if v := os.Getenv("RESTITCH_REGISTRY_URL"); v != "" {
-			*registryURL = v
-		}
+func parseGatewayFlags(args []string, lookup func(string) (string, bool)) (*gatewayOptions, error) {
+	var o gatewayOptions
+	flags := flag.NewFlagSet("gateway", flag.ContinueOnError)
+	flags.IntVar(&o.port, "port", 8080, "HTTP server port")
+	flags.IntVar(&o.tlsPort, "tls-port", 8443, "HTTPS server port")
+	flags.StringVar(&o.logFormat, "log-format", "json", "Log format: json or text")
+	flags.StringVar(&o.logLevel, "log-level", "info", "Log level: debug, info, warn, error")
+	flags.StringVar(&o.tlsCert, "tls-cert", "", "Path to TLS certificate file")
+	flags.StringVar(&o.tlsKey, "tls-key", "", "Path to TLS private key file")
+	flags.DurationVar(&o.readTimeout, "read-timeout", 30*time.Second, "HTTP read timeout")
+	flags.DurationVar(&o.writeTimeout, "write-timeout", 30*time.Second, "HTTP write timeout")
+	flags.DurationVar(&o.shutdownTimeout, "shutdown-timeout", 30*time.Second, "Graceful shutdown deadline")
+	flags.StringVar(&o.configFile, "config", "restitch.yaml", "Path to the artifact file (standalone mode)")
+	flags.StringVar(&o.studioURL, "studio-url", "", "Studio URL to pull the environment's artifact from (managed mode)")
+	flags.StringVar(&o.gatewayToken, "gateway-token", "", "Gateway token of the environment (managed mode)")
+	flags.DurationVar(&o.pollInterval, "poll-interval", 10*time.Second, "How often to pull from Studio")
+	flags.IntVar(&o.opsPort, "ops-port", 0, "Port for /metrics (0 turns it off)")
+	if err := flags.Parse(args); err != nil {
+		return nil, err
 	}
-	if *registryKey == "" {
-		if v := os.Getenv("RESTITCH_REGISTRY_KEY"); v != "" {
-			*registryKey = v
-		}
+	if err := gwconfig.BindEnv(flags, lookup); err != nil {
+		return nil, err
 	}
-	if v := os.Getenv("RESTITCH_POLL_INTERVAL"); v != "" && !isFlagSet(flags, "poll-interval") {
-		if d, err := time.ParseDuration(v); err == nil {
-			*pollInterval = d
+	o.set = map[string]bool{}
+	flags.Visit(func(f *flag.Flag) { o.set[f.Name] = true })
+	return &o, nil
+}
+
+func gatewayCmd(args []string) int {
+	opts, err := parseGatewayFlags(args, os.LookupEnv)
+	if err != nil {
+		if !errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintf(os.Stderr, "gateway: %v\n", err)
 		}
+		return 2
 	}
-
-	registryMode := *registryURL != ""
-	if registryMode && isFlagSet(flags, "config") {
-		slog.Error("--config and --registry-url are mutually exclusive")
-		return 1
+	managed := opts.studioURL != ""
+	if managed && opts.set["config"] {
+		fmt.Fprintln(os.Stderr, "gateway: -config (RESTITCH_CONFIG) and -studio-url (RESTITCH_STUDIO_URL) are mutually exclusive")
+		return 2
 	}
-
-	// configPath is a display value for logs and the admin API: the config
-	// file path in file mode, or the registry URL in registry mode.
-	configPath := *configFile
-	if registryMode {
-		configPath = *registryURL
-	}
-
-	// Load and parse gateway config (server/admin blocks + compositions).
-	// In registry mode, the initial fetch is blocking: any failure here is fatal.
-	var expanded, raw []byte
-	var noConfigFile bool
-	var regClient *hotreload.RegistryClient
-
-	if registryMode {
-		var clientOpts []hotreload.ClientOption
-		if *registryKey != "" {
-			clientOpts = append(clientOpts, hotreload.WithAdminKey(*registryKey))
-		}
-		regClient = hotreload.NewRegistryClient(*registryURL, clientOpts...)
-
-		result, err := regClient.Fetch(context.Background(), "")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to fetch initial config from registry: %v\n", err)
-			return 1
-		}
-		raw = result.YAML
-		expandedStr, err := gwconfig.ExpandEnvStrict(string(raw))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to expand env vars in registry config: %v\n", err)
-			return 1
-		}
-		expanded = []byte(expandedStr)
-	} else {
-		var readErr error
-		expanded, raw, readErr = gwconfig.ReadAndExpand(*configFile)
-		noConfigFile = errors.Is(readErr, iofs.ErrNotExist)
-		if readErr != nil && !noConfigFile {
-			fmt.Fprintf(os.Stderr, "failed to load config file: %v\n", readErr)
-			return 1
-		}
+	if managed && opts.gatewayToken == "" {
+		fmt.Fprintln(os.Stderr, "gateway: -studio-url needs -gateway-token (RESTITCH_GATEWAY_TOKEN)")
+		return 2
 	}
 
-	// Parse server/admin config from YAML (or use defaults if no file)
-	var gwcfg *gwconfig.File
-	if noConfigFile {
-		// LoadBytes applies defaults and validates, so the no-config path
-		// gets the same treatment as a file path (finding L7).
-		var err error
-		gwcfg, err = gwconfig.LoadBytes([]byte{}, []byte{})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "config error: %v\n", err)
-			return 1
-		}
-	} else {
-		var err error
-		gwcfg, err = gwconfig.LoadBytes(expanded, raw)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "config error: %v\n", err)
-			return 1
-		}
-	}
-	gwconfig.ApplyEnvOverrides(gwcfg)
-
-	// Flag overrides win over env overrides and YAML
-	if isFlagSet(flags, "port") {
-		gwcfg.Server.Port = *port
-	}
-	if isFlagSet(flags, "tls-port") {
-		gwcfg.Server.TLSPort = *tlsPort
-	}
-	if isFlagSet(flags, "log-format") {
-		gwcfg.Server.LogFormat = *logFormat
-	}
-	if isFlagSet(flags, "log-level") {
-		gwcfg.Server.LogLevel = *logLevel
-	}
-	if isFlagSet(flags, "cert") {
-		gwcfg.Server.TLSCert = *certFile
-	}
-	if isFlagSet(flags, "key") {
-		gwcfg.Server.TLSKey = *keyFile
-	}
-
-	// Env and flag overrides land after the initial validation, so validate
-	// again: an invalid RESTITCH_PORT must fail here, not at bind time
-	// (finding L7).
+	// Process settings come from flags and their env twins only.
+	gwcfg := &gwconfig.File{Server: gwconfig.ServerConfig{
+		Port:            opts.port,
+		TLSPort:         opts.tlsPort,
+		TLSCert:         opts.tlsCert,
+		TLSKey:          opts.tlsKey,
+		ReadTimeout:     gwconfig.Duration{Duration: opts.readTimeout},
+		WriteTimeout:    gwconfig.Duration{Duration: opts.writeTimeout},
+		ShutdownTimeout: gwconfig.Duration{Duration: opts.shutdownTimeout},
+		LogFormat:       opts.logFormat,
+		LogLevel:        opts.logLevel,
+	}}
 	if err := gwcfg.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
-		return 1
+		return 2
 	}
 
 	if err := observability.Setup(gwcfg.Server.LogFormat, gwcfg.Server.LogLevel); err != nil {
@@ -185,367 +144,227 @@ func runCmd(args []string) int {
 	}()
 
 	srv := server.New(server.Config{
-		Port:    gwcfg.Server.Port,
-		TLSPort: gwcfg.Server.TLSPort,
+		Port:         gwcfg.Server.Port,
+		TLSPort:      gwcfg.Server.TLSPort,
+		ReadTimeout:  gwcfg.Server.ReadTimeout.Duration,
+		WriteTimeout: gwcfg.Server.WriteTimeout.Duration,
 	})
 
-	if noConfigFile {
-		slog.Warn("no composition config found, starting with health endpoints only",
-			"config_file", *configFile)
+	// shutdown runs the components down in a fixed order instead of defer
+	// order (RESTITCH_SHUTDOWN_TIMEOUT bounds each stage).
+	shutdown := &gatewayShutdown{
+		servers: []func(context.Context) error{srv.Shutdown},
+		timeout: gwcfg.Server.ShutdownTimeout.Duration,
+	}
 
-		router := server.NewRouter()
-		router.Use(observability.RequestIDMiddleware)
-		router.Use(server.NewLoggingMiddleware())
-		router.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
-		router.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
-		router.Finalize()
-		srv.SetHandler(router)
-	} else {
+	metrics := observability.NewMetrics()
+	observability.SetDefaultMetrics(metrics)
+	var breakersMu sync.Mutex
+	breakers := map[string]string{}
+	upstream.OnBreakerStateChange = func(name string, from, to string) {
+		metrics.BreakerState.WithLabelValues(name).Set(observability.BreakerStateValue(to))
+		breakersMu.Lock()
+		breakers[name] = to
+		breakersMu.Unlock()
+	}
+
+	// A managed gateway accumulates usage per minute and pushes it to
+	// Studio; a standalone gateway reports through /metrics only.
+	var acc *admin.Accumulator
+	var sampler *hotreload.RequestSampler
+	var client *hotreload.Client
+	instanceID := hotreload.NewInstanceID()
+	if managed {
+		acc = admin.NewAccumulator()
+		client = hotreload.NewClient(opts.studioURL, opts.gatewayToken)
+		sampler = &hotreload.RequestSampler{Client: client, InstanceID: instanceID, Dropped: metrics.TelemetryDroppedTotal}
+	}
+
+	// Every pipeline serves the probes. The first one serves only them:
+	// standalone mode replaces it with the file, managed mode with the
+	// first pulled version.
+	withProbes := func(r *server.Router) {
+		r.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
+		r.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
+		r.Finalize()
+	}
+	probeRouter := server.NewRouter()
+	withProbes(probeRouter)
+	swapper := newSwapper(&Pipeline{Handler: probeRouter})
+	srv.SetHandler(applyMiddleware(swapper,
+		observability.RequestIDMiddleware,
+		server.NewLoggingMiddleware(),
+		recoveryMiddleware,
+	))
+
+	// reloadFromBytes compiles one artifact and swaps it in. The file
+	// watcher, SIGHUP and the Studio poller all apply versions through it.
+	reloadFromBytes := func(rawYAML []byte) (string, error) {
+		expandedStr, err := gwconfig.ExpandEnvStrict(string(rawYAML))
+		if err != nil {
+			return "", fmt.Errorf("env expansion: %w", err)
+		}
+		expanded := []byte(expandedStr)
+
+		loaded, err := gwconfig.LoadBytes(expanded, rawYAML)
+		if err != nil {
+			return "", fmt.Errorf("load config: %w", err)
+		}
+		hash := loaded.Hash()
+		if current := swapper.Current(); current != nil && current.Hash == hash {
+			slog.Info("config unchanged", "hash", hash)
+			return hash, nil
+		}
+
 		cfg, err := composition.ParseConfig(expanded)
 		if err != nil {
-			slog.Error("failed to parse config", "file", *configFile, "error", err)
-			return 1
+			return "", err
 		}
-
 		compiled, err := composition.CompileConfig(context.Background(), cfg)
 		if err != nil {
-			slog.Error("failed to compile config", "error", err)
-			return 1
+			return "", err
 		}
-
-		slog.Info("loaded composition config",
-			"source", configPath,
-			"upstreams", len(compiled.Config.Upstreams),
-			"compositions", len(compiled.Config.Compositions))
-
-		// Initialize Prometheus metrics
-		metrics := observability.NewMetrics()
-		observability.SetDefaultMetrics(metrics)
-
-		// Wire circuit breaker state gauge
-		upstream.OnBreakerStateChange = func(name string, from, to string) {
-			metrics.BreakerState.WithLabelValues(name).Set(observability.BreakerStateValue(to))
+		var authenticator *inbound.Authenticator
+		if cfg.Auth != nil {
+			authenticator, err = inbound.New(context.Background(), *cfg.Auth)
+			if err != nil {
+				return "", fmt.Errorf("inbound auth: %w", err)
+			}
 		}
 
 		pipe := &Pipeline{
-			Hash:     gwcfg.Hash(),
+			Hash:     hash,
 			Compiled: compiled,
 			Executor: composition.NewExecutor(compiled),
 		}
-
-		var authenticator *inbound.Authenticator
-		if gwcfg.Server.Auth != nil {
-			authCfg := gwconfigToInboundAuth(gwcfg.Server.Auth)
-			var authErr error
-			authenticator, authErr = inbound.New(context.Background(), authCfg)
-			if authErr != nil {
-				slog.Error("failed to initialize inbound auth", "error", authErr)
-				return 1
-			}
-			slog.Info("inbound authentication enabled",
-				"api_keys", len(gwcfg.Server.Auth.APIKeys),
-				"jwt", gwcfg.Server.Auth.JWT != nil)
-		}
-
+		router := server.NewRouter()
 		handler := composition.NewHandler(compiled, authenticator)
-
-		// Wire request recording (ring buffer + stats)
-		ringSize := gwcfg.Admin.RequestLogSize
-		ring := admin.NewRingBuffer(ringSize)
-		stats := admin.NewStats()
-
-		// Create time-series storage backend from config.
-		adminCfg := gwcfg.Admin
-		var store admin.Storage
-		switch adminCfg.Storage.Type {
-		case "sqlite":
-			var err error
-			retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 7*24*time.Hour)
-			store, err = admin.NewSQLStorage(adminCfg.Storage.URL, adminCfg.Storage.AuthToken, retention)
-			if err != nil {
-				slog.Error("failed to open SQLite storage", "error", err)
-				// fall back to memory
-				store = admin.NewMemoryStorage(retention)
-			}
-		case "turso":
-			var err error
-			retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 30*24*time.Hour)
-			store, err = admin.NewSQLStorage(adminCfg.Storage.URL, adminCfg.Storage.AuthToken, retention)
-			if err != nil {
-				slog.Error("failed to connect to Turso", "error", err)
-				store = admin.NewMemoryStorage(retention)
-			}
-		default:
-			retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 24*time.Hour)
-			store = admin.NewMemoryStorage(retention)
+		if acc != nil {
+			handler.SetRecorder(&admin.MultiRecorder{Accumulator: acc, Samples: sampler})
 		}
+		handler.RegisterRoutes(router)
+		withProbes(router)
+		pipe.Handler = pipelineRateLimit(router, cfg.RateLimit)
 
-		// Durable request records go through a bounded async writer so a slow
-		// or locked database cannot stall request completion (finding M6).
-		// Memory storage is fast and never wrapped.
-		if adminCfg.Storage.Type == "sqlite" || adminCfg.Storage.Type == "turso" {
-			store = admin.NewAsyncStore(store)
+		old := swapper.Swap(pipe)
+		time.AfterFunc(30*time.Second, old.Close)
+		slog.Info("config applied",
+			"hash", hash,
+			"upstreams", len(compiled.Config.Upstreams),
+			"compositions", len(compiled.Config.Compositions),
+			"inbound_auth", cfg.Auth != nil)
+		return hash, nil
+	}
+
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	defer bgCancel()
+	var rl *reloader
+	shutdown.stopBackground = func() {
+		bgCancel()
+		if rl != nil {
+			rl.stop()
 		}
+	}
 
-		acc := admin.NewAccumulator()
-
-		// Start flush goroutine: periodically drains the accumulator into
-		// durable storage and compacts old data.
-		flushCtx, flushCancel := context.WithCancel(context.Background())
+	if managed {
+		// A managed gateway starts without a config and stays not ready
+		// until its first pull; a Studio outage never crash-loops it.
+		srv.SetConfigured(false)
+		metrics.RegisterRegistryMetrics()
+		poller := hotreload.NewPoller(client, opts.pollInterval, reloadFromBytes, metrics)
+		applied := make(chan struct{}, 1)
+		poller.OnApplied(func(v int) {
+			srv.SetConfigured(true)
+			slog.Info("artifact version applied", "version", v)
+			select {
+			case applied <- struct{}{}:
+			default:
+			}
+		})
+		go hotreload.RunHeartbeat(bgCtx, client, hotreload.HeartbeatInterval, applied, func() hotreload.Heartbeat {
+			st := poller.Status()
+			return hotreload.Heartbeat{
+				InstanceID: instanceID, BinaryVersion: version,
+				AppliedVersion: st.Version, LastPullError: st.LastError,
+			}
+		})
 		go func() {
-			ticker := time.NewTicker(60 * time.Second)
-			defer ticker.Stop()
+			if err := poller.Run(bgCtx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("artifact poller stopped unexpectedly", "error", err)
+			}
+		}()
+		go func() {
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGHUP)
+			defer signal.Stop(sigCh)
 			for {
 				select {
-				case <-ticker.C:
-					buckets := acc.Flush()
-					for _, b := range buckets {
-						if err := store.RecordBucket(context.Background(), b); err != nil {
-							slog.Error("failed to record time-series bucket", "error", err)
-						}
-					}
-					retentionDur := admin.ParseRangeDuration(adminCfg.Storage.Retention, 24*time.Hour)
-					if err := store.Compact(context.Background(), retentionDur); err != nil {
-						slog.Error("failed to compact time-series storage", "error", err)
-					}
-				case <-flushCtx.Done():
+				case <-bgCtx.Done():
 					return
+				case <-sigCh:
+					slog.Info("SIGHUP received, pulling the current version")
+					poller.Trigger()
 				}
 			}
 		}()
-		defer func() {
-			flushCancel()
-			buckets := acc.Flush()
-			for _, b := range buckets {
-				if err := store.RecordBucket(context.Background(), b); err != nil {
-					slog.Error("failed to flush bucket on shutdown", "error", err)
-				}
-			}
-		}()
-
-		// recorder is shared across reloads: the reload path must call
-		// SetRecorder on each new handler, or recording silently stops after
-		// the first hot reload (finding H2).
-		recorder := &admin.MultiRecorder{Ring: ring, Stats: stats, Accumulator: acc, Storage: store}
-		handler.SetRecorder(recorder)
-
-		router := server.NewRouter()
-		handler.RegisterRoutes(router)
-		router.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
-		router.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
-		router.Finalize()
-		pipe.Handler = pipelineRateLimit(router, gwcfg.Server.RateLimit)
-
-		swapper := newSwapper(pipe)
-
-		middlewares := []func(http.Handler) http.Handler{
-			observability.RequestIDMiddleware,
-			server.NewLoggingMiddleware(),
-			recoveryMiddleware,
+		pusher := &hotreload.UsagePusher{
+			Client: client, InstanceID: instanceID, Acc: acc, Dropped: metrics.TelemetryDroppedTotal,
+			Breakers: func() map[string]string {
+				breakersMu.Lock()
+				defer breakersMu.Unlock()
+				return maps.Clone(breakers)
+			},
 		}
-
-		wrapped := applyMiddleware(swapper, middlewares...)
-		srv.SetHandler(wrapped)
-
-		// Build an upstream health checker for the admin API. It is rebuilt
-		// on every reload (finding H3) and swapped atomically so the admin
-		// handler never reads a checker whose upstream map is stale.
-		var healthChecker atomic.Pointer[upstream.Checker]
-		healthChecker.Store(upstream.NewChecker(compiled.Upstreams, 10*time.Second))
-
-		// reloadFromBytes compiles raw YAML and hot-swaps the pipeline. It is
-		// shared between file-mode reload (SIGHUP/fsnotify/admin API) and
-		// registry-mode reload (poller/SIGHUP/admin API).
-		reloadFromBytes := func(rawYAML []byte) (string, error) {
-			expandedStr, err := gwconfig.ExpandEnvStrict(string(rawYAML))
-			if err != nil {
-				return "", fmt.Errorf("env expansion: %w", err)
-			}
-			newExpanded := []byte(expandedStr)
-
-			newGwcfg, err := gwconfig.LoadBytes(newExpanded, rawYAML)
-			if err != nil {
-				return "", fmt.Errorf("load config: %w", err)
-			}
-			newHash := newGwcfg.Hash()
-
-			if current := swapper.Current(); current != nil && current.Hash == newHash && newHash != "" {
-				slog.Info("config unchanged", "hash", newHash)
-				return newHash, nil
-			}
-
-			newCfg, err := composition.ParseConfig(newExpanded)
-			if err != nil {
-				return "", err
-			}
-			newCompiled, err := composition.CompileConfig(context.Background(), newCfg)
-			if err != nil {
-				return "", err
-			}
-
-			var newAuth *inbound.Authenticator
-			if newGwcfg.Server.Auth != nil {
-				authCfg := gwconfigToInboundAuth(newGwcfg.Server.Auth)
-				newAuth, err = inbound.New(context.Background(), authCfg)
-				if err != nil {
-					return "", fmt.Errorf("inbound auth: %w", err)
-				}
-			}
-
-			newPipe := &Pipeline{
-				Hash:     newHash,
-				Compiled: newCompiled,
-				Executor: composition.NewExecutor(newCompiled),
-			}
-			healthChecker.Store(upstream.NewChecker(newCompiled.Upstreams, 10*time.Second))
-			newHandler := composition.NewHandler(newCompiled, newAuth)
-			newHandler.SetRecorder(recorder)
-			newRouter := server.NewRouter()
-			newHandler.RegisterRoutes(newRouter)
-			newRouter.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
-			newRouter.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
-			newRouter.Finalize()
-			newPipe.Handler = pipelineRateLimit(newRouter, newGwcfg.Server.RateLimit)
-
-			old := swapper.Swap(newPipe)
-			if old != nil {
-				time.AfterFunc(30*time.Second, old.Close)
-			}
-
-			slog.Info("config reloaded", "old_hash", old.Hash, "new_hash", newHash)
-			return newHash, nil
+		go pusher.Run(bgCtx, hotreload.UsageInterval)
+		go sampler.Run(bgCtx, hotreload.RequestsInterval)
+		// The last minute of usage and samples goes out after traffic stopped.
+		shutdown.final = func(ctx context.Context) {
+			pusher.Push(ctx)
+			sampler.Push(ctx)
 		}
-
-		// doReload is the file-mode reload entry point: read the file, then
-		// share the compile/swap logic with registry mode via reloadFromBytes.
-		doReload := func() (string, error) {
-			raw, err := os.ReadFile(*configFile)
-			if err != nil {
-				return "", fmt.Errorf("read config: %w", err)
-			}
-			return reloadFromBytes(raw)
-		}
-
-		// Mode-specific reload wiring. adminReloadFn and registryStatusFn are
-		// captured by admin.Deps below; admin.New copies Deps by value, so
-		// these must be finalized before it is constructed.
-		var adminReloadFn func() (string, error)
-		var registryStatusFn func() any
-
-		bgCtx, bgCancel := context.WithCancel(context.Background())
-		defer bgCancel()
-
-		if registryMode {
-			// Register registry metrics
-			metrics.RegisterRegistryMetrics()
-
-			poller := hotreload.NewPoller(regClient, *pollInterval, reloadFromBytes, metrics)
-
-			registryStatusFn = func() any {
-				s := poller.Status()
-				return map[string]any{
-					"mode":                  "registry",
-					"registry_url":          *registryURL,
-					"poll_interval_seconds": pollInterval.Seconds(),
-					"last_poll":             s.LastPollTime,
-					"last_success":          s.LastSuccessTime,
-					"etag":                  s.LastETag,
-					"composition_count":     s.CompositionCount,
-					"error":                 nilIfEmpty(s.LastError),
-					"error_type":            nilIfEmpty(s.ErrorType),
-					"consecutive_errors":    s.ConsecutiveErrors,
-				}
-			}
-
-			adminReloadFn = func() (string, error) {
-				poller.Trigger()
-				return swapper.Current().Hash, nil
-			}
-
-			go func() {
-				if err := poller.Run(bgCtx); err != nil && !errors.Is(err, context.Canceled) {
-					slog.Error("registry poller stopped unexpectedly", "error", err)
-				}
-			}()
-			go func() {
-				sigCh := make(chan os.Signal, 1)
-				signal.Notify(sigCh, syscall.SIGHUP)
-				defer signal.Stop(sigCh)
-				for {
-					select {
-					case <-bgCtx.Done():
-						return
-					case <-sigCh:
-						slog.Info("SIGHUP received, triggering registry poll")
-						poller.Trigger()
-					}
-				}
-			}()
-
-			slog.Info("registry polling mode enabled",
-				"url", *registryURL, "poll_interval", pollInterval.String())
-		} else {
-			rl := newReloader(*configFile, doReload)
-			rl.watchSignals()
-			rl.watchFile()
-			adminReloadFn = rl.reload
-		}
-
-		// Admin server. The enabled flag is honored here: admin.New and
-		// admin.Start only run when admin.enabled is true (finding C3).
-		if gwcfg.Admin.IsEnabled() {
-			adminSrv := admin.New(admin.Config{
-				Enabled: gwcfg.Admin.IsEnabled(),
-				Port:    gwcfg.Admin.Port,
-				Bind:    gwcfg.Admin.Bind,
-				APIKey:  gwcfg.Admin.APIKey,
-				Storage: adminCfg.Storage,
-			}, admin.Deps{
-				Metrics:    metrics.Handler(),
-				Version:    version,
-				ConfigPath: configPath,
-				ConfigHash: func() string { return swapper.Current().Hash },
-				Compositions: func() []admin.CompositionInfo {
-					return compositionsFromPipeline(swapper.Current())
-				},
-				Upstreams: func(ctx context.Context) []admin.UpstreamInfo {
-					return upstreamsFromPipeline(swapper.Current(), &healthChecker, ctx)
-				},
-				Requests: ring,
-				Stats:    stats,
-				Storage:  store,
-				Validate: func(yamlBytes []byte) []string {
-					_, err := composition.ParseConfig(yamlBytes)
-					if err != nil {
-						return []string{err.Error()}
-					}
-					return nil
-				},
-				Reload:         adminReloadFn,
-				RegistryStatus: registryStatusFn,
-			})
-			if err := adminSrv.Start(); err != nil {
-				// An admin server that cannot bind its port is a deployment
-				// error, not a reason to run without the control plane
-				// (finding L18).
-				slog.Error("admin server failed to start", "error", err)
+		slog.Info("managed mode", "studio_url", opts.studioURL, "poll_interval", opts.pollInterval.String())
+	} else {
+		raw, err := os.ReadFile(opts.configFile)
+		switch {
+		case errors.Is(err, iofs.ErrNotExist):
+			slog.Warn("no artifact file, serving the probes only", "config_file", opts.configFile)
+		case err != nil:
+			slog.Error("failed to read the artifact file", "file", opts.configFile, "error", err)
+			return 1
+		default:
+			if _, err := reloadFromBytes(raw); err != nil {
+				slog.Error("failed to load the artifact file", "file", opts.configFile, "error", err)
 				return 1
 			}
-			defer func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := adminSrv.Shutdown(ctx); err != nil {
-					slog.Error("admin server shutdown error", "error", err)
+			rl = newReloader(opts.configFile, func() (string, error) {
+				raw, err := os.ReadFile(opts.configFile)
+				if err != nil {
+					return "", fmt.Errorf("read config: %w", err)
 				}
-			}()
-		} else {
-			slog.Info("admin server disabled by config", "enabled", false)
+				return reloadFromBytes(raw)
+			})
+			rl.watchSignals()
+			rl.watchFile()
 		}
-		defer func() {
-			if err := store.Close(); err != nil {
-				slog.Error("failed to close storage", "error", err)
+	}
+
+	// The optional ops port serves /metrics only. The probes stay on the
+	// data port, because a container platform probes one port.
+	if opts.opsPort != 0 {
+		opsMux := http.NewServeMux()
+		opsMux.Handle("GET /metrics", metrics.Handler())
+		opsSrv := &http.Server{
+			Addr:              net.JoinHostPort("", strconv.Itoa(opts.opsPort)),
+			Handler:           opsMux,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+		go func() {
+			if err := opsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				slog.Error("ops server failed", "error", err)
 			}
 		}()
+		slog.Info("ops server starting", "port", opts.opsPort)
+		shutdown.servers = append(shutdown.servers, opsSrv.Shutdown)
 	}
 
 	tlsEnabled := gwcfg.Server.TLSCert != "" && gwcfg.Server.TLSKey != ""
@@ -575,13 +394,12 @@ func runCmd(args []string) int {
 	select {
 	case err := <-errChan:
 		slog.Error("server error", "error", err)
+		if err := shutdown.run(); err != nil {
+			slog.Error("shutdown error", "error", err)
+		}
 		return 1
 	case <-srv.WaitForShutdownSignal():
-		// The configured server.shutdown_timeout governs the drain window
-		// (default 30s); it was parsed but unused (finding L6).
-		ctx, cancel := context.WithTimeout(context.Background(), gwcfg.Server.ShutdownTimeout.Duration)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
+		if err := shutdown.run(); err != nil {
 			slog.Error("shutdown error", "error", err)
 			return 1
 		}
@@ -589,23 +407,6 @@ func runCmd(args []string) int {
 	}
 
 	return 0
-}
-
-func isFlagSet(fs *flag.FlagSet, name string) bool {
-	found := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
-		}
-	})
-	return found
-}
-
-func nilIfEmpty(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
 }
 
 func applyMiddleware(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
@@ -619,15 +420,11 @@ func applyMiddleware(h http.Handler, mws ...func(http.Handler) http.Handler) htt
 // or returns h unchanged when cfg is nil. It is applied to each pipeline as
 // it is built, so a reload that changes server.rate_limit takes effect
 // instead of being frozen at startup (finding L11).
-func pipelineRateLimit(h http.Handler, cfg *gwconfig.RateLimitConfig) http.Handler {
+func pipelineRateLimit(h http.Handler, cfg *ratelimit.Config) http.Handler {
 	if cfg == nil {
 		return h
 	}
-	rl := ratelimit.New(ratelimit.Config{
-		RequestsPerSecond: cfg.RequestsPerSecond,
-		Burst:             cfg.Burst,
-		Key:               cfg.Key,
-	})
+	rl := ratelimit.New(*cfg)
 	slog.Info("global rate limit enabled",
 		"rps", cfg.RequestsPerSecond,
 		"burst", cfg.Burst,
@@ -645,112 +442,4 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
-}
-
-func compositionsFromPipeline(p *Pipeline) []admin.CompositionInfo {
-	if p == nil || p.Compiled == nil {
-		return nil
-	}
-	var result []admin.CompositionInfo
-	for name, comp := range p.Compiled.Config.Compositions {
-		ci := admin.CompositionInfo{
-			Name:   name,
-			Path:   comp.Path,
-			Method: comp.Method,
-			Public: comp.Public,
-		}
-		for _, step := range comp.Steps {
-			si := admin.StepInfo{
-				Name:     step.Name,
-				Upstream: step.Upstream,
-				Method:   step.Method,
-				Optional: step.Optional,
-			}
-			if step.Timeout != nil {
-				si.TimeoutMS = step.Timeout.Milliseconds()
-			}
-			if step.DependsOn != nil {
-				si.DependsOn = step.DependsOn
-			} else {
-				si.DependsOn = []string{}
-			}
-
-			// Compute inferred deps: all deps minus explicit deps
-			if cc, ok := p.Compiled.Compositions[name]; ok {
-				if cs, ok := cc.Steps[step.Name]; ok {
-					explicit := make(map[string]bool, len(step.DependsOn))
-					for _, d := range step.DependsOn {
-						explicit[d] = true
-					}
-					var inferred []string
-					for _, d := range cs.Deps {
-						if !explicit[d] {
-							inferred = append(inferred, d)
-						}
-					}
-					if inferred == nil {
-						inferred = []string{}
-					}
-					si.InferredDeps = inferred
-				}
-			}
-			if si.InferredDeps == nil {
-				si.InferredDeps = []string{}
-			}
-
-			ci.Steps = append(ci.Steps, si)
-		}
-		if cc, ok := p.Compiled.Compositions[name]; ok && cc.ExecutionPlan != nil {
-			ci.Waves = cc.ExecutionPlan.Waves
-		}
-		result = append(result, ci)
-	}
-	return result
-}
-
-func upstreamsFromPipeline(p *Pipeline, checker *atomic.Pointer[upstream.Checker], ctx context.Context) []admin.UpstreamInfo {
-	if p == nil || p.Compiled == nil {
-		return nil
-	}
-	var healthMap map[string]upstream.HealthStatus
-	if chk := checker.Load(); chk != nil {
-		healthMap = chk.Check(ctx)
-	}
-	var result []admin.UpstreamInfo
-	for name, up := range p.Compiled.Config.Upstreams {
-		ui := admin.UpstreamInfo{
-			Name:      name,
-			URL:       up.URL,
-			TimeoutMS: up.Timeout.Milliseconds(),
-		}
-		if up.Auth != nil {
-			ui.AuthType = up.Auth.Type()
-		} else {
-			ui.AuthType = "none"
-		}
-		if hs, ok := healthMap[name]; ok {
-			ui.Health = admin.UpstreamHealthInfo{
-				Status:    hs.Status,
-				LatencyMS: hs.LatencyMS,
-				CheckedAt: hs.CheckedAt.Format(time.RFC3339),
-				Error:     hs.Error,
-			}
-		}
-		result = append(result, ui)
-	}
-	return result
-}
-
-func gwconfigToInboundAuth(auth *gwconfig.InboundAuthConfig) inbound.InboundAuthConfig {
-	cfg := inbound.InboundAuthConfig{
-		APIKeys: auth.APIKeys,
-	}
-	if auth.JWT != nil {
-		cfg.JWT = &inbound.JWTConfig{
-			JWKSURL:  auth.JWT.JWKSURL,
-			Issuer:   auth.JWT.Issuer,
-			Audience: auth.JWT.Audience,
-		}
-	}
-	return cfg
 }

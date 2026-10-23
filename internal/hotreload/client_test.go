@@ -17,143 +17,194 @@ package hotreload
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/alternayte/restitch-gateway/v2/internal/admin"
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
+	"github.com/alternayte/restitch-gateway/v2/internal/reqlog"
 )
 
-func TestRegistryClient_Fetch_Success(t *testing.T) {
-	bundle := map[string]any{
-		"yaml_content":      "upstreams: {}\ncompositions: {}\n",
-		"etag":              "abc123",
-		"composition_count": 2,
-		"composition_names": []string{"comp1", "comp2"},
-	}
+func TestClient_FetchSendsTokenAndReadsVersion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/registry/bundle" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.Header.Get("If-None-Match") != "" {
-			t.Errorf("unexpected If-None-Match on first request: %s", r.Header.Get("If-None-Match"))
-		}
-		w.Header().Set("ETag", "abc123")
-		_ = json.NewEncoder(w).Encode(bundle)
-	}))
-	defer srv.Close()
-
-	client := NewRegistryClient(srv.URL)
-	result, err := client.Fetch(context.Background(), "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.NotModified {
-		t.Error("expected modified")
-	}
-	if result.ETag != "abc123" {
-		t.Errorf("etag = %q, want %q", result.ETag, "abc123")
-	}
-	if string(result.YAML) != "upstreams: {}\ncompositions: {}\n" {
-		t.Errorf("yaml = %q", string(result.YAML))
-	}
-	if result.CompositionCount != 2 {
-		t.Errorf("count = %d, want 2", result.CompositionCount)
-	}
-}
-
-func TestRegistryClient_Fetch_NotModified(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("If-None-Match") == "abc123" {
-			w.Header().Set("ETag", "abc123")
-			w.WriteHeader(http.StatusNotModified)
+		if r.URL.Path != "/gateway/v1/artifact" || r.Header.Get("Authorization") != "Bearer rgt_abc" {
+			http.Error(w, "nope", http.StatusUnauthorized)
 			return
 		}
-		t.Errorf("expected If-None-Match: abc123, got %q", r.Header.Get("If-None-Match"))
+		bundleHandler("upstreams: {}\n", `"staging-3"`, 3)(w, r)
 	}))
 	defer srv.Close()
 
-	client := NewRegistryClient(srv.URL)
-	result, err := client.Fetch(context.Background(), "abc123")
+	c := NewClient(srv.URL+"/", "rgt_abc")
+	res, err := c.Fetch(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.NotModified {
-		t.Error("expected NotModified")
+	if string(res.YAML) != "upstreams: {}\n" || res.Version != 3 || res.ETag != `"staging-3"` {
+		t.Fatalf("result = %+v", res)
+	}
+	res, err = c.Fetch(context.Background(), `"staging-3"`)
+	if err != nil || !res.NotModified {
+		t.Fatalf("same etag: %+v %v", res, err)
 	}
 }
 
-func TestRegistryClient_Fetch_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+func TestClient_FetchClassifiesStatus(t *testing.T) {
+	for status, want := range map[int]error{
+		http.StatusNotFound:     ErrNoVersion,
+		http.StatusUnauthorized: ErrTokenRejected,
+		http.StatusForbidden:    ErrTokenRejected,
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+		}))
+		_, err := NewClient(srv.URL, "rgt_x").Fetch(context.Background(), "")
+		srv.Close()
+		if !errors.Is(err, want) {
+			t.Errorf("status %d: err = %v, want %v", status, err, want)
+		}
+	}
+}
+
+func TestClient_FetchServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer srv.Close()
-
-	client := NewRegistryClient(srv.URL)
-	_, err := client.Fetch(context.Background(), "")
-	if err == nil {
-		t.Error("expected error on 500")
+	if _, err := NewClient(srv.URL, "rgt_x").Fetch(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "502") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
-func TestRegistryClient_Fetch_ConnectionRefused(t *testing.T) {
-	client := NewRegistryClient("http://127.0.0.1:1")
-	_, err := client.Fetch(context.Background(), "")
-	if err == nil {
-		t.Error("expected error on connection refused")
+func TestClient_FetchConnectionRefused(t *testing.T) {
+	if _, err := NewClient("http://127.0.0.1:1", "rgt_x").Fetch(context.Background(), ""); err == nil {
+		t.Fatal("expected an error")
 	}
 }
 
-func TestRegistryClient_Fetch_AdminKey(t *testing.T) {
-	var gotKey string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotKey = r.Header.Get("X-Admin-Key")
-		w.Header().Set("ETag", "x")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"yaml_content": "", "etag": "x", "composition_count": 0, "composition_names": []string{},
-		})
+func TestClient_FetchRefusesOversizedArtifact(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("a", composition.MaxArtifactBytes+1)))
 	}))
 	defer srv.Close()
-
-	client := NewRegistryClient(srv.URL, WithAdminKey("secret"))
-	_, err := client.Fetch(context.Background(), "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotKey != "secret" {
-		t.Errorf("X-Admin-Key = %q, want %q", gotKey, "secret")
+	if _, err := NewClient(srv.URL, "rgt_x").Fetch(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
-func TestRegistryClient_Fetch_ContextCanceled(t *testing.T) {
+func TestRunHeartbeatReportsStatus(t *testing.T) {
+	got := make(chan Heartbeat, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
+		if r.URL.Path != "/gateway/v1/heartbeat" || r.Header.Get("Authorization") != "Bearer rgt_abc" {
+			http.Error(w, "nope", http.StatusUnauthorized)
+			return
+		}
+		var hb Heartbeat
+		_ = json.NewDecoder(r.Body).Decode(&hb)
+		got <- hb
+		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	client := NewRegistryClient(srv.URL)
-	_, err := client.Fetch(ctx, "")
-	if err == nil {
-		t.Error("expected error on canceled context")
+	defer cancel()
+	now := make(chan struct{}, 1)
+	version := 1
+	go RunHeartbeat(ctx, NewClient(srv.URL, "rgt_abc"), time.Hour, now, func() Heartbeat {
+		return Heartbeat{InstanceID: "gw-1", BinaryVersion: "v2", AppliedVersion: version}
+	})
+	if hb := <-got; hb.InstanceID != "gw-1" || hb.AppliedVersion != 1 {
+		t.Fatalf("first heartbeat = %+v", hb)
+	}
+	version = 2
+	now <- struct{}{}
+	select {
+	case hb := <-got:
+		if hb.AppliedVersion != 2 {
+			t.Fatalf("second heartbeat = %+v", hb)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no heartbeat after the trigger")
 	}
 }
 
-// TestRegistryClient_Fetch_OversizedBundle covers finding H4: a bundle
-// larger than the limit must be rejected, not decoded.
-func TestRegistryClient_Fetch_OversizedBundle(t *testing.T) {
+func TestUsagePusherRetriesOnceThenDrops(t *testing.T) {
+	var fail atomic.Bool
+	got := make(chan UsagePush, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"yaml_content": "` + strings.Repeat("a", maxBundleBytes) + `"}`))
+		if fail.Load() {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		var p UsagePush
+		_ = json.NewDecoder(r.Body).Decode(&p)
+		got <- p
+		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
 
-	client := NewRegistryClient(srv.URL)
-	_, err := client.Fetch(context.Background(), "")
-	if err == nil {
-		t.Fatal("expected error for oversized bundle")
+	dropped := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "d"}, []string{"kind"})
+	acc := admin.NewAccumulator()
+	p := &UsagePusher{Client: NewClient(srv.URL, "rgt_x"), InstanceID: "gw-a", Acc: acc, Dropped: dropped,
+		Breakers: func() map[string]string { return map[string]string{"users": "closed"} }}
+
+	fail.Store(true)
+	acc.Record("orders", 5, false, false, nil)
+	p.Push(context.Background()) // fails, kept
+	acc.Record("orders", 5, false, false, nil)
+	p.Push(context.Background()) // fails again: the first window drops
+	if v := testutil.ToFloat64(dropped.WithLabelValues("usage")); v == 0 {
+		t.Fatal("the second failure must count the dropped buckets")
 	}
-	if !strings.Contains(err.Error(), "exceeds") {
-		t.Errorf("error = %v, want a size-limit error", err)
+
+	fail.Store(false)
+	acc.Record("orders", 5, false, false, nil)
+	p.Push(context.Background())
+	push := <-got
+	var requests int64
+	for _, b := range push.Buckets {
+		if b.Composition == "orders" {
+			requests += b.Requests
+		}
+	}
+	if requests != 2 || push.Breakers["users"] != "closed" || push.InstanceID != "gw-a" {
+		t.Fatalf("push = %+v (orders requests %d, want 2: the kept window plus the new one)", push, requests)
+	}
+}
+
+func TestRequestSamplerKeepsFailuresAndCapsSuccesses(t *testing.T) {
+	got := make(chan RequestsPush, 2)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var p RequestsPush
+		_ = json.NewDecoder(r.Body).Decode(&p)
+		got <- p
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	s := &RequestSampler{Client: NewClient(srv.URL, "rgt_x"), InstanceID: "gw-a"}
+	now := time.Now()
+	for i := 0; i < successesPerMinute+20; i++ {
+		s.Record(reqlog.Record{ID: "ok", Status: 200, Time: now})
+	}
+	s.Record(reqlog.Record{ID: "bad", Status: 502, Time: now})
+	s.Push(context.Background())
+	push := <-got
+	failures := 0
+	for _, r := range push.Requests {
+		if r.Status >= 500 {
+			failures++
+		}
+	}
+	if len(push.Requests) != successesPerMinute+1 || failures != 1 {
+		t.Fatalf("pushed %d samples with %d failures, want %d and 1", len(push.Requests), failures, successesPerMinute+1)
 	}
 }

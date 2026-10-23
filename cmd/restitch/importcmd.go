@@ -127,7 +127,10 @@ func importCmd(args []string) int {
 		}
 	}
 
+	// Every generated route requires an API key: v2 refuses a non-public
+	// composition without an auth policy, and an open default is unsafe.
 	output := map[string]any{
+		"auth": map[string]any{"api_keys": []string{"${GATEWAY_API_KEY}"}},
 		"upstreams": map[string]any{
 			*upstreamName: map[string]any{"url": base},
 		},

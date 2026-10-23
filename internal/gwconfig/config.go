@@ -19,13 +19,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/alternayte/restitch-gateway/internal/admin"
 )
 
 // Duration wraps time.Duration for YAML unmarshaling from Go duration strings.
@@ -50,67 +47,40 @@ func (d Duration) MarshalYAML() (interface{}, error) {
 	return d.String(), nil
 }
 
-// File is the root configuration loaded from restitch.yaml.
+// File holds the gateway process settings, which come from flags and env
+// only, and the hash of the artifact file. composition.Config owns the
+// artifact itself.
 type File struct {
-	Server       ServerConfig           `yaml:"server"`
-	Admin        AdminConfig            `yaml:"admin"`
-	Upstreams    map[string]interface{} `yaml:"upstreams"`
-	Compositions map[string]interface{} `yaml:"compositions"`
+	Server ServerConfig
 
 	raw []byte // original bytes for hash
 }
 
-// RateLimitConfig configures gateway-wide rate limiting.
-type RateLimitConfig struct {
-	RequestsPerSecond float64 `yaml:"requests_per_second"`
-	Burst             int     `yaml:"burst"`
-	Key               string  `yaml:"key"` // "ip", "header:X-Client-ID", "api-key"
+// artifactKeys are the top-level keys an artifact may hold.
+var artifactKeys = []string{"auth", "rate_limit", "block_private_upstreams", "upstreams", "compositions"}
+
+// v1Moved names where a v1 server:/admin: key went. A key with an empty
+// value has no successor and is removed in v2. Every other key maps to the
+// flag of the same name, so its env var comes from EnvName.
+var v1Moved = map[string]string{
+	"server.auth":            "the top-level auth key",
+	"server.rate_limit":      "the top-level rate_limit key",
+	"admin.request_log_size": "",
+	"admin.storage":          "",
 }
 
-// ServerConfig holds gateway server settings.
+// ServerConfig holds the gateway process settings. Flags and their
+// RESTITCH_ env twins set them; the YAML file never does.
 type ServerConfig struct {
-	Port            int                `yaml:"port"`
-	TLSPort         int                `yaml:"tls_port"`
-	TLSCert         string             `yaml:"tls_cert"`
-	TLSKey          string             `yaml:"tls_key"`
-	ReadTimeout     Duration           `yaml:"read_timeout"`
-	WriteTimeout    Duration           `yaml:"write_timeout"`
-	ShutdownTimeout Duration           `yaml:"shutdown_timeout"`
-	LogFormat       string             `yaml:"log_format"`
-	LogLevel        string             `yaml:"log_level"`
-	Auth            *InboundAuthConfig `yaml:"auth"`
-	RateLimit       *RateLimitConfig   `yaml:"rate_limit"`
-}
-
-// InboundAuthConfig configures gateway-level authentication.
-type InboundAuthConfig struct {
-	APIKeys []string   `yaml:"api_keys"`
-	JWT     *JWTConfig `yaml:"jwt"`
-}
-
-// JWTConfig configures JWT validation via JWKS.
-type JWTConfig struct {
-	JWKSURL  string `yaml:"jwks_url"`
-	Issuer   string `yaml:"issuer"`
-	Audience string `yaml:"audience"`
-}
-
-// AdminConfig holds admin API server settings.
-type AdminConfig struct {
-	Enabled        *bool               `yaml:"enabled"`
-	Port           int                 `yaml:"port"`
-	Bind           string              `yaml:"bind"`
-	APIKey         string              `yaml:"api_key"`
-	RequestLogSize int                 `yaml:"request_log_size"`
-	Storage        admin.StorageConfig `yaml:"storage"`
-}
-
-// IsEnabled returns whether the admin server is enabled (default true).
-func (a AdminConfig) IsEnabled() bool {
-	if a.Enabled == nil {
-		return true
-	}
-	return *a.Enabled
+	Port            int
+	TLSPort         int
+	TLSCert         string
+	TLSKey          string
+	ReadTimeout     Duration
+	WriteTimeout    Duration
+	ShutdownTimeout Duration
+	LogFormat       string
+	LogLevel        string
 }
 
 // ReadAndExpand reads a config file and performs whole-file env expansion.
@@ -142,11 +112,10 @@ func Load(path string) (*File, error) {
 // LoadBytes parses already-expanded YAML bytes into a File.
 // raw is the original (unexpanded) bytes used for hashing.
 func LoadBytes(expanded []byte, raw []byte) (*File, error) {
-	var f File
-	if err := yaml.Unmarshal(expanded, &f); err != nil {
-		return nil, fmt.Errorf("parsing config: %w", err)
+	if err := CheckArtifactKeys(expanded); err != nil {
+		return nil, err
 	}
-	f.raw = raw
+	f := File{raw: raw}
 
 	applyDefaults(&f)
 
@@ -155,6 +124,66 @@ func LoadBytes(expanded []byte, raw []byte) (*File, error) {
 	}
 
 	return &f, nil
+}
+
+// CheckArtifactKeys refuses the v1 server: and admin: blocks, naming where
+// each key went, and any other key an artifact does not hold.
+func CheckArtifactKeys(doc []byte) error {
+	var root yaml.Node
+	if err := yaml.Unmarshal(doc, &root); err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	if len(root.Content) == 0 {
+		return nil
+	}
+	top := root.Content[0]
+	if top.Kind != yaml.MappingNode {
+		return fmt.Errorf("parsing config: the top level must be a mapping")
+	}
+	var errs []error
+	for i := 0; i+1 < len(top.Content); i += 2 {
+		key, val := top.Content[i].Value, top.Content[i+1]
+		switch {
+		case key == "server" || key == "admin":
+			errs = append(errs, v1BlockErrors(key, val)...)
+		case !contains(artifactKeys, key):
+			errs = append(errs, fmt.Errorf("unknown top-level key %q (an artifact holds %s)",
+				key, strings.Join(artifactKeys, ", ")))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func v1BlockErrors(block string, val *yaml.Node) []error {
+	if val.Kind != yaml.MappingNode || len(val.Content) == 0 {
+		return []error{fmt.Errorf("%s: removed in v2; process settings are flags and RESTITCH_ env vars", block)}
+	}
+	var errs []error
+	for i := 0; i+1 < len(val.Content); i += 2 {
+		name := block + "." + val.Content[i].Value
+		dest, known := v1Moved[name]
+		switch {
+		case block == "admin":
+			errs = append(errs, fmt.Errorf("%s removed in v2: the gateway has no admin API; Studio shows its state", name))
+		case known && dest == "":
+			errs = append(errs, fmt.Errorf("%s removed in v2", name))
+		case known:
+			errs = append(errs, fmt.Errorf("%s moved to %s", name, dest))
+		default:
+			flagName := strings.ReplaceAll(val.Content[i].Value, "_", "-")
+			errs = append(errs, fmt.Errorf("%s moved to %s", name, EnvName(flagName)))
+		}
+	}
+	return errs
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 func applyDefaults(f *File) {
@@ -176,15 +205,6 @@ func applyDefaults(f *File) {
 	if f.Server.ShutdownTimeout.Duration == 0 {
 		f.Server.ShutdownTimeout.Duration = 30 * time.Second
 	}
-	if f.Admin.Port == 0 {
-		f.Admin.Port = 9090
-	}
-	if f.Admin.Bind == "" {
-		f.Admin.Bind = "127.0.0.1"
-	}
-	if f.Admin.RequestLogSize == 0 {
-		f.Admin.RequestLogSize = 500
-	}
 }
 
 // Validate checks the config for errors. Returns joined errors for all problems.
@@ -192,44 +212,19 @@ func (f *File) Validate() error {
 	var errs []error
 
 	if f.Server.Port < 1 || f.Server.Port > 65535 {
-		errs = append(errs, fmt.Errorf("server.port must be 1-65535, got %d", f.Server.Port))
+		errs = append(errs, fmt.Errorf("RESTITCH_PORT must be 1-65535, got %d", f.Server.Port))
 	}
 	if f.Server.TLSPort != 0 && (f.Server.TLSPort < 1 || f.Server.TLSPort > 65535) {
-		errs = append(errs, fmt.Errorf("server.tls_port must be 1-65535, got %d", f.Server.TLSPort))
-	}
-	if f.Admin.Port < 1 || f.Admin.Port > 65535 {
-		errs = append(errs, fmt.Errorf("admin.port must be 1-65535, got %d", f.Admin.Port))
+		errs = append(errs, fmt.Errorf("RESTITCH_TLS_PORT must be 1-65535, got %d", f.Server.TLSPort))
 	}
 
 	logFormat := strings.ToLower(f.Server.LogFormat)
 	if logFormat != "json" && logFormat != "text" {
-		errs = append(errs, fmt.Errorf("server.log_format must be json or text, got %q", f.Server.LogFormat))
+		errs = append(errs, fmt.Errorf("RESTITCH_LOG_FORMAT must be json or text, got %q", f.Server.LogFormat))
 	}
 	logLevel := strings.ToLower(f.Server.LogLevel)
 	if logLevel != "debug" && logLevel != "info" && logLevel != "warn" && logLevel != "error" {
-		errs = append(errs, fmt.Errorf("server.log_level must be debug/info/warn/error, got %q", f.Server.LogLevel))
-	}
-
-	if f.Server.Auth != nil && f.Server.Auth.JWT != nil {
-		if f.Server.Auth.JWT.JWKSURL == "" {
-			errs = append(errs, fmt.Errorf("server.auth.jwt.jwks_url is required when jwt is configured"))
-		}
-	}
-
-	switch f.Admin.Storage.Type {
-	case "", "memory":
-		// valid, no additional fields required
-	case "sqlite":
-		if f.Admin.Storage.URL == "" {
-			errs = append(errs, fmt.Errorf("admin.storage.url is required when type is %q", f.Admin.Storage.Type))
-		}
-	case "turso":
-		// The bundled sqlite driver cannot speak libsql (finding L8): a
-		// libsql:// DSN used to silently create a local file named after the
-		// URL. Reject it until a real libSQL client exists.
-		errs = append(errs, fmt.Errorf("admin.storage.type %q is not supported by this build; use sqlite or memory", f.Admin.Storage.Type))
-	default:
-		errs = append(errs, fmt.Errorf("admin.storage.type must be memory, sqlite, or turso, got %q", f.Admin.Storage.Type))
+		errs = append(errs, fmt.Errorf("RESTITCH_LOG_LEVEL must be debug/info/warn/error, got %q", f.Server.LogLevel))
 	}
 
 	if len(errs) == 0 {
@@ -242,45 +237,4 @@ func (f *File) Validate() error {
 func (f *File) Hash() string {
 	h := sha256.Sum256(f.raw)
 	return fmt.Sprintf("%x", h)
-}
-
-// ApplyEnvOverrides applies RESTITCH_* environment variables per §2.5.
-func ApplyEnvOverrides(f *File) {
-	if v := os.Getenv("RESTITCH_PORT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			f.Server.Port = n
-		}
-	}
-	if v := os.Getenv("RESTITCH_TLS_PORT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			f.Server.TLSPort = n
-		}
-	}
-	if v := os.Getenv("RESTITCH_TLS_CERT"); v != "" {
-		f.Server.TLSCert = v
-	}
-	if v := os.Getenv("RESTITCH_TLS_KEY"); v != "" {
-		f.Server.TLSKey = v
-	}
-	if v := os.Getenv("RESTITCH_LOG_FORMAT"); v != "" {
-		f.Server.LogFormat = v
-	}
-	if v := os.Getenv("RESTITCH_LOG_LEVEL"); v != "" {
-		f.Server.LogLevel = v
-	}
-	if v := os.Getenv("RESTITCH_ADMIN_PORT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			f.Admin.Port = n
-		}
-	}
-	if v := os.Getenv("RESTITCH_ADMIN_BIND"); v != "" {
-		f.Admin.Bind = v
-	}
-	if v := os.Getenv("RESTITCH_ADMIN_ENABLED"); v != "" {
-		b := strings.ToLower(v) == "true" || v == "1"
-		f.Admin.Enabled = &b
-	}
-	if v := os.Getenv("RESTITCH_ADMIN_API_KEY"); v != "" {
-		f.Admin.APIKey = v
-	}
 }

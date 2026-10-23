@@ -22,7 +22,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/alternayte/restitch-gateway/internal/server"
+	"github.com/alternayte/restitch-gateway/v2/internal/server"
 )
 
 func TestHandler_AuthorizationScoping_D8(t *testing.T) {
@@ -60,6 +60,7 @@ upstreams:
 compositions:
   scoped:
     path: /scoped
+    public: true
     method: GET
     steps:
       - name: a

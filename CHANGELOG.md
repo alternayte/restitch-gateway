@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- **Fix:** `request_schema` validation can no longer be bypassed. A non-empty body with a missing or non-JSON Content-Type returns 415, an empty or `null` body is validated as JSON `null`, and a body read error returns 400 instead of executing the composition. JSON detection now parses the media type (`application/json` or `+json`) instead of matching the substring "json".
+- Fix: the per-step cache and coalesce key is derived from the outgoing
+  upstream request (method, escaped URL, headers including forwarded
+  `Accept`/`Accept-Language`, body, inbound `Authorization`). Path params
+  that differ only in `/` placement and requests with different forwarded
+  headers no longer share an entry. Coalesced callers no longer share a
+  response that carries `Set-Cookie` or `Cache-Control: private`/`no-store`.
+- **Ordered gateway shutdown**: shutdown now runs in a fixed order (HTTP and
+  admin servers, registry poller and file watcher, final time-series flush,
+  request-record drain, storage close) instead of LIFO defers. The final
+  time-series window is no longer written to a closed store. The record drain
+  has one `server.shutdown_timeout` deadline instead of 5s per record. Records
+  sent after shutdown begins are dropped instead of panicking the process.
+  Dropped request records increment the new
+  `restitch_request_records_dropped_total{reason}` counter and log at most one
+  line per 10s.
+
 ## v1.2.0 — 2026-09-02
 
 First public release. Everything below this entry — the composition-engine

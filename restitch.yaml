@@ -7,6 +7,7 @@ upstreams:
 compositions:
   user-with-posts:
     path: "/api/user-posts"
+    public: true
     method: GET
     steps:
       - name: user

@@ -148,11 +148,21 @@ steps:
 
 - **GET only** — coalescing is only applied when the step method is GET.
   Non-GET steps with `coalesce: true` are ignored.
-- **Key construction** — the dedup key is
-  `method + URL + sha256(authorization)[:16]`. The authorization hash
-  prevents cross-user data leaks through coalescing.
-- **Shared results** — step results are value types. The same result is
-  returned to all coalesced callers.
+- **Key construction** — the gateway builds the outgoing upstream request
+  first and derives the key from it: the method, the final URL as sent
+  (after path and query escaping), every header the gateway sets on the
+  request (step headers, forwarded `Accept` and `Accept-Language`,
+  `Content-Type`), the request body, and the inbound `Authorization`
+  header. The key is the full SHA-256 digest of these fields. Per-request
+  headers (`X-Request-ID`, `X-Correlation-ID`, `traceparent`, `tracestate`,
+  `baggage`) are not part of the key. Credentials that an upstream `auth`
+  strategy of type `header`, `basic` or `oauth2` adds are constant for the
+  upstream, so they are not part of the key. The `passthrough` strategy
+  forwards the inbound `Authorization`, which the key includes.
+- **Shared results** — the same result is returned to all coalesced
+  callers, except a response with `Set-Cookie` or a `Cache-Control` of
+  `private` or `no-store`. A caller that joined the call of another caller
+  then sends its own request.
 - **Cache interaction** — coalescing is checked **after** the cache. If the
   cache has a hit, coalescing is skipped.
 
@@ -181,8 +191,9 @@ steps:
   a non-GET step is a validation error.
 - **TTL-based expiry** — cached responses expire after the configured `ttl`.
   A background janitor sweeps expired entries every 30 seconds.
-- **Key construction** — same as coalescing:
-  `method + URL + sha256(authorization)[:16]`.
+- **Key construction** — the same key as coalescing (see above). Two
+  requests share a cache entry only if the gateway sends the same request
+  upstream.
 - **What is cached** — responses with status < 500 that did not match an
   error rule.
 - **Cache bypass** — responses with status ≥ 500 or error-rule matches are

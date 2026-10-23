@@ -15,26 +15,37 @@
 package composition
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/auth"
-	"github.com/alternayte/restitch-gateway/internal/gwconfig"
-	"github.com/alternayte/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/v2/internal/auth"
+	"github.com/alternayte/restitch-gateway/v2/internal/gwconfig"
+	"github.com/alternayte/restitch-gateway/v2/internal/upstream"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
 
 // ParseConfig parses and validates composition configuration from YAML bytes.
+// Decoding is strict: an unknown key at any level is an error, and the v1
+// server: and admin: blocks are refused with the env var that replaced
+// each key.
 func ParseConfig(data []byte) (*Config, error) {
+	if err := gwconfig.CheckArtifactKeys(data); err != nil {
+		return nil, err
+	}
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("invalid YAML: %w", err)
 	}
 
@@ -458,7 +469,16 @@ func isPrivateUpstreamHost(host string) bool {
 	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }
 
+// reservedPaths are the gateway probes; a composition cannot claim them.
+var reservedPaths = map[string]bool{"/health": true, "/ready": true}
+
 func validateAndApplyDefaults(cfg *Config) error {
+	if cfg.Auth != nil && cfg.Auth.JWT != nil && cfg.Auth.JWT.JWKSURL == "" {
+		return fmt.Errorf("auth.jwt.jwks_url is required when jwt is configured")
+	}
+	if cfg.Auth != nil && len(cfg.Auth.APIKeys) == 0 && cfg.Auth.JWT == nil {
+		return fmt.Errorf("auth: set api_keys, jwt, or both")
+	}
 	for name, up := range cfg.Upstreams {
 		if up.URL == "" {
 			return fmt.Errorf("upstream %s: url is required", name)
@@ -486,6 +506,13 @@ func validateAndApplyDefaults(cfg *Config) error {
 
 		if comp.Response.ContentType == "" {
 			comp.Response.ContentType = "application/json"
+		}
+
+		if reservedPaths[comp.Path] {
+			return fmt.Errorf("composition %s: path %s is reserved for the gateway probes", compName, comp.Path)
+		}
+		if !comp.Public && cfg.Auth == nil {
+			return fmt.Errorf("composition %s is not public and the artifact has no auth policy: add a top-level auth block, or set public: true", compName)
 		}
 
 		if comp.MaxRequestBytes < 0 {

@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -61,6 +62,7 @@ func TestExecutor(t *testing.T) {
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: user
         upstream: test-upstream
@@ -137,6 +139,7 @@ compositions:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: user
         upstream: test-upstream
@@ -206,6 +209,7 @@ compositions:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: step1
         upstream: test-upstream
@@ -276,6 +280,7 @@ compositions:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: user
         upstream: test-upstream
@@ -331,6 +336,7 @@ compositions:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: step1
         upstream: test-upstream
@@ -362,6 +368,7 @@ compositions:
 compositions:
   existing:
     path: /existing
+    public: true
     steps: []
     response:
       status: 200
@@ -404,6 +411,7 @@ upstreams:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: a
         upstream: dead
@@ -498,6 +506,7 @@ func TestStepCacheKeysOnEvaluatedHeaders(t *testing.T) {
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: s1
         upstream: test-upstream
@@ -562,6 +571,7 @@ func TestStepCacheSkipsPrivateResponses(t *testing.T) {
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: c1
         upstream: test-upstream
@@ -593,5 +603,215 @@ compositions:
 
 	if got := atomic.LoadInt32(&hits); got != 6 {
 		t.Errorf("upstream hits = %d, want 6 (3 steps x 2 executions; private responses must not be cached)", got)
+	}
+}
+
+// TestStepCacheKeyUsesEscapedURL: path params a="x/y",b="z" and a="x",b="y/z"
+// produce different upstream URLs once escaped, so they must not share a
+// cache entry.
+func TestStepCacheKeyUsesEscapedURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"path": r.URL.EscapedPath()})
+	}))
+	defer server.Close()
+
+	config := createTestConfig(server.URL, `
+compositions:
+  test:
+    path: /test
+    public: true
+    steps:
+      - name: s1
+        upstream: test-upstream
+        path: "/items/{{ req.params.a }}/{{ req.params.b }}"
+        cache: {ttl: 30s}
+    response:
+      status: 200
+      body:
+        path: "{{ steps.s1.body.path }}"
+`)
+
+	executor := NewExecutor(config)
+	defer executor.Close()
+
+	exec := func(a, b string) string {
+		rd := NewRequestData(httptest.NewRequest("GET", "/test", nil), map[string]string{"a": a, "b": b}, nil)
+		result, err := executor.Execute(context.Background(), "test", rd)
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+		body, _ := result.Steps["s1"].Body.(map[string]interface{})
+		return body["path"].(string)
+	}
+
+	if got, want := exec("x/y", "z"), "/items/x%2Fy/z"; got != want {
+		t.Fatalf("first execution path = %q, want %q", got, want)
+	}
+	if got, want := exec("x", "y/z"), "/items/x/y%2Fz"; got != want {
+		t.Fatalf("second execution path = %q, want %q (cache key must use the escaped URL)", got, want)
+	}
+}
+
+// TestStepCacheKeyIncludesForwardedHeaders: Accept-Language is forwarded to
+// the upstream implicitly, so different values must not share a cache entry.
+func TestStepCacheKeyIncludesForwardedHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"lang": r.Header.Get("Accept-Language")})
+	}))
+	defer server.Close()
+
+	config := createTestConfig(server.URL, `
+compositions:
+  test:
+    path: /test
+    public: true
+    steps:
+      - name: s1
+        upstream: test-upstream
+        path: /greeting
+        cache: {ttl: 30s}
+    response:
+      status: 200
+      body:
+        lang: "{{ steps.s1.body.lang }}"
+`)
+
+	executor := NewExecutor(config)
+	defer executor.Close()
+
+	exec := func(lang string) string {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("Accept-Language", lang)
+		result, err := executor.Execute(context.Background(), "test", NewRequestData(req, nil, nil))
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+		body, _ := result.Steps["s1"].Body.(map[string]interface{})
+		return body["lang"].(string)
+	}
+
+	if got := exec("en"); got != "en" {
+		t.Fatalf("first execution lang = %q, want en", got)
+	}
+	if got := exec("fr"); got != "fr" {
+		t.Fatalf("second execution lang = %q, want fr (cache key must include forwarded headers)", got)
+	}
+}
+
+// TestStepCacheHitsForIdenticalRequests: identical requests share one cache
+// entry even though each gets its own X-Request-ID and trace context.
+func TestStepCacheHitsForIdenticalRequests(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+	}))
+	defer server.Close()
+
+	config := createTestConfig(server.URL, `
+compositions:
+  test:
+    path: /test
+    public: true
+    steps:
+      - name: s1
+        upstream: test-upstream
+        path: "/items/{{ req.params.id }}"
+        headers: {X-Tenant: "{{ req.headers['X-Tenant'] }}"}
+        cache: {ttl: 30s}
+    response:
+      status: 200
+      body:
+        ok: true
+`)
+
+	executor := NewExecutor(config)
+	defer executor.Close()
+
+	for i := 0; i < 3; i++ {
+		req := httptest.NewRequest("GET", "/test", nil)
+		req.Header.Set("X-Tenant", "t1")
+		req.Header.Set("Accept-Language", "en")
+		rd := NewRequestData(req, map[string]string{"id": "a/b"}, nil)
+		result, err := executor.Execute(context.Background(), "test", rd)
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+		if i > 0 && !result.StepTimings[0].Cached {
+			t.Errorf("execution %d: step not served from cache", i+1)
+		}
+	}
+
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("upstream hits = %d, want 1", got)
+	}
+}
+
+// TestCoalescedPrivateResponseNotShared: concurrent identical requests may
+// share one upstream call, but a response carrying Set-Cookie is user
+// specific, so a follower must issue its own request instead of reusing it.
+func TestCoalescedPrivateResponseNotShared(t *testing.T) {
+	var hits int32
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&hits, 1)
+		if n == 1 {
+			<-release
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Set-Cookie", "sid=s"+strconv.Itoa(int(n)))
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"n": n})
+	}))
+	defer server.Close()
+
+	config := createTestConfig(server.URL, `
+compositions:
+  test:
+    path: /test
+    public: true
+    steps:
+      - name: s1
+        upstream: test-upstream
+        path: /session
+        coalesce: true
+    response:
+      status: 200
+      body:
+        ok: true
+`)
+
+	executor := NewExecutor(config)
+	defer executor.Close()
+
+	const callers = 4
+	cookies := make([]string, callers)
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			rd := NewRequestData(httptest.NewRequest("GET", "/test", nil), nil, nil)
+			result, err := executor.Execute(context.Background(), "test", rd)
+			if err != nil {
+				t.Errorf("Execute failed: %v", err)
+				return
+			}
+			cookies[i] = result.Steps["s1"].Headers.Get("Set-Cookie")
+		}(i)
+	}
+	// Let every caller join the in-flight call before the leader returns.
+	time.Sleep(100 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	seen := map[string]bool{}
+	for _, c := range cookies {
+		if seen[c] {
+			t.Errorf("Set-Cookie %q was shared between coalesced callers: %v", c, cookies)
+		}
+		seen[c] = true
 	}
 }

@@ -7,9 +7,8 @@
 #   export BASIC_USER=admin
 #   export BASIC_PASS=password
 
-server:
-  auth:
-    api_keys: ["${GATEWAY_KEY}"]
+auth:
+  api_keys: ["${GATEWAY_KEY}"]
 
 upstreams:
   header-auth:

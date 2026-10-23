@@ -35,6 +35,7 @@ upstreams:
 compositions:
   dashboard:
     path: /api/dashboard
+    public: true
     steps:
       - name: user
         upstream: mock
@@ -91,6 +92,7 @@ upstreams:
 compositions:
   partial:
     path: /p
+    public: true
     steps:
       - name: user
         upstream: mock
@@ -168,6 +170,7 @@ upstreams:
 compositions:
   fail:
     path: /fail
+    public: true
     steps:
       - name: data
         upstream: dead
@@ -213,6 +216,7 @@ upstreams:
 compositions:
   timeout:
     path: /timeout
+    public: true
     steps:
       - name: s
         upstream: slow
@@ -256,6 +260,7 @@ upstreams:
 compositions:
   user:
     path: "/api/users/{id}"
+    public: true
     steps:
       - name: u
         upstream: mock
@@ -308,6 +313,7 @@ upstreams:
 compositions:
   retry:
     path: /retry
+    public: true
     steps:
       - name: s
         upstream: flaky
@@ -358,6 +364,7 @@ upstreams:
 compositions:
   cached:
     path: /cached
+    public: true
     steps:
       - name: data
         upstream: mock
@@ -404,6 +411,8 @@ compositions:
 func TestE2E_InboundAPIKey(t *testing.T) {
 	Run(t, Config{
 		YAML: `
+auth:
+  api_keys: ["test-key-42"]
 upstreams:
   mock:
     url: "@@UPSTREAM_mock@@"
@@ -424,7 +433,6 @@ compositions:
 				"GET /data": {Body: `{"ok":true}`},
 			}},
 		},
-		APIKeys: []string{"test-key-42"},
 	}, func(t *testing.T, env *Env) {
 		// Without key → 401
 		resp1, err := env.Client.Get(env.GatewayURL + "/protected")
@@ -461,6 +469,7 @@ upstreams:
 compositions:
   big:
     path: /big
+    public: true
     steps:
       - name: s
         upstream: big
@@ -505,6 +514,7 @@ upstreams:
 compositions:
   scoped:
     path: /scoped
+    public: true
     steps:
       - name: pt
         upstream: passthrough-svc
@@ -585,6 +595,7 @@ upstreams:
 compositions:
   info:
     path: /api/info
+    public: true
     steps:
       - name: detail
         upstream: mock

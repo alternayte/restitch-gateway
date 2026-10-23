@@ -24,14 +24,18 @@ import (
 var version = "dev"
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1][0] == '-' {
-		// No subcommand or starts with flag → default to "run"
-		os.Exit(runCmd(os.Args[1:]))
+	if len(os.Args) < 2 {
+		usage()
+		os.Exit(2)
 	}
 
 	switch os.Args[1] {
-	case "run":
-		os.Exit(runCmd(os.Args[2:]))
+	case "gateway":
+		os.Exit(gatewayCmd(os.Args[2:]))
+	case "studio":
+		os.Exit(studioCmd(os.Args[2:]))
+	case "publish":
+		os.Exit(publishCmd(os.Args[2:]))
 	case "check":
 		os.Exit(checkCmd(os.Args[2:]))
 	case "version":
@@ -44,7 +48,11 @@ func main() {
 		os.Exit(healthcheckCmd(os.Args[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
-		fmt.Fprintf(os.Stderr, "usage: restitch [run|check|version|import|dev|healthcheck] [flags]\n")
+		usage()
 		os.Exit(2)
 	}
+}
+
+func usage() {
+	fmt.Fprintf(os.Stderr, "usage: restitch [gateway|studio|publish|check|version|import|dev|healthcheck] [flags]\n")
 }

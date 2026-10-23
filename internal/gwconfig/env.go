@@ -15,15 +15,55 @@
 package gwconfig
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
 )
 
+// EnvName returns the environment variable that sets a flag: RESTITCH_
+// plus the flag name in upper snake case. Every process setting follows
+// this one rule, so the docs can list the variables from the flag sets.
+func EnvName(flagName string) string {
+	return "RESTITCH_" + strings.ToUpper(strings.ReplaceAll(flagName, "-", "_"))
+}
+
+// BindEnv sets each flag that the command line did not give from its
+// EnvName variable. Precedence is flag, then env, then default. An env
+// value the flag cannot parse is an error that names the variable.
+func BindEnv(fs *flag.FlagSet, lookup func(string) (string, bool)) error {
+	given := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
+
+	var errs []error
+	fs.VisitAll(func(f *flag.Flag) {
+		if given[f.Name] {
+			return
+		}
+		name := EnvName(f.Name)
+		v, ok := lookup(name)
+		if !ok || v == "" {
+			return
+		}
+		if err := fs.Set(f.Name, v); err != nil {
+			errs = append(errs, fmt.Errorf("%s=%q: %w", name, v, err))
+		}
+	})
+	return errors.Join(errs...)
+}
+
 // ExpandEnvStrict expands ${VAR} and ${VAR:default}. "$$" → literal "$".
 // A "$" not part of "$$" or "${...}" is an error. ${VAR} with VAR unset
 // and no default is an error listing the variable name.
 func ExpandEnvStrict(s string) (string, error) {
+	return ExpandWith(s, os.LookupEnv)
+}
+
+// ExpandWith is ExpandEnvStrict with the variable lookup supplied by the
+// caller. Studio validates an artifact without the gateway's environment
+// by passing a lookup that answers a placeholder for every name.
+func ExpandWith(s string, lookup func(string) (string, bool)) (string, error) {
 	var b strings.Builder
 	i := 0
 
@@ -70,7 +110,7 @@ func ExpandEnvStrict(s string) (string, error) {
 			hasDefault = true
 		}
 
-		val, exists := os.LookupEnv(varName)
+		val, exists := lookup(varName)
 		if !exists || val == "" {
 			if hasDefault {
 				b.WriteString(defaultVal)

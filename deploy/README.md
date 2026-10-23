@@ -1,72 +1,137 @@
-# Restitch production stack
+# Deploying Restitch
 
-Gateway in **registry mode** against Studio, with Prometheus and Jaeger. This
-is the stack that exercises the centralized-config loop (M20 + M21): Studio
-owns configuration, and the gateway polls `/api/v1/registry/bundle` for it.
+One image serves every role. The container command picks the role:
+`gateway` or `studio`. The image has no default command.
 
-For a simple file-config quickstart instead, see `examples/docker-compose/`.
+- `docker-compose.yml` runs Studio on Postgres, two managed gateways, a mock
+  upstream and Prometheus.
+- `kubernetes/` holds plain manifests for Studio and the gateways.
 
-## Bring-up
+CI checks both with `make deploy-lint`: `docker compose config` and
+`kubeconform -strict`.
+
+For one gateway from one file, with no Studio, see `examples/docker-compose/`.
+
+## Docker Compose
+
+The gateways need a gateway token, and only Studio can make one. The bring-up
+therefore has two steps.
+
+### Step 1: start Studio
 
 ```bash
 cd deploy
-cp .env.example .env      # then edit ports/keys as needed
-docker compose up -d --build
+cp .env.example .env
 ```
 
-The first build runs `npm ci` and two Go builds — expect several minutes.
+Set `POSTGRES_PASSWORD`, `RESTITCH_BOOTSTRAP_EMAIL` and
+`RESTITCH_BOOTSTRAP_PASSWORD` in `.env`. Use URL-safe characters in the
+Postgres password, because Studio receives it inside a database URL.
+
+```bash
+docker compose up -d --build --wait postgres studio
+```
+
+Studio is at http://localhost:3080. Sign in as the bootstrap owner.
+
+### Step 2: make a token and start the gateways
+
+1. In Studio, create an environment, for example `production`.
+2. Open the environment, then open **Gateway tokens**. Create a token.
+3. Copy the token (it starts with `rgt_`). Studio shows it once.
+4. Set `RESTITCH_GATEWAY_TOKEN` in `.env` to the token.
+5. Start the rest of the stack:
+
+```bash
+docker compose up -d --wait
+```
+
+Without a token, each gateway exits with
+`gateway: -studio-url needs -gateway-token (RESTITCH_GATEWAY_TOKEN)`, and
+Compose stops restarting it after five attempts.
+
+### Step 3: publish
+
+Add resources to the draft, or import an artifact file on the environment
+page. The mock upstream is `http://mockupstream:8081`;
+`examples/docker-compose/restitch.yaml` is an artifact that uses it. Publish.
+Each gateway applies the new version within one poll interval (10s).
+
+```bash
+curl -s http://localhost:8080/api/users/42/dashboard   # gateway-1
+curl -s http://localhost:8082/api/users/42/dashboard   # gateway-2
+```
+
+Until the first version exists, each gateway answers `/health` with 200 and
+`/ready` with 503.
 
 | Service | Default URL |
 |---------|-------------|
-| Gateway | http://localhost:8080 |
-| Gateway admin + `/metrics` | http://localhost:9090 |
 | Studio | http://localhost:3080 |
+| gateway-1 | http://localhost:8080 |
+| gateway-2 | http://localhost:8082 |
 | Prometheus | http://localhost:9091 |
-| Jaeger UI | http://localhost:16686 |
 
-**Prometheus is on 9091, not its conventional 9090** — the gateway admin
-server already owns 9090 on the host.
+Each gateway serves `/metrics` on `RESTITCH_OPS_PORT` (9090) inside the
+Compose network. Prometheus scrapes both.
 
-## Seeding the registry
-
-A fresh Studio has no compositions, so the registry bundle is empty and the
-gateway starts serving nothing. Create one (the registry API requires the
-key from `RESTITCH_REGISTRY_KEY` in your `.env`, hardening C1; the field is
-`yaml_content`, finding M26):
+### Teardown
 
 ```bash
-curl -X POST http://localhost:3080/api/v1/configs \
-  -H 'Content-Type: application/json' \
-  -H 'X-Admin-Key: restitch-dev' \
-  -d '{"name":"example","yaml_content":"compositions:\n  hello:\n    path: /hello\n    method: GET\n    steps: []\n"}'
+docker compose down -v     # -v also deletes the Postgres and Prometheus data
 ```
 
-The gateway picks it up within one poll interval (10s by default).
+## Kubernetes
+
+The manifests assume a Postgres database that you run, and a namespace of
+your choice. They create no Secret, so no credential is in the repository.
+
+1. Create the Studio secret:
+
+   ```bash
+   kubectl create secret generic restitch-studio \
+     --from-literal=database-url='postgres://USER:PASSWORD@HOST:5432/DB?sslmode=require' \
+     --from-literal=bootstrap-email='owner@example.com' \
+     --from-literal=bootstrap-password='CHANGE-ME'
+   ```
+
+2. In `kubernetes/studio.yaml`, set `RESTITCH_PUBLIC_URL` to the URL people
+   use to reach Studio. Set the image tag in both files to a release.
+3. Apply Studio, and expose the `restitch-studio` Service with your ingress:
+
+   ```bash
+   kubectl apply -f kubernetes/studio.yaml
+   ```
+
+4. Sign in, create an environment and a gateway token, as in the Compose
+   steps. Create the gateway secret:
+
+   ```bash
+   kubectl create secret generic restitch-gateway --from-literal=gateway-token='rgt_...'
+   ```
+
+5. Apply the gateways:
+
+   ```bash
+   kubectl apply -f kubernetes/gateway.yaml
+   ```
+
+Studio probes: `/health` (process up) and `/ready` (database answers).
+Gateway probes: `/health` and `/ready` on the data port. `/ready` stays 503
+until the gateway applies its first artifact version.
 
 ## Tuning the latency alert
 
 `prometheus/rules/alerts.yml` → `RestitchHighP95Latency` → `expr:`. The `> 1`
-literal is the P95 threshold in **seconds**. Prometheus rule files have no
-variable substitution, so this literal is the configuration point. After
-editing, re-run the unit tests:
+literal is the P95 threshold in seconds. Prometheus rule files have no
+variable substitution, so this literal is the configuration point. After you
+edit it, run the rule tests:
 
 ```bash
-# Prefer .env when present so a version override there does not drift from
-# the Prometheus actually being tested (finding L28).
-ENV_FILE="$PWD/.env"; [ -f "$ENV_FILE" ] || ENV_FILE="$PWD/.env.example"
 docker run --rm -v "$PWD/prometheus:/p:ro" --entrypoint=/bin/promtool \
-  prom/prometheus:$(grep -E '^PROMETHEUS_VERSION=' "$ENV_FILE" | cut -d= -f2) \
+  prom/prometheus:$(grep -E '^PROMETHEUS_VERSION=' .env.example | cut -d= -f2) \
   test rules /p/rules/alerts_test.yml
 ```
 
-## Alerting
-
-No Alertmanager ships here on purpose — a demo receiver that discards every
-notification proves nothing. `prometheus/prometheus.yml` has a commented
-`alerting:` block marking where to point your own.
-
-## Teardown
-
-```bash
-docker compose down -v     # -v also drops the Studio database and Prometheus TSDB
-```
+No Alertmanager ships here. `prometheus/prometheus.yml` has a commented
+`alerting:` block that shows where to point your own.

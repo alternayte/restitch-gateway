@@ -1,45 +1,33 @@
-# Docker Compose Example
+# Standalone gateway with Docker Compose
 
-Runs the full Restitch stack: mock upstream, gateway, and Studio.
+Runs one gateway in standalone mode from `restitch.yaml`, with a mock upstream.
+There is no Studio. For Studio on Postgres with managed gateways, see `deploy/`.
 
-## Quick Start
+## Run
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
-## Services
+| Service | URL |
+|---------|-----|
+| Gateway | http://localhost:8080 |
+| Mock upstream | http://mockupstream:8081, inside the Compose network only |
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| Gateway | http://localhost:8080 | Data plane — serves compositions |
-| Admin API | http://localhost:9090 | Metrics, request log, config management |
-| Studio | http://localhost:3080 | Web UI |
-| Mock upstream | http://localhost:8081 | Test backend |
-
-## Try It
+## Try it
 
 ```bash
-# Fetch a composed user dashboard
-curl -s http://localhost:8080/api/users/42/dashboard | python3 -m json.tool
-
-# Check metrics
-curl -s http://localhost:9090/metrics | grep restitch_requests_total
-
-# View recent requests (admin key required since hardening C3)
-curl -s -H "X-Admin-Key: restitch-dev" http://localhost:9090/admin/api/requests \
-    | python3 -m json.tool
-
-# Open Studio
-open http://localhost:3080
+curl -s http://localhost:8080/api/users/42/dashboard
+curl -s http://localhost:8080/api/echo
+curl -s http://localhost:8080/ready
 ```
 
-## Configuration
+## Change the config
 
-Edit `restitch.yaml` to modify compositions. The gateway watches the config
-file and reloads automatically, or trigger a reload via Studio or the admin
-API:
+Edit `restitch.yaml`. The gateway reloads the file when it changes. Some editors
+replace the file instead of writing to it, and a single-file bind mount then
+keeps the old content. In that case, restart the gateway:
 
 ```bash
-curl -X POST -H "X-Admin-Key: restitch-dev" http://localhost:9090/admin/api/reload
+docker compose restart gateway
 ```

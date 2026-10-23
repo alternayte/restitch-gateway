@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	upstreampkg "github.com/alternayte/restitch-gateway/internal/upstream"
+	upstreampkg "github.com/alternayte/restitch-gateway/v2/internal/upstream"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -66,9 +66,17 @@ func ExecuteStepWithTimeout(
 	env map[string]interface{},
 	timeout time.Duration,
 ) (*StepResult, error) {
-	stepCtx, cancel := context.WithTimeout(parentCtx, timeout)
-	defer cancel()
+	req, err := buildStepRequest(parentCtx, step, up, env)
+	if err != nil {
+		return nil, err
+	}
+	return sendStepRequest(req, step, up, timeout)
+}
 
+// buildStepRequest evaluates the step templates and returns the outgoing
+// upstream request exactly as it will be sent, minus the headers the
+// upstream auth RoundTripper adds later.
+func buildStepRequest(ctx context.Context, step *CompiledStep, up *upstreampkg.Upstream, env map[string]interface{}) (*http.Request, error) {
 	path, err := step.PathPart.EvalString(env, EscapePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate path: %w", err)
@@ -105,7 +113,7 @@ func ExecuteStepWithTimeout(
 		body = bytes.NewReader(bodyBytes)
 	}
 
-	req, err := http.NewRequestWithContext(stepCtx, step.Step.Method, fullURL, body)
+	req, err := http.NewRequestWithContext(ctx, step.Step.Method, fullURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -120,7 +128,7 @@ func ExecuteStepWithTimeout(
 	// This replaces the manual traceparent copy from propagateHeaders when tracing
 	// is active. The traceparent entry in propagatedHeaders remains as a fallback
 	// for when tracing is disabled.
-	otel.GetTextMapPropagator().Inject(stepCtx, propagation.HeaderCarrier(req.Header))
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 
 	for key, tmpl := range step.Headers {
 		val, err := tmpl.EvalString(env, EscapeNone)
@@ -135,6 +143,16 @@ func ExecuteStepWithTimeout(
 		}
 		req.Header.Set(key, val)
 	}
+
+	return req, nil
+}
+
+// sendStepRequest sends a request built by buildStepRequest under the step
+// timeout and reads the response.
+func sendStepRequest(req *http.Request, step *CompiledStep, up *upstreampkg.Upstream, timeout time.Duration) (*StepResult, error) {
+	stepCtx, cancel := context.WithTimeout(req.Context(), timeout)
+	defer cancel()
+	req = req.WithContext(stepCtx)
 
 	resp, err := up.Client.Do(req)
 	if err != nil {

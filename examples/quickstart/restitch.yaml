@@ -8,6 +8,7 @@ upstreams:
 compositions:
   user-posts:
     path: "/api/user-posts"
+    public: true
     method: GET
     steps:
       - name: user
@@ -23,6 +24,7 @@ compositions:
 
   echo:
     path: "/api/echo"
+    public: true
     method: GET
     steps:
       - name: e

@@ -28,6 +28,23 @@ jobs:
   go:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Studio tests run against SQLite always and against this Postgres
+    # through RESTITCH_TEST_DATABASE_URL.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: restitch_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      RESTITCH_TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/restitch_test?sslmode=disable
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -37,7 +54,7 @@ jobs:
           cache: npm
           cache-dependency-path: studio/package-lock.json
 
-      # cmd/restitch-studio embeds dist/, which is a build artifact and not
+      # internal/studio embeds dist/, which is a build artifact and not
       # committed (finding M36); a fresh clone needs the frontend first.
       - run: npm ci && npm run build
         working-directory: studio
@@ -125,6 +142,17 @@ jobs:
       - name: Build Docker image
         run: docker build -t restitch:ci .
 
+      - name: Build the Compose demo upstream
+        run: docker build --target mockupstream -t restitch-mockupstream:ci .
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      # docker compose config and kubeconform over deploy/.
+      - name: Lint deployment files
+        run: make deploy-lint
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -177,6 +205,7 @@ jobs:
             loadtest:
               path: "/loadtest"
               method: GET
+              public: true
               steps:
                 - name: s1
                   upstream: mock
@@ -185,7 +214,7 @@ jobs:
                 body:
                   name: "{{ steps.s1.body.name }}"
           YAML
-          ./bin/restitch run -config /tmp/ci_load.yaml -port 18080 -log-format json &
+          ./bin/restitch gateway -config /tmp/ci_load.yaml -port 18080 -log-format json &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:18080/loadtest >/dev/null && break
             sleep 1

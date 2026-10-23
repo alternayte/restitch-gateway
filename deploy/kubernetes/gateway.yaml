@@ -1,0 +1,79 @@
+# Restitch gateways in managed mode. They pull the current artifact version
+# of one environment from Studio. The gateway token comes from the Secret
+# restitch-gateway (key gateway-token), which you create after you make the
+# token in Studio (see deploy/README.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restitch-gateway
+  labels:
+    app.kubernetes.io/name: restitch-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: restitch-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: restitch-gateway
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: ghcr.io/alternayte/restitch-gateway:latest
+          args: ["gateway"]
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: ops
+              containerPort: 9090
+          env:
+            - name: RESTITCH_STUDIO_URL
+              value: http://restitch-studio:3080
+            - name: RESTITCH_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: restitch-gateway
+                  key: gateway-token
+            - name: RESTITCH_OPS_PORT
+              value: "9090"
+          # /ready stays 503 until the first artifact version is applied.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restitch-gateway
+  labels:
+    app.kubernetes.io/name: restitch-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: restitch-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

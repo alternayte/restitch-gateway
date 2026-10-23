@@ -26,6 +26,9 @@ import (
 type Config struct {
 	Port    int
 	TLSPort int
+	// ReadTimeout and WriteTimeout default to 30s when zero.
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
 }
 
 // Server represents the restitch HTTP/HTTPS server.
@@ -35,13 +38,23 @@ type Server struct {
 	httpServer  *http.Server
 	httpsServer *http.Server
 	ready       atomic.Bool
-	startTime   time.Time
+	// unconfigured holds /ready at 503 until the first artifact is applied
+	// (managed mode). It is false by default, so standalone mode is ready
+	// once the listener is bound.
+	unconfigured atomic.Bool
+	startTime    time.Time
 }
 
 // New creates a new Server with the given configuration.
 func New(config Config) *Server {
 	router := NewRouter()
 
+	if config.ReadTimeout == 0 {
+		config.ReadTimeout = 30 * time.Second
+	}
+	if config.WriteTimeout == 0 {
+		config.WriteTimeout = 30 * time.Second
+	}
 	s := &Server{
 		config:    config,
 		router:    router,
@@ -51,8 +64,8 @@ func New(config Config) *Server {
 	s.httpServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", config.Port),
 		Handler:           router,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		ReadTimeout:       config.ReadTimeout,
+		WriteTimeout:      config.WriteTimeout,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
@@ -60,8 +73,8 @@ func New(config Config) *Server {
 	s.httpsServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", config.TLSPort),
 		Handler:           router,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		ReadTimeout:       config.ReadTimeout,
+		WriteTimeout:      config.WriteTimeout,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
@@ -108,9 +121,16 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	return s.httpsServer.ServeTLS(ln, "", "")
 }
 
-// Ready returns whether the server is ready to accept requests.
+// Ready returns whether the server is ready to accept requests: the
+// listener is bound and a config is applied.
 func (s *Server) Ready() bool {
-	return s.ready.Load()
+	return s.ready.Load() && !s.unconfigured.Load()
+}
+
+// SetConfigured records whether a config is applied. A managed gateway
+// starts unconfigured and turns configured after its first pull.
+func (s *Server) SetConfigured(configured bool) {
+	s.unconfigured.Store(!configured)
 }
 
 // SetReady sets the server's ready state.

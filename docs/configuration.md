@@ -67,7 +67,7 @@ Top-level server settings. All fields are optional.
 | `tls_key` | string | `""` | Path to TLS private key |
 | `read_timeout` | duration | `"10s"` | HTTP server read timeout |
 | `write_timeout` | duration | `"30s"` | HTTP server write timeout |
-| `shutdown_timeout` | duration | `"30s"` | Graceful shutdown deadline |
+| `shutdown_timeout` | duration | `"30s"` | Graceful shutdown deadline. It bounds the HTTP and admin server drain, and then separately the final time-series flush and request-record drain. |
 | `log_format` | string | `"json"` | Log output format: `json` or `text` |
 | `log_level` | string | `"info"` | Minimum log level: `debug`, `info`, `warn`, `error` |
 
@@ -295,7 +295,7 @@ a DAG of upstream steps and a response template.
 | `public` | bool | `false` | When `true`, skip inbound auth for this route |
 | `rate_limit` | object | — | Per-composition rate limiter. Same fields as `server.rate_limit`. |
 | `max_request_bytes` | int | `1048576` | Maximum request body size in bytes (default 1 MiB). Requests exceeding this are rejected with 413. |
-| `request_schema` | object | — | JSON Schema for request body validation. Invalid requests are rejected with 400. |
+| `request_schema` | object | — | JSON Schema for request body validation. Invalid requests are rejected with 400. A non-empty body must have a JSON Content-Type (`application/json` or a `+json` type), otherwise the request is rejected with 415. An empty body or a literal `null` is validated as JSON `null`, so a `type: object` schema rejects it. |
 
 ### compositions.*.steps
 

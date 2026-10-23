@@ -21,6 +21,7 @@ Metrics are served on the admin port (default 9090) at `GET /metrics`.
 | `restitch_cache_hits_total` | counter | `composition`, `step` | Step cache hits |
 | `restitch_cache_misses_total` | counter | `composition`, `step` | Step cache misses |
 | `restitch_coalesced_total` | counter | `composition`, `step` | Requests that shared a coalesced upstream call |
+| `restitch_telemetry_dropped_total` | counter | `kind` | Telemetry a managed gateway dropped after one failed retry to push it to Studio: `usage` (one-minute aggregates) or `requests` (sampled requests). Request handling never waits on a push. |
 | `restitch_registry_polls_total` | counter | `result` | Registry polls by result (`success`, `not_modified`, `error`) |
 | `restitch_registry_poll_duration_seconds` | histogram | — | Registry poll duration |
 | `restitch_registry_last_success_timestamp` | gauge | — | Unix time of the last successful registry poll |

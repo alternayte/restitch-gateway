@@ -23,14 +23,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/admin"
-	"github.com/alternayte/restitch-gateway/internal/composition"
-	"github.com/alternayte/restitch-gateway/internal/inbound"
-	"github.com/alternayte/restitch-gateway/internal/server"
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
+	"github.com/alternayte/restitch-gateway/v2/internal/inbound"
+	"github.com/alternayte/restitch-gateway/v2/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/v2/internal/server"
 )
 
 // ScriptedResponse defines a canned response for a scripted upstream.
@@ -52,15 +53,39 @@ type UpstreamSpec struct {
 type Config struct {
 	YAML      string
 	Upstreams map[string]UpstreamSpec
-	APIKeys   []string // if set, enables inbound API key auth
 }
 
 // Env provides access to the running gateway for tests.
 type Env struct {
 	GatewayURL string
 	Client     *http.Client
-	Requests   *admin.RingBuffer
+	Requests   *RecordLog
 	hits       map[string]*atomic.Int64
+}
+
+// RecordLog keeps every request record the handler emits, newest first
+// in List.
+type RecordLog struct {
+	mu   sync.Mutex
+	recs []reqlog.Record
+}
+
+// Record implements the handler's recorder.
+func (l *RecordLog) Record(rec reqlog.Record) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.recs = append(l.recs, rec)
+}
+
+// List returns up to limit records, newest first.
+func (l *RecordLog) List(limit int) []reqlog.Record {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []reqlog.Record
+	for i := len(l.recs) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, l.recs[i])
+	}
+	return out
 }
 
 // Hits returns the number of requests received by the named upstream.
@@ -129,12 +154,12 @@ func Run(t *testing.T, cfg Config, fn func(t *testing.T, env *Env)) {
 		t.Fatalf("CompileConfig: %v", err)
 	}
 
+	// The artifact's auth policy builds the authenticator, as the gateway
+	// does.
 	var authenticator *inbound.Authenticator
-	if len(cfg.APIKeys) > 0 {
+	if parsed.Auth != nil {
 		var authErr error
-		authenticator, authErr = inbound.New(context.Background(), inbound.InboundAuthConfig{
-			APIKeys: cfg.APIKeys,
-		})
+		authenticator, authErr = inbound.New(context.Background(), *parsed.Auth)
 		if authErr != nil {
 			t.Fatalf("inbound auth: %v", authErr)
 		}
@@ -142,13 +167,8 @@ func Run(t *testing.T, cfg Config, fn func(t *testing.T, env *Env)) {
 
 	handler := composition.NewHandler(compiled, authenticator)
 
-	ring := admin.NewRingBuffer(100)
-	stats := admin.NewStats()
-	handler.SetRecorder(&admin.MultiRecorder{
-		Ring:  ring,
-		Stats: stats,
-	})
-	env.Requests = ring
+	env.Requests = &RecordLog{}
+	handler.SetRecorder(env.Requests)
 
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)
