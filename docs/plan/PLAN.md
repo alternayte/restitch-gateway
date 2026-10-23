@@ -23,7 +23,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
 - [x] C13 — Gateways push sampled requests with redacted headers and no bodies
 - [x] C14 — `restitch publish` and YAML import and export use the publish path
-- [ ] C15 — `restitch dev` runs both roles in one process on SQLite
+- [x] C15 — `restitch dev` runs both roles in one process on SQLite
 
 ### Studio UI
 - [ ] C16 — The new UI shell signs in and renders environments through the generated client
@@ -238,7 +238,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C15 — `restitch dev` runs both roles in one process on SQLite
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C10
 - **Files:** `cmd/restitch/dev.go`, `cmd/restitch/dev_test.go`, `internal/devmode/`
 - **Goal:** `restitch dev` starts Studio and a gateway in one process with a dev environment, a bootstrap user and a wired token, with no env vars.
@@ -246,6 +246,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and `internal/devmode` no longer spawns child processes.
 - **Spec:** Decision on dev mode.
 - **Notes:** SQLite under `.restitch/` in the working directory. Print the sign-in URL and credentials on start.
+  Done: `cmd/restitch/dev.go` starts `studio.Server` on 127.0.0.1 (default port 3080, SQLite in -data-dir, default .restitch), signs in dev@restitch.local / restitch-dev-password, and runs `gatewayCmd` in the same process as a managed gateway of environment "dev" with a 1s poll. `Server.PrepareDevEnvironment` creates the environment and issues a fresh token on each start, revoking the previous dev token. `internal/devmode` is deleted. Flags: -port, -studio-port, -data-dir.
 
 ---
 
