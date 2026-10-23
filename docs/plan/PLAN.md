@@ -392,7 +392,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C27 — The docs describe v2: container platforms, configuration, Studio, CHANGELOG
 
-- **Status:** docs done; AGENTS.md agents-audit pending (main session)
+- **Status:** done; AGENTS.md updated through agents-audit items 1-14, accepted by the user on 2026-10-24
 - **Depends on:** C26
 - **Files:** `docs/deployment.md`, `docs/configuration.md`, `docs/studio.md`, `README.md`, `CHANGELOG.md`
 - **Goal:** A reader deploys Studio and gateways to any image-and-env-vars platform from the generic guide, and every env var in the code appears once in the docs.
