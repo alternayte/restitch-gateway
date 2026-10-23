@@ -19,7 +19,7 @@ lint:
 	golangci-lint run
 
 run:
-	go run ./cmd/restitch
+	go run ./cmd/restitch gateway
 
 ci: vet lint race
 

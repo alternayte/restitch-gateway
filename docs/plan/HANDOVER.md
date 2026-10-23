@@ -1,10 +1,10 @@
 # Handover
 
-Updated: 2026-10-24, session 5 (closed)
+Updated: 2026-10-24, session 5 (closed after C27 docs)
 
 ## Where we are
 
-C01-C18, C20 and C22-C24 and C26 are done; C26 has not run in CI yet. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The new frontend in `studio/` (TanStack, generated client, sluice UI layer) signs in and lists and creates environments; `restitch studio` serves it from `internal/studio/dist`. The old Studio binary, registry and session packages are gone. One image holds only /restitch and needs a role command; `deploy/` has a Compose stack (Postgres, Studio, two gateways, mock upstream, Prometheus) with a two-step bring-up, and plain Kubernetes manifests; `make deploy-lint` lints both. Studio answers GET /health and GET /ready. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
+C01-C18, C20, C22-C24 and C26 are done and merged to main (PR #34). C27 docs are done on branch c27-docs; its AGENTS.md half waits for an agents-audit by the user. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The new frontend in `studio/` (TanStack, generated client, sluice UI layer) signs in and lists and creates environments; `restitch studio` serves it from `internal/studio/dist`. The old Studio binary, registry and session packages are gone. One image holds only /restitch and needs a role command; `deploy/` has a Compose stack (Postgres, Studio, two gateways, mock upstream, Prometheus) with a two-step bring-up, and plain Kubernetes manifests; `make deploy-lint` lints both. Studio answers GET /health and GET /ready. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
 
 ## Prove it
 
@@ -13,11 +13,11 @@ Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its
 
 ## Active chunk
 
-None. Unblocked next: C27 (docs), C25 (command palette), C19 (step graph), C21 (secret picker).
+C27: docs done; AGENTS.md pending. Unblocked next: C25 (command palette), C19 (step graph), C21 (secret picker).
 
 ## Next action
 
-Push the branch and open a PR, or run the CI workflow by hand, to see the C26 lint steps pass in CI; CI runs only on pull_request to main and pushes to main. Ask the user first: both are outward-facing. Then start C27: docs for container platforms, configuration, Studio and the CHANGELOG, and an agents-audit for the stale AGENTS.md lines.
+The user runs `agents-audit`. Proposed AGENTS.md replacements are in the LOG entry for session 5. After the accepted items land, mark C27 done and merge the c27-docs PR when CI is green.
 
 ## Decisions
 
@@ -35,13 +35,12 @@ Push the branch and open a PR, or run the CI workflow by hand, to see the C26 li
 
 ## Open questions
 
-- README and docs still show v1 server:/admin: blocks and the removed -registry-url/-registry-key flags. C27 rewrites them; do not patch them piecemeal.
-- `AGENTS.md` still describes v1 in its Run section (`cmd/restitch-studio/dist`, `bin/restitch dev` finding `bin/restitch-studio`) and its registry and bundle domain words. Only init-agents or an accepted agents-audit item may change it: run agents-audit as part of C27, or earlier if a session trips over it.
+- `AGENTS.md` still describes v1 in its Run section (`cmd/restitch-studio/dist`, `bin/restitch dev` finding `bin/restitch-studio`) and its registry and bundle domain words. Only init-agents or an accepted agents-audit item may change it; the user triggers agents-audit.
 - sluice's UI is AGPL-3.0-only and Restitch is Apache-2.0. The ported files are the user's own code; the user decides whether that needs a note.
 
 ## Environment
 
-- Branch: `v2-control-plane`, cut from `fix/review-5-6-7`; neither is merged to `main` or pushed.
+- Branch: work branches come off `main`; `v2-control-plane` merged as PR #34. C27 is on `c27-docs`.
 - Setup: `make studio`
 - Postgres for tests: the docker command under Prove it. CI runs a postgres:17-alpine service in the go job.
 - Docker in this session could not read the macOS keychain (`docker compose build` failed on credentials). Workaround: DOCKER_CONFIG pointing at a copy of ~/.docker/config.json without credsStore, plus symlinks to cli-plugins, contexts and buildx, after `docker pull` of the base images. Docker Desktop's disk filled once; the user allowed a builder and container prune.

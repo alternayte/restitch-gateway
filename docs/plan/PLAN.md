@@ -379,7 +379,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C26 — One image runs every role, with Compose and Kubernetes files linted in CI
 
-- **Status:** done locally; the CI lint steps have not run, because the branch is not pushed
+- **Status:** done; `make deploy-lint` passed in CI on PR #34 (merged as 5306310)
 - **Depends on:** C15
 - **Files:** `Dockerfile`, `deploy/docker-compose.yml`, `deploy/kubernetes/`, `.github/workflows/ci.yml`, `Makefile`
 - **Goal:** The image has entrypoint `/restitch`; Compose and plain manifests run Studio on Postgres and two gateways.
