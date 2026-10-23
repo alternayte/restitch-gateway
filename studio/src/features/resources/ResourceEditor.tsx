@@ -23,6 +23,7 @@ import { CodeField } from "@/features/resources/code-field";
 import { kindLabel, type Kind } from "@/features/resources/kinds";
 import { StepNames } from "@/features/resources/lint";
 import { ObjectFields, type Schema } from "@/features/resources/schema-form";
+import { StepGraph, type Step } from "@/features/resources/step-graph";
 import { useCurrentUser } from "@/lib/auth";
 import { errorMessage } from "@/lib/errors";
 import { can } from "@/lib/roles";
@@ -175,6 +176,17 @@ function EditorForm({
       <fieldset disabled={!canEdit} className="min-w-0">
         {view === "form" ? (
           <StepNames.Provider value={kind === "composition" ? stepNamesOf(body) : null}>
+            {kind === "composition" && (
+              <section aria-labelledby="step-graph-heading" className="mb-5 flex flex-col gap-2">
+                <h2 id="step-graph-heading" className="text-sm font-medium">
+                  Step graph
+                </h2>
+                <StepGraph
+                  steps={Array.isArray(body.steps) ? (body.steps as Step[]) : []}
+                  onChange={(steps) => setBody({ ...body, steps })}
+                />
+              </section>
+            )}
             <ObjectFields schema={schema} defs={defs} value={body} onChange={setBody} path={kind} />
           </StepNames.Provider>
         ) : (

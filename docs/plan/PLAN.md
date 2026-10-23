@@ -29,7 +29,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C16 — The new UI shell signs in and renders environments through the generated client
 - [x] C17 — Studio serves a JSON Schema of the artifact that covers every config field
 - [x] C18 — A resource form generated from the schema saves a resource, with a YAML tab
-- [ ] C19 — The step graph widget edits depends_on
+- [x] C19 — The step graph widget edits depends_on
 - [x] C20 — Expression fields show server lint errors as the user types
 - [ ] C21 — The secret picker inserts ${VAR} names and the environment lists required names
 - [x] C22 — The publish screen shows the diff, history, rollback and promote
@@ -293,13 +293,14 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C19 — The step graph widget edits depends_on
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C18
 - **Files:** `studio/src/features/resources/step-graph.tsx`, `studio/src/lib/dag.ts`, `studio/src/features/resources/step-graph.test.tsx`
 - **Goal:** Connecting two step nodes adds depends_on; removing the edge removes it; a cycle is refused.
 - **First failing test:** `studio/src/features/resources/step-graph.test.tsx` — "refuses an edge that makes a cycle"
 - **Done when:** the test command passes.
 - **Notes:** Reuse @xyflow/react and `studio/src/lib/dag.ts`.
+  Done: `StepGraph` (@xyflow/react 12, back in package.json) sits above the composition form and edits `body.steps` through the editor's one object, so the form's Depends on fields and the YAML tab show each change. An edge runs from a dependency to the step that needs it; drawing one adds depends_on, Backspace on a selected edge or the edge list's remove button deletes it, and an edge whose dependency already reaches the step is refused with an inline message. Below the canvas, two selects and Add edge do the same without dragging, for keyboards and phones. `studio/src/lib/dag.ts` keeps only depends_on (waves for the layout, reachability for the cycle check). Implicit edges from `{{ steps.X }}` are not drawn: the gateway finds them by walking the expr AST, the old regex in dag.ts disagreed with it (bracket access, string literals), and no API returns them; publish still rejects a cycle that runs through a template. Verified in a browser against `restitch dev`: three steps, an edge by drag and one by the selects, a refused cycle, Backspace removal, depends_on in the YAML tab, save and publish of version 1, light and dark, 390px.
 
 ---
 
