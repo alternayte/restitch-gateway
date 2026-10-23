@@ -35,7 +35,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C22 — The publish screen shows the diff, history, rollback and promote
 - [x] C23 — Owners manage gateway tokens and users in settings
 - [x] C24 — Environment dashboards show aggregates, sampled requests and instances
-- [ ] C25 — The command palette and keyboard shortcuts reach every page and action
+- [x] C25 — The command palette and keyboard shortcuts reach every page and action
 
 ### Delivery
 - [x] C26 — One image runs every role, with Compose and Kubernetes files linted in CI
@@ -369,13 +369,14 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C25 — The command palette and keyboard shortcuts reach every page and action
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C22, C23, C24
 - **Files:** `studio/src/app/command-palette.tsx`, `studio/src/app/keyboard.tsx`, `studio/src/app/command-palette.test.tsx`
 - **Goal:** Cmd+K finds pages, environments and resources; ? shows shortcuts; g plus a letter jumps to pages.
 - **First failing test:** `studio/src/app/command-palette.test.tsx` — "finds a resource by name"
 - **Done when:** the test command passes.
 - **Notes:** Port from `../sluice/ui/src/app/`.
+  Done: ported sluice's palette (`studio/src/app/command-palette.tsx`), shortcuts and shortcut sheet (`keyboard.tsx`) and `matchScore` (`studio/src/lib/commands.ts`; the page-command registry stayed behind because no page registers commands). Cmd+K (also a Search button in the sidebar and the mobile header) finds pages, environments, every page of every environment and every resource of the first 25 environments; actions are New environment (owner), New resource in <env> (editor), the theme choices, keyboard shortcuts and Sign out, and each action opens the dialog the page already has. Owner-only pages and actions are filtered with `can`. The environment sub-pages moved into `envPages` in `nav.ts`, which EnvironmentNav, the palette, the chords and the sheet share. Chords: g e environments, g u users (owner); inside an environment g o overview, g d draft, g p publish and history, g t gateway tokens (owner); j/k/Enter/Esc move through table rows. Decided: while searching, the group with the best match comes first, because fuzzy matches put "New resource in dev" above an exact resource-name match and Enter opened the wrong thing; theme and sign-out show only in search results, so the empty palette leads with pages. Found while verifying: Chromium does not always deliver the dialog close event after Escape, so the palette and every `Dialog` stayed "open" in state and would not reopen; both now close through state on `cancel`. Verified in a browser against `restitch dev`: created an environment and an upstream through palette actions, found the upstream by name and opened it, g p / g d / g o, j plus Enter on the draft table, ? sheet, theme switch and sign out from the palette, light and dark, 390px.
 
 ---
 

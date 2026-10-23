@@ -45,6 +45,12 @@ export function Dialog({
     <dialog
       ref={ref}
       onClose={onClose}
+      // Escape closes through state. Chromium does not always deliver the close event after a
+      // close request, which left the dialog closed while its state said open.
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
       aria-label={title}
       className={cn(
         "sheet m-auto w-[calc(100%-2rem)] rounded-panel border bg-panel p-0 text-foreground shadow-float",

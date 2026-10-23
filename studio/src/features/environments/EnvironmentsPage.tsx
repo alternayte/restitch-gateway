@@ -79,7 +79,7 @@ export function EnvironmentsPage() {
   );
 }
 
-function CreateEnvironmentDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CreateEnvironmentDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [invalid, setInvalid] = useState(false);

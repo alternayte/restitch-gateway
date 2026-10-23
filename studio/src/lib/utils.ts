@@ -48,3 +48,6 @@ export function formatRelative(iso: string | null | undefined, now = Date.now())
   if (d < 30) return `${d} d ago`;
   return new Date(iso).toLocaleDateString();
 }
+
+/** isMac reports whether the browser runs on an Apple platform, for shortcut labels. */
+export const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
