@@ -1,23 +1,23 @@
 # Handover
 
-Updated: 2026-10-23, session 3 (closed)
+Updated: 2026-10-23, session 4 (closed)
 
 ## Where we are
 
-C01-C15 and C17 are done; the whole Go side of the spec except the delivery chunks exists. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The frontend in `studio/` is still the old v1 SPA and talks to APIs that no longer exist. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
+C01-C17 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The new frontend in `studio/` (TanStack, generated client, sluice UI layer) signs in and lists and creates environments; `restitch studio` serves it from `internal/studio/dist`. The old Studio binary, registry and session packages are gone. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
 
 ## Prove it
 
 Run: `docker run -d --rm --name restitch-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=restitch_test -p 55432:5432 postgres:17-alpine`, then `RESTITCH_TEST_DATABASE_URL="postgres://postgres:test@localhost:55432/restitch_test?sslmode=disable" make ci && make e2e && (cd studio && npm run test)`
-Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its postgres subtests), `make e2e` ok, Studio: 9 files, 28 tests passed. Seen at commit 751221b.
+Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its postgres subtests), `make e2e` ok, Studio: 9 files, 28 tests passed. Seen at commit 9020cfa. The Postgres container is started with --rm, so after `docker stop` run the `docker run` command again; a refused connection in the postgres subtests means the container is missing, not a code fault.
 
 ## Active chunk
 
-None. Unblocked next: C16 (UI shell). Every remaining chunk except C26/C27 is frontend and depends on C16.
+None. Unblocked next: C18 (resource forms), C22 (publish screen), C23 (tokens and users), C24 (dashboards). C19-C21 need C18; C25 needs C22-C24.
 
 ## Next action
 
-Start C16. Read `../sluice/ui/package.json`, `../sluice/ui/openapi-ts.config.ts`, `../sluice/ui/src/components/data-state.tsx`, `ui/toast.tsx`, `confirm-dialog.tsx`, `lib/theme.tsx` and `app/app-shell.tsx` first. Generate the client from `api/openapi.yaml` (it is committed and current). Write "redirects to sign-in without a session" in `studio/src/routes/login.test.tsx`. Verify the shell by driving it in a browser with the verify-ui skill against `restitch dev`, not with an e2e suite. The Go embed lives in `cmd/restitch-studio`; `restitch studio` serves no SPA yet, so C16 must embed the new build into `internal/studio` and serve it on /.
+Start C18: add a route `studio/src/routes/environments.$env.tsx` that lists the draft's resources (listResourcesOptions) and opens a resource in a form built from GET /api/v1/schema (getArtifactSchemaOptions; `definitions` names the $defs entry per kind). Decide the form library first (see Open questions) and record the choice here. Write "saves an upstream created through the form" in `studio/src/features/resources/resource-form.test.tsx`. Verify in a browser with the verify-ui skill against `bin/restitch dev -port 18080 -studio-port 13080 -data-dir <scratch>` (sign in as dev@restitch.local / restitch-dev-password).
 
 ## Decisions
 
@@ -38,7 +38,8 @@ Start C16. Read `../sluice/ui/package.json`, `../sluice/ui/openapi-ts.config.ts`
 - The form library for C18 is open. Assumption: try `@rjsf/core` with a shadcn theme first; drop it for a small hand-written renderer over the C17 schema if it cannot render the custom widgets. Record the choice here.
 - `cmd/mockupstream` is in the image today. Assumption: tests need it, the image does not (C26).
 - README, docs, `deploy/` and `examples/registry` still show v1 server:/admin: blocks and the removed -registry-url/-registry-key flags. C26 and C27 rewrite them; do not patch them piecemeal.
-- The old `cmd/restitch-studio` binary, `internal/registry` and `internal/devmode` still build and pass their tests, but their dashboards fail against a v2 gateway. C15, C24 and C26 delete them.
+- `AGENTS.md` still describes v1 in its Run section (`cmd/restitch-studio/dist`, `bin/restitch dev` finding `bin/restitch-studio`) and its registry and bundle domain words. Only init-agents or an accepted agents-audit item may change it: run agents-audit as part of C27, or earlier if a session trips over it.
+- sluice's UI is AGPL-3.0-only and Restitch is Apache-2.0. The ported files are the user's own code; the user decides whether that needs a note.
 
 ## Environment
 

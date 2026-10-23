@@ -48,3 +48,12 @@ Append only. Newest entry at the bottom. Never edit an older entry.
 - **Decided:** `restitch_telemetry_dropped_total{kind}` replaced the request-records metric, which lost its user when C04 removed the store. Upstream health is the per-upstream error count from pushed step metrics, plus breaker states; v2 has no active health probe. The gateway caps successful samples at 60 a minute and Studio applies the environment cap on top.
 - **Blocked:** none.
 - **Chunks (continued):** C14, C15, C17 done. `restitch publish`, single-process `restitch dev` (internal/devmode deleted), the artifact JSON Schema (invopop/jsonschema). The OpenAPI importer now emits an auth block so its scaffold validates. Session closed at about 70% context.
+
+---
+
+## 2026-10-23 — session 4
+
+- **Chunks:** C16 done.
+- **Did:** replaced the v1 SPA with a TanStack app ported from sluice's UI layer; generated client from api/openapi.yaml; Studio serves the build; deleted cmd/restitch-studio, internal/registry and internal/session.
+- **Decided:** the old pages went all at once, because none of them could run against v2 APIs; their chart, waterfall and DAG code stays reachable in git at 751221b. The generated client needs an absolute base URL in tests only (`studio/src/test-setup.ts`).
+- **Blocked:** none. Session closed past the context budget.
