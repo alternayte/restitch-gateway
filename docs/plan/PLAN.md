@@ -1,0 +1,377 @@
+# Plan: Studio control plane (v2)
+
+Source: `docs/specs/studio-control-plane.md` (all sections)
+Test command: `make ci && make e2e && (cd studio && npm run test)`
+Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_URL` (added in C05)
+
+## Chunks
+
+### Gateway runtime
+- [ ] C01 — `restitch gateway` runs standalone from RESTITCH_CONFIG under the /v2 module
+- [ ] C02 — A v1 file with server: or admin: is refused with the replacement env var named
+- [ ] C03 — An artifact with a non-public composition and no auth policy is refused
+- [ ] C04 — The gateway has no admin API; probes on the data port, metrics on the ops port
+
+### Studio core
+- [ ] C05 — `restitch studio` signs in a bootstrap owner and refuses anonymous API calls
+- [ ] C06 — An editor saves resources in an environment draft, and a stale save gets 409
+- [ ] C07 — Publish validates the draft, returns a diff and writes an artifact version
+- [ ] C08 — Rollback and promote write new versions and drafts without changing history
+- [ ] C09 — A gateway token pulls its environment's artifact version with an ETag
+- [ ] C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
+- [ ] C11 — Studio lists each gateway instance with its applied artifact version
+- [ ] C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
+- [ ] C13 — Gateways push sampled requests with redacted headers and no bodies
+- [ ] C14 — `restitch publish` and YAML import and export use the publish path
+- [ ] C15 — `restitch dev` runs both roles in one process on SQLite
+
+### Studio UI
+- [ ] C16 — The new UI shell signs in and renders environments through the generated client
+- [ ] C17 — Studio serves a JSON Schema of the artifact that covers every config field
+- [ ] C18 — A resource form generated from the schema saves a resource, with a YAML tab
+- [ ] C19 — The step graph widget edits depends_on
+- [ ] C20 — Expression fields show server lint errors as the user types
+- [ ] C21 — The secret picker inserts ${VAR} names and the environment lists required names
+- [ ] C22 — The publish screen shows the diff, history, rollback and promote
+- [ ] C23 — Owners manage gateway tokens and users in settings
+- [ ] C24 — Environment dashboards show aggregates, sampled requests and instances
+- [ ] C25 — The command palette and keyboard shortcuts reach every page and action
+
+### Delivery
+- [ ] C26 — One image runs every role, with Compose and Kubernetes files linted in CI
+- [ ] C27 — The docs describe v2: container platforms, configuration, Studio, CHANGELOG
+
+---
+
+### C01 — `restitch gateway` runs standalone from RESTITCH_CONFIG under the /v2 module
+
+- **Status:** todo
+- **Depends on:** none
+- **Files:** `go.mod`, `cmd/restitch/main.go`, `cmd/restitch/run.go`, `internal/gwconfig/env.go`, `cmd/restitch/run_test.go`
+- **Goal:** `restitch gateway` reads every flag and its RESTITCH_ env twin with flag over env over default, and serves the file named by RESTITCH_CONFIG with reload on change and SIGHUP.
+- **First failing test:** `cmd/restitch/run_test.go` — "TestGatewayFlagOverEnvOverDefault"
+- **Done when:** the test command passes, `go list -m` prints `github.com/alternayte/restitch-gateway/v2`, and `restitch run` no longer exists.
+- **Spec:** Decisions on one binary, the naming rule, standalone mode, v2.0.0.
+- **Notes:** The env name is RESTITCH_ plus the flag name in upper snake case; derive it in one function, never by hand. Rewrite every import path in the same commit. RESTITCH_CONFIG and RESTITCH_STUDIO_URL together exit 2 (the second flag lands in C10; reserve the check here).
+
+---
+
+### C02 — A v1 file with server: or admin: is refused with the replacement env var named
+
+- **Status:** todo
+- **Depends on:** C01
+- **Files:** `internal/gwconfig/config.go`, `internal/gwconfig/config_test.go`, `cmd/restitch/run.go`
+- **Goal:** Loading a file with any key under server: or admin: fails with a message such as "server.port moved to RESTITCH_PORT".
+- **First failing test:** `internal/gwconfig/config_test.go` — "TestLoadRejectsV1ServerBlock"
+- **Done when:** the test command passes and the message names the env var for every v1 key that still has one; keys with no successor say "removed in v2".
+- **Spec:** Decision on v2.0.0.
+- **Notes:** Process settings come from flags and env only after this chunk. Decode the artifact strictly (unknown keys fail) with yaml KnownFields.
+
+---
+
+### C03 — An artifact with a non-public composition and no auth policy is refused
+
+- **Status:** todo
+- **Depends on:** C02
+- **Files:** `internal/composition/config.go`, `internal/composition/parser.go`, `internal/composition/validate.go`, `internal/composition/validate_test.go`, `cmd/restitch/check.go`
+- **Goal:** One function validates an artifact: auth policy, rate-limit policies, reserved paths and the existing compile, and both gateway load and `restitch check` call it.
+- **First failing test:** `internal/composition/validate_test.go` — "TestValidateRejectsNonPublicWithoutAuthPolicy"
+- **Done when:** the test command passes, a composition on /health or /ready is refused, and `handler.go` has no path that serves a non-public route without an authenticator.
+- **Spec:** Decisions on the artifact contents, the fail-open route, one validator, reserved probe paths.
+- **Notes:** auth and rate_limit move from server: to top-level artifact keys. ${VAR} checks name syntax only; expansion happens on the gateway after validation of names.
+
+---
+
+### C04 — The gateway has no admin API; probes on the data port, metrics on the ops port
+
+- **Status:** todo
+- **Depends on:** C01
+- **Files:** `cmd/restitch/run.go`, `cmd/restitch/shutdown.go`, `internal/admin/`, `internal/server/server.go`, `cmd/restitch/run_test.go`
+- **Goal:** The gateway opens only the data port, with /health and /ready, plus RESTITCH_OPS_PORT for /metrics when set.
+- **First failing test:** `cmd/restitch/run_test.go` — "TestGatewayOpensNoAdminListener"
+- **Done when:** the test command passes and `internal/admin` keeps only the accumulator and recorder that C12 and C13 export.
+- **Spec:** Decision on removing the admin API and gateway-side storage.
+- **Notes:** Delete the admin server, SQL and memory storage, async store and their tests. Keep the ordered shutdown in `shutdown.go`; it loses the store steps.
+
+---
+
+### C05 — `restitch studio` signs in a bootstrap owner and refuses anonymous API calls
+
+- **Status:** todo
+- **Depends on:** C01
+- **Files:** `internal/studio/server.go`, `internal/studio/store.go`, `internal/studio/server_test.go`, `cmd/restitch/studio.go`, `.github/workflows/ci.yml`
+- **Goal:** `restitch studio` serves a huma v2 API with auth-all mounted through humaauth; the bootstrap owner signs in, an anonymous call gets 401, a cross-site POST gets 403.
+- **First failing test:** `internal/studio/server_test.go` — "TestAnonymousAPICallReturns401"
+- **Done when:** the test command passes on SQLite and on Postgres, and `openapi.yaml` is generated and committed with a test that fails on drift.
+- **Spec:** Decisions on sign-in, storage, the Studio API.
+- **Notes:** This chunk carries the highest risk: do it early. Roles viewer, editor, owner through the auth-all roles plugin. RESTITCH_DATABASE_URL picks the store. Add a Postgres service to CI and read RESTITCH_TEST_DATABASE_URL in tests. Open an auth-all issue for any gap instead of working around it.
+
+---
+
+### C06 — An editor saves resources in an environment draft, and a stale save gets 409
+
+- **Status:** todo
+- **Depends on:** C05
+- **Files:** `internal/studio/draft.go`, `internal/studio/draft_test.go`, `internal/studio/migrations/`, `internal/studio/server.go`
+- **Goal:** Owners create environments; editors create, update and delete typed resources in a draft; each save carries a base revision.
+- **First failing test:** `internal/studio/draft_test.go` — "TestStaleSaveReturns409"
+- **Done when:** the test command passes, a duplicate name in one environment fails on the database constraint, and a viewer gets 403 on save.
+- **Spec:** Decisions on typed resources, the shared draft, base revision.
+- **Notes:** A resource row holds environment, kind, name, revision and the body as JSON. Save validates the single resource with the C03 rules that apply to it.
+
+---
+
+### C07 — Publish validates the draft, returns a diff and writes an artifact version
+
+- **Status:** todo
+- **Depends on:** C06, C03
+- **Files:** `internal/studio/publish.go`, `internal/studio/publish_test.go`, `internal/studio/server.go`
+- **Goal:** A publish preview returns the diff against the current version; publish runs the C03 validator on the whole draft and writes an immutable numbered version with author and message.
+- **First failing test:** `internal/studio/publish_test.go` — "TestPublishRefusesInvalidDraft"
+- **Done when:** the test command passes and two publishes produce versions 1 and 2 with the artifact YAML stored verbatim.
+- **Spec:** Decision on publish.
+- **Notes:** The stored artifact is the YAML format that standalone mode reads. Author comes from the session, never from the request body.
+
+---
+
+### C08 — Rollback and promote write new versions and drafts without changing history
+
+- **Status:** todo
+- **Depends on:** C07
+- **Files:** `internal/studio/publish.go`, `internal/studio/publish_test.go`
+- **Goal:** Rollback to version N writes version N+k with N's content; promote copies a version into another environment's draft and returns the diff.
+- **First failing test:** `internal/studio/publish_test.go` — "TestRollbackAppendsVersion"
+- **Done when:** the test command passes and no update or delete statement touches the versions table.
+- **Spec:** Decision on rollback and promote.
+
+---
+
+### C09 — A gateway token pulls its environment's artifact version with an ETag
+
+- **Status:** todo
+- **Depends on:** C07
+- **Files:** `internal/studio/gatewayapi.go`, `internal/studio/tokens.go`, `internal/studio/gatewayapi_test.go`
+- **Goal:** Owners create and revoke gateway tokens per environment; a token pulls the current version and each immutable version URL, with ETag and 304.
+- **First failing test:** `internal/studio/gatewayapi_test.go` — "TestTokenCannotPullOtherEnvironment"
+- **Done when:** the test command passes, a revoked token gets 401, and a gateway token gets 403 on every user API route.
+- **Spec:** Decisions on the gateway token and immutable version URLs.
+- **Notes:** Store the token hashed; return it once. Many tokens per environment. Body size limit matches the gateway's pull limit.
+
+---
+
+### C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
+
+- **Status:** todo
+- **Depends on:** C09, C04
+- **Files:** `internal/hotreload/client.go`, `internal/hotreload/poller.go`, `cmd/restitch/run.go`, `internal/server/health.go`, `internal/hotreload/poller_test.go`
+- **Goal:** With RESTITCH_STUDIO_URL and RESTITCH_GATEWAY_TOKEN the gateway pulls and applies versions; while Studio is unreachable /health is 200 and /ready is 503 until the first version.
+- **First failing test:** `internal/hotreload/poller_test.go` — "TestReadyStays503UntilFirstArtifact"
+- **Done when:** the test command passes and an e2e spec in `tests/` starts a gateway before Studio, then serves traffic after a publish.
+- **Spec:** Decision on cold start.
+- **Notes:** No disk cache. Keep the last good version in memory on a failed pull. The old bundle endpoint and registry key are gone.
+
+---
+
+### C11 — Studio lists each gateway instance with its applied artifact version
+
+- **Status:** todo
+- **Depends on:** C10
+- **Files:** `internal/hotreload/heartbeat.go`, `internal/studio/instances.go`, `internal/studio/instances_test.go`
+- **Goal:** Each gateway posts a heartbeat with instance ID, binary version, applied version and last pull result; Studio lists instances per environment and marks silent ones stale.
+- **First failing test:** `internal/studio/instances_test.go` — "TestHeartbeatRecordsAppliedVersion"
+- **Done when:** the test command passes and two gateways in one environment appear as two instances.
+- **Spec:** Decision on the heartbeat.
+
+---
+
+### C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
+
+- **Status:** todo
+- **Depends on:** C11
+- **Files:** `internal/admin/accumulator.go`, `internal/hotreload/telemetry.go`, `internal/studio/usage.go`, `internal/studio/usage_test.go`
+- **Goal:** Gateways push per-minute counts, errors, latency histograms, cache hits, breaker state and upstream health per composition, step and upstream; Studio sums replicas and deletes data past the environment's retention.
+- **First failing test:** `internal/studio/usage_test.go` — "TestAggregatesSumAcrossInstances"
+- **Done when:** the test command passes and the retention default is 7 days.
+- **Spec:** Decision on usage push.
+- **Notes:** A failed push retries the next interval and then drops with a counter metric; it never blocks requests.
+
+---
+
+### C13 — Gateways push sampled requests with redacted headers and no bodies
+
+- **Status:** todo
+- **Depends on:** C12
+- **Files:** `internal/admin/recorder.go`, `internal/hotreload/telemetry.go`, `internal/studio/requests.go`, `internal/studio/requests_test.go`
+- **Goal:** Every failed request and a capped sample of successes reach Studio with step timings and redacted headers.
+- **First failing test:** `internal/studio/requests_test.go` — "TestSampleNeverCarriesBodyOrAuthorization"
+- **Done when:** the test command passes and the success sample cap is a per-environment setting.
+- **Spec:** Decision on sampled requests.
+
+---
+
+### C14 — `restitch publish` and YAML import and export use the publish path
+
+- **Status:** todo
+- **Depends on:** C08
+- **Files:** `cmd/restitch/publish.go`, `internal/studio/importexport.go`, `internal/studio/importexport_test.go`, `cmd/restitch/importcmd.go`
+- **Goal:** `restitch publish --env NAME FILE` replaces the draft from the file and publishes with an API key; Studio exports any version as the same YAML.
+- **First failing test:** `internal/studio/importexport_test.go` — "TestExportThenImportRoundTrips"
+- **Done when:** the test command passes and an invalid file exits non-zero with the validator message.
+- **Spec:** Decision on CLI publish.
+- **Notes:** Check what `restitch import` does today before you touch it; keep it only if it still has a job.
+
+---
+
+### C15 — `restitch dev` runs both roles in one process on SQLite
+
+- **Status:** todo
+- **Depends on:** C10
+- **Files:** `cmd/restitch/dev.go`, `cmd/restitch/dev_test.go`, `internal/devmode/`
+- **Goal:** `restitch dev` starts Studio and a gateway in one process with a dev environment, a bootstrap user and a wired token, with no env vars.
+- **First failing test:** `cmd/restitch/dev_test.go` — "TestDevServesPublishedComposition"
+- **Done when:** the test command passes and `internal/devmode` no longer spawns child processes.
+- **Spec:** Decision on dev mode.
+- **Notes:** SQLite under `.restitch/` in the working directory. Print the sign-in URL and credentials on start.
+
+---
+
+### C16 — The new UI shell signs in and renders environments through the generated client
+
+- **Status:** todo
+- **Depends on:** C06
+- **Files:** `studio/package.json`, `studio/openapi-ts.config.ts`, `studio/src/routes/`, `studio/src/app/`, `studio/src/components/data-state.tsx`
+- **Goal:** The UI uses TanStack Router and Query with a hey-api client generated from `openapi.yaml`; sign-in, sign-out, the environment list, light and dark themes, DataState and toasts work.
+- **First failing test:** `studio/src/routes/login.test.tsx` — "redirects to sign-in without a session"
+- **Done when:** the test command passes and `npm run build` succeeds with no react-router-dom dependency.
+- **Spec:** Decision on the Studio API and UI stack.
+- **Notes:** Copy patterns from `../sluice/ui/src` (data-state, toast, confirm-dialog, theme, app-shell); keep the Restitch accent. shadcn on Radix replaces base-ui. Delete pages as their replacements land, not before.
+
+---
+
+### C17 — Studio serves a JSON Schema of the artifact that covers every config field
+
+- **Status:** todo
+- **Depends on:** C03, C05
+- **Files:** `internal/composition/schema.go`, `internal/composition/schema_test.go`, `internal/studio/server.go`
+- **Goal:** A JSON Schema generated from the Go artifact types describes every resource kind and field, and Studio serves it.
+- **First failing test:** `internal/composition/schema_test.go` — "TestSchemaCoversEveryYAMLField"
+- **Done when:** the test command passes and the test walks the Go types by reflection, so a new field without schema coverage fails it.
+- **Spec:** Decision on forms from JSON Schema.
+
+---
+
+### C18 — A resource form generated from the schema saves a resource, with a YAML tab
+
+- **Status:** todo
+- **Depends on:** C16, C17
+- **Files:** `studio/src/features/resources/`, `studio/src/routes/environments.$env.tsx`
+- **Goal:** The draft page lists resources in a TanStack Table; each resource opens a schema-driven form and a YAML tab on the same object; a stale save shows a reload prompt.
+- **First failing test:** `studio/src/features/resources/resource-form.test.tsx` — "saves an upstream created through the form"
+- **Done when:** the test command passes and request_schema edits in a CodeMirror JSON editor.
+- **Spec:** Decisions on forms and the shared object.
+- **Notes:** The form library is open; see HANDOVER Open questions.
+
+---
+
+### C19 — The step graph widget edits depends_on
+
+- **Status:** todo
+- **Depends on:** C18
+- **Files:** `studio/src/features/resources/step-graph.tsx`, `studio/src/lib/dag.ts`, `studio/src/features/resources/step-graph.test.tsx`
+- **Goal:** Connecting two step nodes adds depends_on; removing the edge removes it; a cycle is refused.
+- **First failing test:** `studio/src/features/resources/step-graph.test.tsx` — "refuses an edge that makes a cycle"
+- **Done when:** the test command passes.
+- **Notes:** Reuse @xyflow/react and `studio/src/lib/dag.ts`.
+
+---
+
+### C20 — Expression fields show server lint errors as the user types
+
+- **Status:** todo
+- **Depends on:** C18
+- **Files:** `internal/studio/lint.go`, `internal/studio/lint_test.go`, `studio/src/features/resources/expression-field.tsx`
+- **Goal:** Expression and template fields post to a lint endpoint after typing stops and show errors inline.
+- **First failing test:** `internal/studio/lint_test.go` — "TestLintReportsUnknownStepReference"
+- **Done when:** the test command passes.
+- **Notes:** The lint endpoint calls the same compile code as C03.
+
+---
+
+### C21 — The secret picker inserts ${VAR} names and the environment lists required names
+
+- **Status:** todo
+- **Depends on:** C18
+- **Files:** `internal/studio/secrets.go`, `internal/studio/secrets_test.go`, `studio/src/features/resources/secret-picker.tsx`
+- **Goal:** Studio lists the ${VAR} names a draft and each version need; string fields offer a picker over those names.
+- **First failing test:** `internal/studio/secrets_test.go` — "TestRequiredNamesListsEveryReference"
+- **Done when:** the test command passes and no secret value is stored in Studio.
+
+---
+
+### C22 — The publish screen shows the diff, history, rollback and promote
+
+- **Status:** todo
+- **Depends on:** C08, C16
+- **Files:** `studio/src/features/publish/`, `studio/src/routes/environments.$env.versions.tsx`
+- **Goal:** An editor previews the diff, enters a message and publishes; the history lists versions; rollback and promote ask for confirmation.
+- **First failing test:** `studio/src/features/publish/publish.test.tsx` — "shows validation errors and blocks publish"
+- **Done when:** the test command passes.
+
+---
+
+### C23 — Owners manage gateway tokens and users in settings
+
+- **Status:** todo
+- **Depends on:** C09, C16
+- **Files:** `studio/src/features/settings/`, `studio/src/routes/settings.*.tsx`
+- **Goal:** Owners create a gateway token and see it once, revoke tokens, and invite, change and disable users; non-owners do not see these actions.
+- **First failing test:** `studio/src/features/settings/tokens.test.tsx` — "shows a new token once"
+- **Done when:** the test command passes.
+
+---
+
+### C24 — Environment dashboards show aggregates, sampled requests and instances
+
+- **Status:** todo
+- **Depends on:** C13, C16
+- **Files:** `studio/src/features/dashboard/`, `studio/src/components/charts/`, `studio/src/components/waterfall/`
+- **Goal:** Each environment shows usage charts, a sampled request list with the waterfall view, and the instances table.
+- **First failing test:** `studio/src/features/dashboard/dashboard.test.tsx` — "shows the empty state before any gateway reports"
+- **Done when:** the test command passes and the old Dashboard, Requests, Builder and Config pages are deleted.
+- **Notes:** Reuse the chart and waterfall components; feed them from the new usage and request endpoints.
+
+---
+
+### C25 — The command palette and keyboard shortcuts reach every page and action
+
+- **Status:** todo
+- **Depends on:** C22, C23, C24
+- **Files:** `studio/src/app/command-palette.tsx`, `studio/src/app/keyboard.tsx`, `studio/src/app/command-palette.test.tsx`
+- **Goal:** Cmd+K finds pages, environments and resources; ? shows shortcuts; g plus a letter jumps to pages.
+- **First failing test:** `studio/src/app/command-palette.test.tsx` — "finds a resource by name"
+- **Done when:** the test command passes.
+- **Notes:** Port from `../sluice/ui/src/app/`.
+
+---
+
+### C26 — One image runs every role, with Compose and Kubernetes files linted in CI
+
+- **Status:** todo
+- **Depends on:** C15
+- **Files:** `Dockerfile`, `deploy/docker-compose.yml`, `deploy/kubernetes/`, `.github/workflows/ci.yml`, `Makefile`
+- **Goal:** The image has entrypoint `/restitch`; Compose and plain manifests run Studio on Postgres and two gateways.
+- **First failing test:** a CI step — `docker compose -f deploy/docker-compose.yml config` and `kubeconform deploy/kubernetes`
+- **Done when:** the test command passes, both lint steps pass in CI, and `docker compose up` serves a published composition.
+- **Notes:** Delete `cmd/restitch-studio`, `cmd/mockupstream` from the image if only tests need it, and the registry examples. No committed keys; Compose generates or demands them.
+
+---
+
+### C27 — The docs describe v2: container platforms, configuration, Studio, CHANGELOG
+
+- **Status:** todo
+- **Depends on:** C26
+- **Files:** `docs/deployment.md`, `docs/configuration.md`, `docs/studio.md`, `README.md`, `CHANGELOG.md`
+- **Goal:** A reader deploys Studio and gateways to any image-and-env-vars platform from the generic guide, and every env var in the code appears once in the docs.
+- **First failing test:** `tests/readme_test.go` — "TestDocsListEveryEnvVar"
+- **Done when:** the test command passes and AGENTS.md lines for registry and bundle are replaced by an accepted agents-audit item.
+- **Notes:** The test reads the env names from the C01 derivation function, so docs cannot drift.

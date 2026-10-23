@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # Restitch — rules for plan executors
 
 PLAN.md is the single source of truth. docs/plan-progress/LEDGER.md is the
