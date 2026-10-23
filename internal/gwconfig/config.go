@@ -50,14 +50,32 @@ func (d Duration) MarshalYAML() (interface{}, error) {
 	return d.String(), nil
 }
 
-// File is the root configuration loaded from restitch.yaml.
+// File is the loaded gateway configuration: the artifact keys from the
+// YAML file, plus the process settings that come from flags and env only.
 type File struct {
-	Server       ServerConfig           `yaml:"server"`
-	Admin        AdminConfig            `yaml:"admin"`
-	Upstreams    map[string]interface{} `yaml:"upstreams"`
-	Compositions map[string]interface{} `yaml:"compositions"`
+	Server ServerConfig `yaml:"-"`
+	Admin  AdminConfig  `yaml:"-"`
+
+	Auth                  *InboundAuthConfig     `yaml:"auth"`
+	RateLimit             *RateLimitConfig       `yaml:"rate_limit"`
+	BlockPrivateUpstreams bool                   `yaml:"block_private_upstreams"`
+	Upstreams             map[string]interface{} `yaml:"upstreams"`
+	Compositions          map[string]interface{} `yaml:"compositions"`
 
 	raw []byte // original bytes for hash
+}
+
+// artifactKeys are the top-level keys an artifact may hold.
+var artifactKeys = []string{"auth", "rate_limit", "block_private_upstreams", "upstreams", "compositions"}
+
+// v1Moved names where a v1 server:/admin: key went. A key with an empty
+// value has no successor and is removed in v2. Every other key maps to the
+// flag of the same name, so its env var comes from EnvName.
+var v1Moved = map[string]string{
+	"server.auth":            "the top-level auth key",
+	"server.rate_limit":      "the top-level rate_limit key",
+	"admin.request_log_size": "",
+	"admin.storage":          "",
 }
 
 // RateLimitConfig configures gateway-wide rate limiting.
@@ -67,19 +85,18 @@ type RateLimitConfig struct {
 	Key               string  `yaml:"key"` // "ip", "header:X-Client-ID", "api-key"
 }
 
-// ServerConfig holds gateway server settings.
+// ServerConfig holds the gateway process settings. Flags and their
+// RESTITCH_ env twins set them; the YAML file never does.
 type ServerConfig struct {
-	Port            int                `yaml:"port"`
-	TLSPort         int                `yaml:"tls_port"`
-	TLSCert         string             `yaml:"tls_cert"`
-	TLSKey          string             `yaml:"tls_key"`
-	ReadTimeout     Duration           `yaml:"read_timeout"`
-	WriteTimeout    Duration           `yaml:"write_timeout"`
-	ShutdownTimeout Duration           `yaml:"shutdown_timeout"`
-	LogFormat       string             `yaml:"log_format"`
-	LogLevel        string             `yaml:"log_level"`
-	Auth            *InboundAuthConfig `yaml:"auth"`
-	RateLimit       *RateLimitConfig   `yaml:"rate_limit"`
+	Port            int
+	TLSPort         int
+	TLSCert         string
+	TLSKey          string
+	ReadTimeout     Duration
+	WriteTimeout    Duration
+	ShutdownTimeout Duration
+	LogFormat       string
+	LogLevel        string
 }
 
 // InboundAuthConfig configures gateway-level authentication.
@@ -95,14 +112,15 @@ type JWTConfig struct {
 	Audience string `yaml:"audience"`
 }
 
-// AdminConfig holds admin API server settings.
+// AdminConfig holds admin API server settings, set from RESTITCH_ADMIN_*
+// env vars only.
 type AdminConfig struct {
-	Enabled        *bool               `yaml:"enabled"`
-	Port           int                 `yaml:"port"`
-	Bind           string              `yaml:"bind"`
-	APIKey         string              `yaml:"api_key"`
-	RequestLogSize int                 `yaml:"request_log_size"`
-	Storage        admin.StorageConfig `yaml:"storage"`
+	Enabled        *bool
+	Port           int
+	Bind           string
+	APIKey         string
+	RequestLogSize int
+	Storage        admin.StorageConfig
 }
 
 // IsEnabled returns whether the admin server is enabled (default true).
@@ -142,6 +160,9 @@ func Load(path string) (*File, error) {
 // LoadBytes parses already-expanded YAML bytes into a File.
 // raw is the original (unexpanded) bytes used for hashing.
 func LoadBytes(expanded []byte, raw []byte) (*File, error) {
+	if err := checkTopLevelKeys(expanded); err != nil {
+		return nil, err
+	}
 	var f File
 	if err := yaml.Unmarshal(expanded, &f); err != nil {
 		return nil, fmt.Errorf("parsing config: %w", err)
@@ -155,6 +176,67 @@ func LoadBytes(expanded []byte, raw []byte) (*File, error) {
 	}
 
 	return &f, nil
+}
+
+// checkTopLevelKeys refuses the v1 server: and admin: blocks, naming where
+// each key went, and any other key an artifact does not hold.
+func checkTopLevelKeys(doc []byte) error {
+	var root yaml.Node
+	if err := yaml.Unmarshal(doc, &root); err != nil {
+		return fmt.Errorf("parsing config: %w", err)
+	}
+	if len(root.Content) == 0 {
+		return nil
+	}
+	top := root.Content[0]
+	if top.Kind != yaml.MappingNode {
+		return fmt.Errorf("parsing config: the top level must be a mapping")
+	}
+	var errs []error
+	for i := 0; i+1 < len(top.Content); i += 2 {
+		key, val := top.Content[i].Value, top.Content[i+1]
+		switch {
+		case key == "server" || key == "admin":
+			errs = append(errs, v1BlockErrors(key, val)...)
+		case !contains(artifactKeys, key):
+			errs = append(errs, fmt.Errorf("unknown top-level key %q (an artifact holds %s)",
+				key, strings.Join(artifactKeys, ", ")))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func v1BlockErrors(block string, val *yaml.Node) []error {
+	if val.Kind != yaml.MappingNode || len(val.Content) == 0 {
+		return []error{fmt.Errorf("%s: removed in v2; process settings are flags and RESTITCH_ env vars", block)}
+	}
+	var errs []error
+	for i := 0; i+1 < len(val.Content); i += 2 {
+		name := block + "." + val.Content[i].Value
+		dest, known := v1Moved[name]
+		switch {
+		case known && dest == "":
+			errs = append(errs, fmt.Errorf("%s removed in v2", name))
+		case known:
+			errs = append(errs, fmt.Errorf("%s moved to %s", name, dest))
+		default:
+			flagName := strings.ReplaceAll(val.Content[i].Value, "_", "-")
+			if block == "admin" {
+				flagName = "admin-" + flagName
+			}
+			errs = append(errs, fmt.Errorf("%s moved to %s", name, EnvName(flagName)))
+		}
+	}
+	return errs
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 func applyDefaults(f *File) {
@@ -192,27 +274,27 @@ func (f *File) Validate() error {
 	var errs []error
 
 	if f.Server.Port < 1 || f.Server.Port > 65535 {
-		errs = append(errs, fmt.Errorf("server.port must be 1-65535, got %d", f.Server.Port))
+		errs = append(errs, fmt.Errorf("RESTITCH_PORT must be 1-65535, got %d", f.Server.Port))
 	}
 	if f.Server.TLSPort != 0 && (f.Server.TLSPort < 1 || f.Server.TLSPort > 65535) {
-		errs = append(errs, fmt.Errorf("server.tls_port must be 1-65535, got %d", f.Server.TLSPort))
+		errs = append(errs, fmt.Errorf("RESTITCH_TLS_PORT must be 1-65535, got %d", f.Server.TLSPort))
 	}
 	if f.Admin.Port < 1 || f.Admin.Port > 65535 {
-		errs = append(errs, fmt.Errorf("admin.port must be 1-65535, got %d", f.Admin.Port))
+		errs = append(errs, fmt.Errorf("RESTITCH_ADMIN_PORT must be 1-65535, got %d (admin.port)", f.Admin.Port))
 	}
 
 	logFormat := strings.ToLower(f.Server.LogFormat)
 	if logFormat != "json" && logFormat != "text" {
-		errs = append(errs, fmt.Errorf("server.log_format must be json or text, got %q", f.Server.LogFormat))
+		errs = append(errs, fmt.Errorf("RESTITCH_LOG_FORMAT must be json or text, got %q", f.Server.LogFormat))
 	}
 	logLevel := strings.ToLower(f.Server.LogLevel)
 	if logLevel != "debug" && logLevel != "info" && logLevel != "warn" && logLevel != "error" {
-		errs = append(errs, fmt.Errorf("server.log_level must be debug/info/warn/error, got %q", f.Server.LogLevel))
+		errs = append(errs, fmt.Errorf("RESTITCH_LOG_LEVEL must be debug/info/warn/error, got %q", f.Server.LogLevel))
 	}
 
-	if f.Server.Auth != nil && f.Server.Auth.JWT != nil {
-		if f.Server.Auth.JWT.JWKSURL == "" {
-			errs = append(errs, fmt.Errorf("server.auth.jwt.jwks_url is required when jwt is configured"))
+	if f.Auth != nil && f.Auth.JWT != nil {
+		if f.Auth.JWT.JWKSURL == "" {
+			errs = append(errs, fmt.Errorf("auth.jwt.jwks_url is required when jwt is configured"))
 		}
 	}
 

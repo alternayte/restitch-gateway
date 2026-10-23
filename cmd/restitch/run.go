@@ -42,17 +42,20 @@ import (
 // gatewayOptions holds the process settings of `restitch gateway`. set
 // names the flags given on the command line or through their env twin.
 type gatewayOptions struct {
-	port         int
-	tlsPort      int
-	logFormat    string
-	logLevel     string
-	tlsCert      string
-	tlsKey       string
-	configFile   string
-	registryURL  string
-	registryKey  string
-	pollInterval time.Duration
-	set          map[string]bool
+	port            int
+	tlsPort         int
+	logFormat       string
+	logLevel        string
+	tlsCert         string
+	tlsKey          string
+	readTimeout     time.Duration
+	writeTimeout    time.Duration
+	shutdownTimeout time.Duration
+	configFile      string
+	registryURL     string
+	registryKey     string
+	pollInterval    time.Duration
+	set             map[string]bool
 }
 
 func parseGatewayFlags(args []string, lookup func(string) (string, bool)) (*gatewayOptions, error) {
@@ -64,6 +67,9 @@ func parseGatewayFlags(args []string, lookup func(string) (string, bool)) (*gate
 	flags.StringVar(&o.logLevel, "log-level", "info", "Log level: debug, info, warn, error")
 	flags.StringVar(&o.tlsCert, "tls-cert", "", "Path to TLS certificate file")
 	flags.StringVar(&o.tlsKey, "tls-key", "", "Path to TLS private key file")
+	flags.DurationVar(&o.readTimeout, "read-timeout", 30*time.Second, "HTTP read timeout")
+	flags.DurationVar(&o.writeTimeout, "write-timeout", 30*time.Second, "HTTP write timeout")
+	flags.DurationVar(&o.shutdownTimeout, "shutdown-timeout", 30*time.Second, "Graceful shutdown deadline")
 	flags.StringVar(&o.configFile, "config", "restitch.yaml", "Path to the artifact file (standalone mode)")
 	flags.StringVar(&o.registryURL, "registry-url", "", "Registry URL for polling mode")
 	flags.StringVar(&o.registryKey, "registry-key", "", "Key for registry auth")
@@ -161,24 +167,17 @@ func gatewayCmd(args []string) int {
 	}
 	gwconfig.ApplyEnvOverrides(gwcfg)
 
-	// Flags, and their env twins, win over YAML.
-	if opts.set["port"] {
-		gwcfg.Server.Port = opts.port
-	}
-	if opts.set["tls-port"] {
-		gwcfg.Server.TLSPort = opts.tlsPort
-	}
-	if opts.set["log-format"] {
-		gwcfg.Server.LogFormat = opts.logFormat
-	}
-	if opts.set["log-level"] {
-		gwcfg.Server.LogLevel = opts.logLevel
-	}
-	if opts.set["tls-cert"] {
-		gwcfg.Server.TLSCert = opts.tlsCert
-	}
-	if opts.set["tls-key"] {
-		gwcfg.Server.TLSKey = opts.tlsKey
+	// Process settings come from flags and their env twins only.
+	gwcfg.Server = gwconfig.ServerConfig{
+		Port:            opts.port,
+		TLSPort:         opts.tlsPort,
+		TLSCert:         opts.tlsCert,
+		TLSKey:          opts.tlsKey,
+		ReadTimeout:     gwconfig.Duration{Duration: opts.readTimeout},
+		WriteTimeout:    gwconfig.Duration{Duration: opts.writeTimeout},
+		ShutdownTimeout: gwconfig.Duration{Duration: opts.shutdownTimeout},
+		LogFormat:       opts.logFormat,
+		LogLevel:        opts.logLevel,
 	}
 
 	// Env and flag overrides land after the initial validation, so validate
@@ -208,8 +207,10 @@ func gatewayCmd(args []string) int {
 	}()
 
 	srv := server.New(server.Config{
-		Port:    gwcfg.Server.Port,
-		TLSPort: gwcfg.Server.TLSPort,
+		Port:         gwcfg.Server.Port,
+		TLSPort:      gwcfg.Server.TLSPort,
+		ReadTimeout:  gwcfg.Server.ReadTimeout.Duration,
+		WriteTimeout: gwcfg.Server.WriteTimeout.Duration,
 	})
 
 	// shutdown replaces the per-component defers: deferred closes ran LIFO,
@@ -266,8 +267,8 @@ func gatewayCmd(args []string) int {
 		}
 
 		var authenticator *inbound.Authenticator
-		if gwcfg.Server.Auth != nil {
-			authCfg := gwconfigToInboundAuth(gwcfg.Server.Auth)
+		if gwcfg.Auth != nil {
+			authCfg := gwconfigToInboundAuth(gwcfg.Auth)
 			var authErr error
 			authenticator, authErr = inbound.New(context.Background(), authCfg)
 			if authErr != nil {
@@ -275,8 +276,8 @@ func gatewayCmd(args []string) int {
 				return 1
 			}
 			slog.Info("inbound authentication enabled",
-				"api_keys", len(gwcfg.Server.Auth.APIKeys),
-				"jwt", gwcfg.Server.Auth.JWT != nil)
+				"api_keys", len(gwcfg.Auth.APIKeys),
+				"jwt", gwcfg.Auth.JWT != nil)
 		}
 
 		handler := composition.NewHandler(compiled, authenticator)
@@ -359,7 +360,7 @@ func gatewayCmd(args []string) int {
 		router.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
 		router.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
 		router.Finalize()
-		pipe.Handler = pipelineRateLimit(router, gwcfg.Server.RateLimit)
+		pipe.Handler = pipelineRateLimit(router, gwcfg.RateLimit)
 
 		swapper := newSwapper(pipe)
 
@@ -409,8 +410,8 @@ func gatewayCmd(args []string) int {
 			}
 
 			var newAuth *inbound.Authenticator
-			if newGwcfg.Server.Auth != nil {
-				authCfg := gwconfigToInboundAuth(newGwcfg.Server.Auth)
+			if newGwcfg.Auth != nil {
+				authCfg := gwconfigToInboundAuth(newGwcfg.Auth)
 				newAuth, err = inbound.New(context.Background(), authCfg)
 				if err != nil {
 					return "", fmt.Errorf("inbound auth: %w", err)
@@ -430,7 +431,7 @@ func gatewayCmd(args []string) int {
 			newRouter.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
 			newRouter.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
 			newRouter.Finalize()
-			newPipe.Handler = pipelineRateLimit(newRouter, newGwcfg.Server.RateLimit)
+			newPipe.Handler = pipelineRateLimit(newRouter, newGwcfg.RateLimit)
 
 			old := swapper.Swap(newPipe)
 			if old != nil {

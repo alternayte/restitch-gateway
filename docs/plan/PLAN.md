@@ -8,7 +8,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### Gateway runtime
 - [x] C01 — `restitch gateway` runs standalone from RESTITCH_CONFIG under the /v2 module
-- [ ] C02 — A v1 file with server: or admin: is refused with the replacement env var named
+- [x] C02 — A v1 file with server: or admin: is refused with the replacement env var named
 - [ ] C03 — An artifact with a non-public composition and no auth policy is refused
 - [ ] C04 — The gateway has no admin API; probes on the data port, metrics on the ops port
 
@@ -59,7 +59,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C02 — A v1 file with server: or admin: is refused with the replacement env var named
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C01
 - **Files:** `internal/gwconfig/config.go`, `internal/gwconfig/config_test.go`, `cmd/restitch/run.go`
 - **Goal:** Loading a file with any key under server: or admin: fails with a message such as "server.port moved to RESTITCH_PORT".
@@ -67,6 +67,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and the message names the env var for every v1 key that still has one; keys with no successor say "removed in v2".
 - **Spec:** Decision on v2.0.0.
 - **Notes:** Process settings come from flags and env only after this chunk. Decode the artifact strictly (unknown keys fail) with yaml KnownFields.
+  Done: `gwconfig.checkTopLevelKeys` refuses server:, admin: and unknown top-level keys; auth and rate_limit are top-level artifact keys on `gwconfig.File`. New flags -read-timeout, -write-timeout, -shutdown-timeout feed `server.Config`. Admin settings are RESTITCH_ADMIN_* env only, and admin storage is memory until C04 deletes it. Nested keys are not strict yet: C03 owns that.
 
 ---
 
@@ -79,7 +80,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **First failing test:** `internal/composition/validate_test.go` — "TestValidateRejectsNonPublicWithoutAuthPolicy"
 - **Done when:** the test command passes, a composition on /health or /ready is refused, and `handler.go` has no path that serves a non-public route without an authenticator.
 - **Spec:** Decisions on the artifact contents, the fail-open route, one validator, reserved probe paths.
-- **Notes:** auth and rate_limit move from server: to top-level artifact keys. ${VAR} checks name syntax only; expansion happens on the gateway after validation of names.
+- **Notes:** auth and rate_limit are already top-level keys on `gwconfig.File` (C02); move them into the composition config so one type owns the artifact. `restitch check` today runs only `composition.ParseConfig` and prints "Syntax OK" for a v1 file; it must call the shared validator. ${VAR} checks name syntax only; expansion happens on the gateway after validation of names.
 
 ---
 

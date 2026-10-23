@@ -26,6 +26,9 @@ import (
 type Config struct {
 	Port    int
 	TLSPort int
+	// ReadTimeout and WriteTimeout default to 30s when zero.
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
 }
 
 // Server represents the restitch HTTP/HTTPS server.
@@ -42,6 +45,12 @@ type Server struct {
 func New(config Config) *Server {
 	router := NewRouter()
 
+	if config.ReadTimeout == 0 {
+		config.ReadTimeout = 30 * time.Second
+	}
+	if config.WriteTimeout == 0 {
+		config.WriteTimeout = 30 * time.Second
+	}
 	s := &Server{
 		config:    config,
 		router:    router,
@@ -51,8 +60,8 @@ func New(config Config) *Server {
 	s.httpServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", config.Port),
 		Handler:           router,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		ReadTimeout:       config.ReadTimeout,
+		WriteTimeout:      config.WriteTimeout,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
@@ -60,8 +69,8 @@ func New(config Config) *Server {
 	s.httpsServer = &http.Server{
 		Addr:              fmt.Sprintf(":%d", config.TLSPort),
 		Handler:           router,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		ReadTimeout:       config.ReadTimeout,
+		WriteTimeout:      config.WriteTimeout,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
