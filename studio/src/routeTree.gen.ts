@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as EnvironmentsEnvIndexRouteImport } from './routes/environments.$env.index'
+import { Route as EnvironmentsEnvTokensRouteImport } from './routes/environments.$env.tokens'
 import { Route as EnvironmentsEnvVersionsRouteImport } from './routes/environments.$env.versions'
 import { Route as EnvironmentsEnvResourcesKindNameRouteImport } from './routes/environments.$env.resources.$kind.$name'
 
@@ -25,9 +27,19 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsUsersRoute = SettingsUsersRouteImport.update({
+  id: '/settings/users',
+  path: '/settings/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EnvironmentsEnvIndexRoute = EnvironmentsEnvIndexRouteImport.update({
   id: '/environments/$env/',
   path: '/environments/$env/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EnvironmentsEnvTokensRoute = EnvironmentsEnvTokensRouteImport.update({
+  id: '/environments/$env/tokens',
+  path: '/environments/$env/tokens',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EnvironmentsEnvVersionsRoute = EnvironmentsEnvVersionsRouteImport.update({
@@ -45,6 +57,8 @@ const EnvironmentsEnvResourcesKindNameRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/settings/users': typeof SettingsUsersRoute
+  '/environments/$env/tokens': typeof EnvironmentsEnvTokensRoute
   '/environments/$env/versions': typeof EnvironmentsEnvVersionsRoute
   '/environments/$env/': typeof EnvironmentsEnvIndexRoute
   '/environments/$env/resources/$kind/$name': typeof EnvironmentsEnvResourcesKindNameRoute
@@ -52,6 +66,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/settings/users': typeof SettingsUsersRoute
+  '/environments/$env/tokens': typeof EnvironmentsEnvTokensRoute
   '/environments/$env/versions': typeof EnvironmentsEnvVersionsRoute
   '/environments/$env': typeof EnvironmentsEnvIndexRoute
   '/environments/$env/resources/$kind/$name': typeof EnvironmentsEnvResourcesKindNameRoute
@@ -60,6 +76,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/settings/users': typeof SettingsUsersRoute
+  '/environments/$env/tokens': typeof EnvironmentsEnvTokensRoute
   '/environments/$env/versions': typeof EnvironmentsEnvVersionsRoute
   '/environments/$env/': typeof EnvironmentsEnvIndexRoute
   '/environments/$env/resources/$kind/$name': typeof EnvironmentsEnvResourcesKindNameRoute
@@ -69,6 +87,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/settings/users'
+    | '/environments/$env/tokens'
     | '/environments/$env/versions'
     | '/environments/$env/'
     | '/environments/$env/resources/$kind/$name'
@@ -76,6 +96,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/settings/users'
+    | '/environments/$env/tokens'
     | '/environments/$env/versions'
     | '/environments/$env'
     | '/environments/$env/resources/$kind/$name'
@@ -83,6 +105,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/login'
+    | '/settings/users'
+    | '/environments/$env/tokens'
     | '/environments/$env/versions'
     | '/environments/$env/'
     | '/environments/$env/resources/$kind/$name'
@@ -91,6 +115,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  SettingsUsersRoute: typeof SettingsUsersRoute
+  EnvironmentsEnvTokensRoute: typeof EnvironmentsEnvTokensRoute
   EnvironmentsEnvVersionsRoute: typeof EnvironmentsEnvVersionsRoute
   EnvironmentsEnvIndexRoute: typeof EnvironmentsEnvIndexRoute
   EnvironmentsEnvResourcesKindNameRoute: typeof EnvironmentsEnvResourcesKindNameRoute
@@ -112,11 +138,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/users': {
+      id: '/settings/users'
+      path: '/settings/users'
+      fullPath: '/settings/users'
+      preLoaderRoute: typeof SettingsUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/environments/$env/': {
       id: '/environments/$env/'
       path: '/environments/$env'
       fullPath: '/environments/$env/'
       preLoaderRoute: typeof EnvironmentsEnvIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/environments/$env/tokens': {
+      id: '/environments/$env/tokens'
+      path: '/environments/$env/tokens'
+      fullPath: '/environments/$env/tokens'
+      preLoaderRoute: typeof EnvironmentsEnvTokensRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/environments/$env/versions': {
@@ -139,6 +179,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  SettingsUsersRoute: SettingsUsersRoute,
+  EnvironmentsEnvTokensRoute: EnvironmentsEnvTokensRoute,
   EnvironmentsEnvVersionsRoute: EnvironmentsEnvVersionsRoute,
   EnvironmentsEnvIndexRoute: EnvironmentsEnvIndexRoute,
   EnvironmentsEnvResourcesKindNameRoute: EnvironmentsEnvResourcesKindNameRoute,

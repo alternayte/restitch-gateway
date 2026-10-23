@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { FileCode2, Plus, Rocket } from "lucide-react";
+import { FileCode2, KeyRound, Plus, Rocket } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { listResourcesOptions } from "@/api/@tanstack/react-query.gen";
 import { DataState } from "@/components/data-state";
@@ -33,6 +33,12 @@ export function DraftPage({ env }: { env: string }) {
         <Rocket className="h-4 w-4" aria-hidden />
         Publish and history
       </Link>
+      {can(me.role, "owner") && (
+        <Link to="/environments/$env/tokens" params={{ env }} className={buttonClass("secondary")}>
+          <KeyRound className="h-4 w-4" aria-hidden />
+          Gateway tokens
+        </Link>
+      )}
       {add}
     </>
   );

@@ -197,6 +197,19 @@ export type IssueGatewayTokenRequest = {
 };
 
 export type IssueGatewayTokenResponse = {
+    created_at: string;
+    created_by: string;
+    id: string;
+    last_used_at?: string;
+    name: string;
+    /**
+     * The first characters of the token, to tell tokens apart.
+     */
+    prefix: string;
+    revoked_at?: string;
+    /**
+     * The token. Studio keeps only its digest, so this is the only time it is shown.
+     */
     token: string;
 };
 

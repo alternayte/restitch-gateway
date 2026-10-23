@@ -33,7 +33,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C20 — Expression fields show server lint errors as the user types
 - [ ] C21 — The secret picker inserts ${VAR} names and the environment lists required names
 - [x] C22 — The publish screen shows the diff, history, rollback and promote
-- [ ] C23 — Owners manage gateway tokens and users in settings
+- [x] C23 — Owners manage gateway tokens and users in settings
 - [ ] C24 — Environment dashboards show aggregates, sampled requests and instances
 - [ ] C25 — The command palette and keyboard shortcuts reach every page and action
 
@@ -342,10 +342,11 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C23 — Owners manage gateway tokens and users in settings
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C09, C16
 - **Files:** `studio/src/features/settings/`, `studio/src/routes/settings.*.tsx`
 - **Goal:** Owners create a gateway token and see it once, revoke tokens, and invite, change and disable users; non-owners do not see these actions.
+- **Notes:** Done: gateway tokens live under the environment (/environments/$env/tokens, linked from the draft page for owners), because a token belongs to one environment; users are /settings/users (Settings nav, owner only). Users: add with a role and a generated temporary password shown once, role select, reset password, disable behind confirm, enable. The issue-token response schema now lists every field (`GatewayToken` is exported so huma includes the embedded fields). `restitch dev` deletes its previous token instead of revoking it, so the list does not fill with dead dev tokens. Test setup gained a native dialog stub and Testing Library cleanup. Verified in a browser: token shown once with copy, temporary password shown once.
 - **First failing test:** `studio/src/features/settings/tokens.test.tsx` — "shows a new token once"
 - **Done when:** the test command passes.
 

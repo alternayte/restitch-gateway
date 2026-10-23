@@ -384,10 +384,34 @@ components:
     IssueGatewayTokenResponse:
       additionalProperties: false
       properties:
+        created_at:
+          format: date-time
+          type: string
+        created_by:
+          type: string
+        id:
+          type: string
+        last_used_at:
+          format: date-time
+          type: string
+        name:
+          type: string
+        prefix:
+          description: The first characters of the token, to tell tokens apart.
+          type: string
+        revoked_at:
+          format: date-time
+          type: string
         token:
+          description: The token. Studio keeps only its digest, so this is the only time it is shown.
           type: string
       required:
         - token
+        - id
+        - name
+        - prefix
+        - created_at
+        - created_by
       type: object
     LintTemplateRequest:
       additionalProperties: false

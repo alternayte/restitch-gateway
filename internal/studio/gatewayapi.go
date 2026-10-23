@@ -42,7 +42,7 @@ const (
 	ArtifactVersionHeader = "Restitch-Artifact-Version"
 )
 
-type gatewayToken struct {
+type GatewayToken struct {
 	ID         string     `json:"id"`
 	Name       string     `json:"name"`
 	Prefix     string     `json:"prefix" doc:"The first characters of the token, to tell tokens apart."`
@@ -81,8 +81,8 @@ func (s *Server) registerGatewayTokens() {
 		}
 	}) (*struct {
 		Body struct {
-			gatewayToken
-			Token string `json:"token"`
+			GatewayToken
+			Token string `json:"token" doc:"The token. Studio keeps only its digest, so this is the only time it is shown."`
 		}
 	}, error) {
 		p, err := principal(ctx)
@@ -96,7 +96,7 @@ func (s *Server) registerGatewayTokens() {
 		if err != nil {
 			return nil, err
 		}
-		gt := gatewayToken{
+		gt := GatewayToken{
 			ID: uuid.NewString(), Name: in.Body.Name, Prefix: token[:len(gatewayTokenPrefix)+6],
 			CreatedAt: time.Now().UTC(), CreatedBy: p.User.Email,
 		}
@@ -108,11 +108,11 @@ func (s *Server) registerGatewayTokens() {
 		}
 		out := &struct {
 			Body struct {
-				gatewayToken
-				Token string `json:"token"`
+				GatewayToken
+				Token string `json:"token" doc:"The token. Studio keeps only its digest, so this is the only time it is shown."`
 			}
 		}{}
-		out.Body.gatewayToken = gt
+		out.Body.GatewayToken = gt
 		out.Body.Token = token
 		return out, nil
 	})
@@ -124,7 +124,7 @@ func (s *Server) registerGatewayTokens() {
 		Environment string `path:"env"`
 	}) (*struct {
 		Body struct {
-			Tokens []gatewayToken `json:"tokens"`
+			Tokens []GatewayToken `json:"tokens"`
 		}
 	}, error) {
 		rows, err := s.db.db.QueryContext(ctx, s.db.rebind(`
@@ -136,12 +136,12 @@ func (s *Server) registerGatewayTokens() {
 		defer rows.Close()
 		out := &struct {
 			Body struct {
-				Tokens []gatewayToken `json:"tokens"`
+				Tokens []GatewayToken `json:"tokens"`
 			}
 		}{}
-		out.Body.Tokens = []gatewayToken{}
+		out.Body.Tokens = []GatewayToken{}
 		for rows.Next() {
-			var gt gatewayToken
+			var gt GatewayToken
 			var revoked, used sql.NullTime
 			if err := rows.Scan(&gt.ID, &gt.Name, &gt.Prefix, &gt.CreatedAt, &gt.CreatedBy, &revoked, &used); err != nil {
 				return nil, err

@@ -138,10 +138,12 @@ function NavLinks({
 }
 
 function Nav({ onNavigate, collapsed = false }: { onNavigate?: () => void; collapsed?: boolean }) {
+  const me = useCurrentUser();
+  const hasSettings = settingsItems.some((item) => can(me.role, item.min));
   return (
     <nav aria-label="Main" className="flex flex-col">
       <NavLinks items={navItems} onNavigate={onNavigate} collapsed={collapsed} />
-      {settingsItems.length > 0 &&
+      {hasSettings &&
         (collapsed ? (
           <div className="mx-2 my-3 border-t border-foreground/10" role="separator" />
         ) : (

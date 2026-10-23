@@ -4,7 +4,7 @@ Updated: 2026-10-23, session 4 (closed)
 
 ## Where we are
 
-C01-C18, C20 and C22 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The new frontend in `studio/` (TanStack, generated client, sluice UI layer) signs in and lists and creates environments; `restitch studio` serves it from `internal/studio/dist`. The old Studio binary, registry and session packages are gone. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
+C01-C18, C20, C22 and C23 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The new frontend in `studio/` (TanStack, generated client, sluice UI layer) signs in and lists and creates environments; `restitch studio` serves it from `internal/studio/dist`. The old Studio binary, registry and session packages are gone. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
 
 ## Prove it
 
@@ -13,11 +13,11 @@ Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its
 
 ## Active chunk
 
-None. Unblocked next: C19 (step graph), C21 (secret picker), C23 (tokens and users), C24 (dashboards).
+None. Unblocked next: C24 (dashboards), C19 (step graph), C21 (secret picker). C25 needs C24.
 
 ## Next action
 
-Start C23 (settings: gateway tokens and users). Port `../sluice/ui/src/features/auth/UsersPage.tsx` and `TokensPage.tsx` patterns. Gateway tokens use issueGatewayTokenMutation/listGatewayTokensOptions/revokeGatewayTokenMutation per environment; users use the auth-all admin routes in the generated client (look for the admin operation ids in `studio/src/api/sdk.gen.ts`). Write "shows a new token once" in `studio/src/features/settings/tokens.test.tsx` first.
+Start C24: an environment dashboard at /environments/$env/overview (or make it the environment landing page) built on getUsageOptions, listRequestsOptions and listInstancesOptions. The v1 chart and waterfall components are in git at 751221b under `studio/src/components/charts` and `studio/src/components/waterfall` (`git show 751221b:studio/src/components/charts/LatencyChart.tsx`); sluice has charts in `../sluice/ui/src/components/charts`. Write "shows the empty state before any gateway reports" in `studio/src/features/dashboard/dashboard.test.tsx` first. Add recharts when the first chart lands.
 
 ## Decisions
 

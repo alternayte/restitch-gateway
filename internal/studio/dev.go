@@ -31,10 +31,10 @@ func (s *Server) PrepareDevEnvironment(ctx context.Context, env, by string) (str
 		env, now, by); err != nil {
 		return "", err
 	}
-	// Earlier dev starts left tokens behind; only the newest one is live.
+	// Earlier dev starts left a token behind. Nobody else ever held it, so
+	// it goes away instead of piling up as revoked rows.
 	if _, err := s.db.db.ExecContext(ctx, s.db.rebind(
-		`UPDATE studio_gateway_tokens SET revoked_at = ? WHERE environment = ? AND name = ? AND revoked_at IS NULL`),
-		now, env, "restitch dev"); err != nil {
+		`DELETE FROM studio_gateway_tokens WHERE environment = ? AND name = ?`), env, "restitch dev"); err != nil {
 		return "", err
 	}
 	token, err := newGatewayToken()
