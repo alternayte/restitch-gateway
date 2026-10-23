@@ -22,7 +22,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C11 — Studio lists each gateway instance with its applied artifact version
 - [x] C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
 - [x] C13 — Gateways push sampled requests with redacted headers and no bodies
-- [ ] C14 — `restitch publish` and YAML import and export use the publish path
+- [x] C14 — `restitch publish` and YAML import and export use the publish path
 - [ ] C15 — `restitch dev` runs both roles in one process on SQLite
 
 ### Studio UI
@@ -224,7 +224,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C14 — `restitch publish` and YAML import and export use the publish path
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C08
 - **Files:** `cmd/restitch/publish.go`, `internal/studio/importexport.go`, `internal/studio/importexport_test.go`, `cmd/restitch/importcmd.go`
 - **Goal:** `restitch publish --env NAME FILE` replaces the draft from the file and publishes with an API key; Studio exports any version as the same YAML.
@@ -232,6 +232,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and an invalid file exits non-zero with the validator message.
 - **Spec:** Decision on CLI publish.
 - **Notes:** Check what `restitch import` does today before you touch it; keep it only if it still has a job.
+  Done: GET /api/v1/environments/{env}/export returns the draft YAML; POST .../import validates the whole file with `validateArtifact`, then `replaceDraft`s it, and a refused file leaves the draft unchanged. `restitch publish -env NAME [-m MSG] FILE` (RESTITCH_STUDIO_URL, RESTITCH_API_KEY) runs import then publish with an auth-all API key as a bearer token, prints the diff and the new version, and exits 1 with the validator message. API keys carry the rak_ prefix. `restitch import openapi` still scaffolds a config from an OpenAPI spec, and now emits auth.api_keys: [${GATEWAY_API_KEY}] so its output validates.
 
 ---
 

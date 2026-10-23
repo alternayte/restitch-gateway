@@ -34,6 +34,8 @@ func main() {
 		os.Exit(gatewayCmd(os.Args[2:]))
 	case "studio":
 		os.Exit(studioCmd(os.Args[2:]))
+	case "publish":
+		os.Exit(publishCmd(os.Args[2:]))
 	case "check":
 		os.Exit(checkCmd(os.Args[2:]))
 	case "version":
@@ -52,5 +54,5 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: restitch [gateway|studio|check|version|import|dev|healthcheck] [flags]\n")
+	fmt.Fprintf(os.Stderr, "usage: restitch [gateway|studio|publish|check|version|import|dev|healthcheck] [flags]\n")
 }

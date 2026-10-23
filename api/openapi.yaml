@@ -273,6 +273,14 @@ components:
       required:
         - error
       type: object
+    ExportDraftResponse:
+      additionalProperties: false
+      properties:
+        yaml:
+          type: string
+      required:
+        - yaml
+      type: object
     GatewayToken:
       additionalProperties: false
       properties:
@@ -300,6 +308,23 @@ components:
         - prefix
         - created_at
         - created_by
+      type: object
+    ImportDraftRequest:
+      additionalProperties: false
+      properties:
+        yaml:
+          maxLength: 10485760
+          type: string
+      required:
+        - yaml
+      type: object
+    ImportDraftResponse:
+      additionalProperties: false
+      properties:
+        diff:
+          type: string
+      required:
+        - diff
       type: object
     Instance:
       additionalProperties: false
@@ -1941,6 +1966,32 @@ paths:
       summary: Change an environment's telemetry settings
       tags:
         - draft
+  /api/v1/environments/{env}/export:
+    get:
+      description: The same format that standalone mode reads and that import accepts. A version's YAML is on getVersion.
+      operationId: exportDraft
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportDraftResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: The draft as artifact YAML
+      tags:
+        - draft
   /api/v1/environments/{env}/gateway-tokens:
     get:
       operationId: listGatewayTokens
@@ -2023,6 +2074,38 @@ paths:
       summary: Revoke a gateway token
       tags:
         - gateway-tokens
+  /api/v1/environments/{env}/import:
+    post:
+      description: The file must pass the same validation as publish; a refused file leaves the draft unchanged. Returns the diff from the old draft.
+      operationId: importDraft
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportDraftRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportDraftResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Replace the draft with an artifact YAML file
+      tags:
+        - draft
   /api/v1/environments/{env}/instances:
     get:
       operationId: listInstances

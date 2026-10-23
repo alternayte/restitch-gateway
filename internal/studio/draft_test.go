@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/alternayte/auth-all/plugins/admin"
+	"github.com/alternayte/auth-all/plugins/apikeys"
 )
 
 // signInAs creates a user with role and returns its session cookies.
@@ -37,6 +38,20 @@ func signInAs(t *testing.T, s *Server, email, role string) []*http.Cookie {
 		t.Fatalf("sign-in %s: %d %s", email, rec.Code, rec.Body)
 	}
 	return rec.Result().Cookies()
+}
+
+// createAPIKey issues an auth-all API key owned by the user with email.
+func createAPIKey(t *testing.T, s *Server, email string) string {
+	t.Helper()
+	u, err := s.auth.GetUserByEmail(context.Background(), email)
+	if err != nil || u == nil {
+		t.Fatalf("user %s: %v", email, err)
+	}
+	_, key, err := s.apikeys.Create(context.Background(), u, apikeys.CreateInput{UserID: u.ID, Name: "ci"})
+	if err != nil {
+		t.Fatalf("create api key: %v", err)
+	}
+	return key
 }
 
 func createEnvironment(t *testing.T, s *Server, owner []*http.Cookie, name string) {

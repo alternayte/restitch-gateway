@@ -1,3 +1,6 @@
+auth:
+    api_keys:
+        - ${GATEWAY_API_KEY}
 compositions:
     create-pet:
         path: /pets

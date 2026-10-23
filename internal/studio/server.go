@@ -68,6 +68,7 @@ type Server struct {
 	db      *database
 	auth    *authall.Auth
 	admin   *admin.Plugin
+	apikeys *apikeys.Plugin
 	now     func() time.Time
 	api     huma.API
 	handler http.Handler
@@ -103,6 +104,7 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	rolePlugin := roles.New(roles.Hierarchy(RoleViewer, RoleEditor, RoleOwner), roles.Default(RoleViewer))
 	adminPlugin := admin.New(admin.AdminRole(RoleOwner))
 	s.admin = adminPlugin
+	s.apikeys = apikeys.New(apikeys.Prefix("rak_"))
 
 	// A browser refuses a Secure cookie over plain HTTP, so a public URL
 	// on http:// (restitch dev, a local quickstart) turns Secure off.
@@ -121,7 +123,7 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 		authall.WithStrictOriginCheck(),
 		authall.WithRateLimiter(limiter),
 		authall.WithStrictRateLimiting(),
-		authall.WithPlugins(rolePlugin, adminPlugin, apikeys.New()),
+		authall.WithPlugins(rolePlugin, adminPlugin, s.apikeys),
 		authall.WithLogger(cfg.Logger),
 	}
 	if cfg.OIDCIssuer != "" {
@@ -176,6 +178,7 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	s.registerInstances()
 	s.registerUsage()
 	s.registerRequests()
+	s.registerImportExport()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST "+auth.BasePath()+signUpPath, http.NotFoundHandler())
