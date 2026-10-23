@@ -28,6 +28,23 @@ jobs:
   go:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Studio tests run against SQLite always and against this Postgres
+    # through RESTITCH_TEST_DATABASE_URL.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: restitch_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      RESTITCH_TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/restitch_test?sslmode=disable
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 

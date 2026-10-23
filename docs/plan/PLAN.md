@@ -13,7 +13,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [ ] C04 — The gateway has no admin API; probes on the data port, metrics on the ops port
 
 ### Studio core
-- [ ] C05 — `restitch studio` signs in a bootstrap owner and refuses anonymous API calls
+- [x] C05 — `restitch studio` signs in a bootstrap owner and refuses anonymous API calls
 - [ ] C06 — An editor saves resources in an environment draft, and a stale save gets 409
 - [ ] C07 — Publish validates the draft, returns a diff and writes an artifact version
 - [ ] C08 — Rollback and promote write new versions and drafts without changing history
@@ -98,7 +98,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C05 — `restitch studio` signs in a bootstrap owner and refuses anonymous API calls
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C01
 - **Files:** `internal/studio/server.go`, `internal/studio/store.go`, `internal/studio/server_test.go`, `cmd/restitch/studio.go`, `.github/workflows/ci.yml`
 - **Goal:** `restitch studio` serves a huma v2 API with auth-all mounted through humaauth; the bootstrap owner signs in, an anonymous call gets 401, a cross-site POST gets 403.
@@ -106,6 +106,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes on SQLite and on Postgres, and `openapi.yaml` is generated and committed with a test that fails on drift.
 - **Spec:** Decisions on sign-in, storage, the Studio API.
 - **Notes:** This chunk carries the highest risk: do it early. Roles viewer, editor, owner through the auth-all roles plugin. RESTITCH_DATABASE_URL picks the store. Add a Postgres service to CI and read RESTITCH_TEST_DATABASE_URL in tests. Open an auth-all issue for any gap instead of working around it.
+  Done: `internal/studio` (server.go, store.go, me.go, migrations/) and `cmd/restitch/studio.go`. The OpenAPI document is `api/openapi.yaml`; refresh it with `go test ./internal/studio -run TestOpenAPIUpToDate -update`. Studio routes are huma operations under /api/v1 behind `auth.RequireAuth`; auth-all lives under /api/auth. auth-all migrates its own tables with `Auth.Migrate`; Studio tables use goose from `internal/studio/migrations`. Sign-in uses the store-backed rate limiter with strict rate limiting. Public sign-up is unrouted and dropped from the document until auth-all#17 ships. `GET/PUT /api/v1/me/preferences` stores UI preferences per user; it replaces the browser-ID sessions when the old Studio goes in C24.
 
 ---
 
