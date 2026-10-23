@@ -170,11 +170,13 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	s.registerDraft()
 	s.registerPublish()
 	s.registerHistory()
+	s.registerGatewayTokens()
 
 	mux := http.NewServeMux()
 	mux.Handle("POST "+auth.BasePath()+signUpPath, http.NotFoundHandler())
 	mux.Handle(auth.BasePath()+"/", auth.Handler())
 	mux.Handle("/api/v1/", auth.RequireAuth(apiMux))
+	mux.Handle("/gateway/v1/", s.gatewayHandler())
 	s.handler = mux
 	return nil
 }

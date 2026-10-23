@@ -255,6 +255,52 @@ components:
       required:
         - error
       type: object
+    GatewayToken:
+      additionalProperties: false
+      properties:
+        created_at:
+          format: date-time
+          type: string
+        created_by:
+          type: string
+        id:
+          type: string
+        last_used_at:
+          format: date-time
+          type: string
+        name:
+          type: string
+        prefix:
+          description: The first characters of the token, to tell tokens apart.
+          type: string
+        revoked_at:
+          format: date-time
+          type: string
+      required:
+        - id
+        - name
+        - prefix
+        - created_at
+        - created_by
+      type: object
+    IssueGatewayTokenRequest:
+      additionalProperties: false
+      properties:
+        name:
+          maxLength: 100
+          minLength: 1
+          type: string
+      required:
+        - name
+      type: object
+    IssueGatewayTokenResponse:
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+      required:
+        - token
+      type: object
     ListEnvironmentsResponse:
       additionalProperties: false
       properties:
@@ -266,6 +312,18 @@ components:
             - "null"
       required:
         - environments
+      type: object
+    ListGatewayTokensResponse:
+      additionalProperties: false
+      properties:
+        tokens:
+          items:
+            $ref: "#/components/schemas/GatewayToken"
+          type:
+            - array
+            - "null"
+      required:
+        - tokens
       type: object
     ListResourcesResponse:
       additionalProperties: false
@@ -1531,6 +1589,88 @@ paths:
       summary: Create an environment with an empty draft
       tags:
         - draft
+  /api/v1/environments/{env}/gateway-tokens:
+    get:
+      operationId: listGatewayTokens
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListGatewayTokensResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List an environment's gateway tokens
+      tags:
+        - gateway-tokens
+    post:
+      description: The response holds the token. Studio stores only its digest, so this is the only time it is shown.
+      operationId: issueGatewayToken
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueGatewayTokenRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueGatewayTokenResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Issue a gateway token for one environment
+      tags:
+        - gateway-tokens
+  /api/v1/environments/{env}/gateway-tokens/{id}:
+    delete:
+      operationId: revokeGatewayToken
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Revoke a gateway token
+      tags:
+        - gateway-tokens
   /api/v1/environments/{env}/promote:
     post:
       description: Replaces this environment's draft with the version's resources and returns the diff. Publish to apply it.

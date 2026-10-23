@@ -17,7 +17,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C06 — An editor saves resources in an environment draft, and a stale save gets 409
 - [x] C07 — Publish validates the draft, returns a diff and writes an artifact version
 - [x] C08 — Rollback and promote write new versions and drafts without changing history
-- [ ] C09 — A gateway token pulls its environment's artifact version with an ETag
+- [x] C09 — A gateway token pulls its environment's artifact version with an ETag
 - [ ] C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
 - [ ] C11 — Studio lists each gateway instance with its applied artifact version
 - [ ] C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
@@ -155,14 +155,15 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C09 — A gateway token pulls its environment's artifact version with an ETag
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C07
 - **Files:** `internal/studio/gatewayapi.go`, `internal/studio/tokens.go`, `internal/studio/gatewayapi_test.go`
 - **Goal:** Owners create and revoke gateway tokens per environment; a token pulls the current version and each immutable version URL, with ETag and 304.
 - **First failing test:** `internal/studio/gatewayapi_test.go` — "TestTokenCannotPullOtherEnvironment"
-- **Done when:** the test command passes, a revoked token gets 401, and a gateway token gets 403 on every user API route.
+- **Done when:** the test command passes, a revoked token gets 401, and a gateway token gets 401 on every user API route (auth-all rejects it before any role check; a gateway token is no user credential).
 - **Spec:** Decisions on the gateway token and immutable version URLs.
 - **Notes:** Store the token hashed; return it once. Many tokens per environment. Body size limit matches the gateway's pull limit.
+  Done: `internal/studio/gatewayapi.go`. Tokens are rgt_ plus 32 random bytes, stored as SHA-256 in `studio_gateway_tokens`; owners issue, list and revoke them under /api/v1/environments/{env}/gateway-tokens. Gateways call GET /gateway/v1/artifact (current, Cache-Control no-cache) and GET /gateway/v1/artifact/versions/{n} (immutable) with Authorization: Bearer; the body is the artifact YAML, the ETag is "<env>-<n>", the version is in the Restitch-Artifact-Version header, 404 means no published version. `composition.MaxArtifactBytes` bounds both publish and the gateway read.
 
 ---
 

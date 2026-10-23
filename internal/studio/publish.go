@@ -214,7 +214,10 @@ func (s *Server) preview(ctx context.Context, env string) (*previewBody, error) 
 		return nil, err
 	}
 	pv := &previewBody{Valid: true, Errors: []string{}, YAML: string(doc)}
-	if err := validateArtifact(ctx, doc); err != nil {
+	if len(doc) > composition.MaxArtifactBytes {
+		pv.Valid = false
+		pv.Errors = append(pv.Errors, fmt.Sprintf("the artifact is %d bytes; gateways read at most %d", len(doc), composition.MaxArtifactBytes))
+	} else if err := validateArtifact(ctx, doc); err != nil {
 		pv.Valid = false
 		pv.Errors = append(pv.Errors, err.Error())
 	}

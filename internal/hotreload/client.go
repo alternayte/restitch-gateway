@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 	"io"
 	"net/http"
 	"time"
@@ -27,7 +28,7 @@ import (
 
 // maxBundleBytes bounds the registry bundle response body. A broken or
 // malicious registry cannot exhaust gateway memory (finding H4).
-const maxBundleBytes = 10 << 20 // 10 MiB
+const maxBundleBytes = composition.MaxArtifactBytes
 
 type FetchResult struct {
 	YAML             []byte
