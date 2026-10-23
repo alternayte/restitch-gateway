@@ -370,6 +370,27 @@ components:
         - diff
         - current_version
       type: object
+    PromoteRequest:
+      additionalProperties: false
+      properties:
+        from_environment:
+          type: string
+        version:
+          format: int64
+          minimum: 1
+          type: integer
+      required:
+        - from_environment
+        - version
+      type: object
+    PromoteResponse:
+      additionalProperties: false
+      properties:
+        diff:
+          type: string
+      required:
+        - diff
+      type: object
     PublishRequest:
       additionalProperties: false
       properties:
@@ -1510,6 +1531,38 @@ paths:
       summary: Create an environment with an empty draft
       tags:
         - draft
+  /api/v1/environments/{env}/promote:
+    post:
+      description: Replaces this environment's draft with the version's resources and returns the diff. Publish to apply it.
+      operationId: promote
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromoteRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromoteResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Copy a published version of another environment into this draft
+      tags:
+        - publish
   /api/v1/environments/{env}/publish:
     post:
       description: Validates the whole draft with the gateway validator. An invalid draft gets 422 and writes nothing. A valid draft becomes the next numbered version, which gateways pull.
@@ -1779,6 +1832,39 @@ paths:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
       summary: Read one artifact version with its YAML
+      tags:
+        - publish
+  /api/v1/environments/{env}/versions/{number}/rollback:
+    post:
+      description: "History stays append-only: version N's YAML becomes the next version. The draft does not change."
+      operationId: rollback
+      parameters:
+        - in: path
+          name: env
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: number
+          required: true
+          schema:
+            format: int64
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactVersion"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Publish an old version again as a new version
       tags:
         - publish
   /api/v1/me:

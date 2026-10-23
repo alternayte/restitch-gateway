@@ -17,6 +17,7 @@ package studio
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -284,4 +285,198 @@ func (s *Server) version(ctx context.Context, env string, number int) (*artifact
 		return nil, err
 	}
 	return &v, nil
+}
+
+// artifactResources splits an artifact into draft resources, the inverse
+// of assembleArtifact.
+func artifactResources(doc []byte) ([]resource, error) {
+	var top map[string]any
+	if err := yaml.Unmarshal(doc, &top); err != nil {
+		return nil, fmt.Errorf("invalid YAML: %w", err)
+	}
+	var out []resource
+	settings := map[string]any{}
+	for key, val := range top {
+		switch key {
+		case "upstreams", "compositions":
+			items, ok := val.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("%s must be a mapping", key)
+			}
+			kind := KindUpstream
+			if key == "compositions" {
+				kind = KindComposition
+			}
+			for name, body := range items {
+				m, ok := body.(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("%s.%s must be a mapping", key, name)
+				}
+				out = append(out, resource{Kind: kind, Name: name, Body: m})
+			}
+		case "auth", "rate_limit":
+			m, ok := val.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("%s must be a mapping", key)
+			}
+			kind := KindAuth
+			if key == "rate_limit" {
+				kind = KindRateLimit
+			}
+			out = append(out, resource{Kind: kind, Name: singletonName, Body: m})
+		default:
+			settings[key] = val
+		}
+	}
+	if len(settings) > 0 {
+		out = append(out, resource{Kind: KindSettings, Name: singletonName, Body: settings})
+	}
+	for _, r := range out {
+		if err := checkResource(r.Kind, r.Name, r.Body); err != nil {
+			return nil, fmt.Errorf("%s %s: %w", r.Kind, r.Name, err)
+		}
+	}
+	return out, nil
+}
+
+// replaceDraft makes resources the whole draft of env in one transaction.
+// A resource that existed keeps counting revisions up, so a tab that holds
+// an older revision still gets 409.
+func (s *Server) replaceDraft(ctx context.Context, env string, resources []resource, by string) error {
+	tx, err := s.db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	revisions := map[string]int{}
+	rows, err := tx.QueryContext(ctx, s.db.rebind(`SELECT kind, name, revision FROM studio_resources WHERE environment = ?`), env)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var kind, name string
+		var rev int
+		if err := rows.Scan(&kind, &name, &rev); err != nil {
+			rows.Close()
+			return err
+		}
+		revisions[kind+"/"+name] = rev
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, s.db.rebind(`DELETE FROM studio_resources WHERE environment = ?`), env); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for _, r := range resources {
+		data, err := json.Marshal(r.Body)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, s.db.rebind(`
+			INSERT INTO studio_resources (environment, kind, name, revision, body, updated_at, updated_by)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`),
+			env, r.Kind, r.Name, revisions[r.Kind+"/"+r.Name]+1, string(data), now, by); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Server) registerHistory() {
+	editor := huma.Middlewares{humaauth.RequireRole(s.api, s.auth, RoleEditor)}
+	tags := []string{"publish"}
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "rollback", Method: http.MethodPost, Path: "/api/v1/environments/{env}/versions/{number}/rollback",
+		Summary:     "Publish an old version again as a new version",
+		Description: "History stays append-only: version N's YAML becomes the next version. The draft does not change.",
+		Tags:        tags, Middlewares: editor,
+	}, func(ctx context.Context, in *struct {
+		Environment string `path:"env"`
+		Number      int    `path:"number" minimum:"1"`
+	}) (*struct{ Body artifactVersion }, error) {
+		p, err := principal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		old, err := s.version(ctx, in.Environment, in.Number)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateArtifact(ctx, []byte(old.YAML)); err != nil {
+			return nil, huma.Error422UnprocessableEntity(fmt.Sprintf("version %d no longer validates: %v", in.Number, err))
+		}
+		v, err := s.writeVersion(ctx, in.Environment, []byte(old.YAML), p.User.Email, fmt.Sprintf("Roll back to version %d", in.Number))
+		if err != nil {
+			return nil, err
+		}
+		return &struct{ Body artifactVersion }{Body: *v}, nil
+	})
+
+	huma.Register(s.api, huma.Operation{
+		OperationID: "promote", Method: http.MethodPost, Path: "/api/v1/environments/{env}/promote",
+		Summary:     "Copy a published version of another environment into this draft",
+		Description: "Replaces this environment's draft with the version's resources and returns the diff. Publish to apply it.",
+		Tags:        tags, Middlewares: editor,
+	}, func(ctx context.Context, in *struct {
+		Environment string `path:"env"`
+		Body        struct {
+			FromEnvironment string `json:"from_environment"`
+			Version         int    `json:"version" minimum:"1"`
+		}
+	}) (*struct {
+		Body struct {
+			Diff string `json:"diff"`
+		}
+	}, error) {
+		p, err := principal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.requireEnvironment(ctx, in.Environment); err != nil {
+			return nil, err
+		}
+		src, err := s.version(ctx, in.Body.FromEnvironment, in.Body.Version)
+		if err != nil {
+			return nil, err
+		}
+		resources, err := artifactResources([]byte(src.YAML))
+		if err != nil {
+			return nil, huma.Error422UnprocessableEntity(err.Error())
+		}
+		before, err := s.draftResources(ctx, in.Environment)
+		if err != nil {
+			return nil, err
+		}
+		beforeDoc, err := assembleArtifact(before)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.replaceDraft(ctx, in.Environment, resources, p.User.Email); err != nil {
+			return nil, err
+		}
+		afterDoc, err := assembleArtifact(resources)
+		if err != nil {
+			return nil, err
+		}
+		diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+			A: difflib.SplitLines(string(beforeDoc)), B: difflib.SplitLines(string(afterDoc)),
+			FromFile: in.Environment + " draft", ToFile: fmt.Sprintf("%s version %d", in.Body.FromEnvironment, in.Body.Version), Context: 3,
+		})
+		if err != nil {
+			return nil, err
+		}
+		out := &struct {
+			Body struct {
+				Diff string `json:"diff"`
+			}
+		}{}
+		out.Body.Diff = diff
+		return out, nil
+	})
 }

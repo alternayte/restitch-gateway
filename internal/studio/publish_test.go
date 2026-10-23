@@ -17,6 +17,8 @@ package studio
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -135,4 +137,79 @@ func TestViewerCannotPublish(t *testing.T) {
 			t.Fatalf("viewer publish: got %d, want 403", code)
 		}
 	})
+}
+
+func TestRollbackAppendsVersion(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s *Server) {
+		c := signIn(t, s)
+		seedValidDraft(t, s, c)
+		_, v1, _ := publish(t, s, c, "first")
+		saveResource(t, s, c, stagingRes+"upstream/users", 1, map[string]any{"url": "https://${USERS_HOST}/v2"})
+		publish(t, s, c, "second")
+
+		rec := do(t, s, http.MethodPost, "/api/v1/environments/staging/versions/1/rollback", testPublicURL, c, nil)
+		var v3 publishResult
+		_ = json.Unmarshal(rec.Body.Bytes(), &v3)
+		if rec.Code != http.StatusOK || v3.Number != 3 || v3.YAML != v1.YAML || !strings.Contains(v3.Message, "1") {
+			t.Fatalf("rollback: %d %s", rec.Code, rec.Body)
+		}
+		rec = do(t, s, http.MethodGet, "/api/v1/environments/staging/versions", "", c, nil)
+		if n := strings.Count(rec.Body.String(), `"number"`); n != 3 {
+			t.Fatalf("history holds %d versions, want 3: %s", n, rec.Body)
+		}
+	})
+}
+
+func TestPromoteCopiesVersionIntoDraft(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s *Server) {
+		c := signIn(t, s)
+		seedValidDraft(t, s, c)
+		publish(t, s, c, "first")
+		createEnvironment(t, s, c, "prod")
+		// prod already holds an upstream of the same name at revision 1.
+		saveResource(t, s, c, "/api/v1/environments/prod/resources/upstream/users", 0, map[string]any{"url": "https://old"})
+
+		rec := do(t, s, http.MethodPost, "/api/v1/environments/prod/promote", testPublicURL, c,
+			map[string]any{"from_environment": "staging", "version": 1})
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "https://old") {
+			t.Fatalf("promote: %d %s", rec.Code, rec.Body)
+		}
+		rec = do(t, s, http.MethodGet, "/api/v1/environments/prod/resources/upstream/users", "", c, nil)
+		var up savedResource
+		_ = json.Unmarshal(rec.Body.Bytes(), &up)
+		if up.Body["url"] != "https://${USERS_HOST}/v1" || up.Revision != 2 {
+			t.Fatalf("promoted upstream = %+v", up)
+		}
+		// A tab that still holds prod's revision 1 must not overwrite it.
+		if code, _ := saveResource(t, s, c, "/api/v1/environments/prod/resources/upstream/users", 1, map[string]any{"url": "https://stale"}); code != http.StatusConflict {
+			t.Fatalf("stale save after promote: got %d, want 409", code)
+		}
+		if rec := do(t, s, http.MethodGet, "/api/v1/environments/prod/resources/composition/user", "", c, nil); rec.Code != http.StatusOK {
+			t.Fatalf("promoted composition missing: %d", rec.Code)
+		}
+		rec = do(t, s, http.MethodGet, "/api/v1/environments/prod/versions", "", c, nil)
+		if strings.Contains(rec.Body.String(), `"number"`) {
+			t.Fatalf("promote must change the draft only, not publish: %s", rec.Body)
+		}
+	})
+}
+
+// Artifact versions are append-only: no code path may rewrite or remove
+// one. Rollback and promote write new rows instead.
+func TestNoCodeRewritesArtifactVersions(t *testing.T) {
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, bad := range []string{"UPDATE studio_artifact_versions", "DELETE FROM studio_artifact_versions"} {
+			if strings.Contains(string(src), bad) {
+				t.Errorf("%s contains %q", f, bad)
+			}
+		}
+	}
 }

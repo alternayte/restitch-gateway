@@ -16,7 +16,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C05 — `restitch studio` signs in a bootstrap owner and refuses anonymous API calls
 - [x] C06 — An editor saves resources in an environment draft, and a stale save gets 409
 - [x] C07 — Publish validates the draft, returns a diff and writes an artifact version
-- [ ] C08 — Rollback and promote write new versions and drafts without changing history
+- [x] C08 — Rollback and promote write new versions and drafts without changing history
 - [ ] C09 — A gateway token pulls its environment's artifact version with an ETag
 - [ ] C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
 - [ ] C11 — Studio lists each gateway instance with its applied artifact version
@@ -142,13 +142,14 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C08 — Rollback and promote write new versions and drafts without changing history
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C07
 - **Files:** `internal/studio/publish.go`, `internal/studio/publish_test.go`
 - **Goal:** Rollback to version N writes version N+k with N's content; promote copies a version into another environment's draft and returns the diff.
 - **First failing test:** `internal/studio/publish_test.go` — "TestRollbackAppendsVersion"
 - **Done when:** the test command passes and no update or delete statement touches the versions table.
 - **Spec:** Decision on rollback and promote.
+- **Notes:** Done: rollback re-validates the old YAML and appends it with message "Roll back to version N"; the draft does not change. Promote parses the version with `artifactResources` (the inverse of `assembleArtifact`, reused by C14 import) and `replaceDraft` swaps the whole draft in one transaction, counting revisions up from the old rows so stale tabs still get 409. `TestNoCodeRewritesArtifactVersions` fails if any non-test file updates or deletes a version row.
 
 ---
 
