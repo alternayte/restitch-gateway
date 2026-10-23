@@ -159,7 +159,7 @@ func TestMemoryStorage_GetRequestByID(t *testing.T) {
 // AsyncStore land in the underlying storage, and Close drains the queue.
 func TestAsyncStore_RecordsAndDrains(t *testing.T) {
 	inner := NewMemoryStorage(24 * time.Hour)
-	as := NewAsyncStore(inner)
+	as := NewAsyncStore(inner, nil)
 
 	ctx := context.Background()
 	for i := 0; i < 50; i++ {
@@ -194,7 +194,7 @@ func TestAsyncStore_RecordsAndDrains(t *testing.T) {
 // queue is full, RecordRequest drops rather than blocking the caller.
 func TestAsyncStore_DropsWhenFull(t *testing.T) {
 	blocker := &blockingStorage{done: make(chan struct{})}
-	as := NewAsyncStore(blocker)
+	as := NewAsyncStore(blocker, nil)
 	defer func() {
 		close(blocker.done)
 		_ = as.Close()

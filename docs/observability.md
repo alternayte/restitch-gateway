@@ -21,6 +21,7 @@ Metrics are served on the admin port (default 9090) at `GET /metrics`.
 | `restitch_cache_hits_total` | counter | `composition`, `step` | Step cache hits |
 | `restitch_cache_misses_total` | counter | `composition`, `step` | Step cache misses |
 | `restitch_coalesced_total` | counter | `composition`, `step` | Requests that shared a coalesced upstream call |
+| `restitch_request_records_dropped_total` | counter | `reason` | Request records not written to durable admin storage (SQLite/Turso): `queue_full` (the 1024-record write queue is full, for example during a database stall), `closed` (recorded after shutdown began), `drain_timeout` (still queued when the shutdown deadline passed). Drops log at most one line per 10s. |
 | `restitch_registry_polls_total` | counter | `result` | Registry polls by result (`success`, `not_modified`, `error`) |
 | `restitch_registry_poll_duration_seconds` | histogram | — | Registry poll duration |
 | `restitch_registry_last_success_timestamp` | gauge | — | Unix time of the last successful registry poll |
