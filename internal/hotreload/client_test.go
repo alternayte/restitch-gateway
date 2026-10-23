@@ -16,144 +16,78 @@ package hotreload
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 )
 
-func TestRegistryClient_Fetch_Success(t *testing.T) {
-	bundle := map[string]any{
-		"yaml_content":      "upstreams: {}\ncompositions: {}\n",
-		"etag":              "abc123",
-		"composition_count": 2,
-		"composition_names": []string{"comp1", "comp2"},
-	}
+func TestClient_FetchSendsTokenAndReadsVersion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/registry/bundle" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if r.Header.Get("If-None-Match") != "" {
-			t.Errorf("unexpected If-None-Match on first request: %s", r.Header.Get("If-None-Match"))
-		}
-		w.Header().Set("ETag", "abc123")
-		_ = json.NewEncoder(w).Encode(bundle)
-	}))
-	defer srv.Close()
-
-	client := NewRegistryClient(srv.URL)
-	result, err := client.Fetch(context.Background(), "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.NotModified {
-		t.Error("expected modified")
-	}
-	if result.ETag != "abc123" {
-		t.Errorf("etag = %q, want %q", result.ETag, "abc123")
-	}
-	if string(result.YAML) != "upstreams: {}\ncompositions: {}\n" {
-		t.Errorf("yaml = %q", string(result.YAML))
-	}
-	if result.CompositionCount != 2 {
-		t.Errorf("count = %d, want 2", result.CompositionCount)
-	}
-}
-
-func TestRegistryClient_Fetch_NotModified(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("If-None-Match") == "abc123" {
-			w.Header().Set("ETag", "abc123")
-			w.WriteHeader(http.StatusNotModified)
+		if r.URL.Path != "/gateway/v1/artifact" || r.Header.Get("Authorization") != "Bearer rgt_abc" {
+			http.Error(w, "nope", http.StatusUnauthorized)
 			return
 		}
-		t.Errorf("expected If-None-Match: abc123, got %q", r.Header.Get("If-None-Match"))
+		bundleHandler("upstreams: {}\n", `"staging-3"`, 3)(w, r)
 	}))
 	defer srv.Close()
 
-	client := NewRegistryClient(srv.URL)
-	result, err := client.Fetch(context.Background(), "abc123")
+	c := NewClient(srv.URL+"/", "rgt_abc")
+	res, err := c.Fetch(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.NotModified {
-		t.Error("expected NotModified")
+	if string(res.YAML) != "upstreams: {}\n" || res.Version != 3 || res.ETag != `"staging-3"` {
+		t.Fatalf("result = %+v", res)
+	}
+	res, err = c.Fetch(context.Background(), `"staging-3"`)
+	if err != nil || !res.NotModified {
+		t.Fatalf("same etag: %+v %v", res, err)
 	}
 }
 
-func TestRegistryClient_Fetch_ServerError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+func TestClient_FetchClassifiesStatus(t *testing.T) {
+	for status, want := range map[int]error{
+		http.StatusNotFound:     ErrNoVersion,
+		http.StatusUnauthorized: ErrTokenRejected,
+		http.StatusForbidden:    ErrTokenRejected,
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+		}))
+		_, err := NewClient(srv.URL, "rgt_x").Fetch(context.Background(), "")
+		srv.Close()
+		if !errors.Is(err, want) {
+			t.Errorf("status %d: err = %v, want %v", status, err, want)
+		}
+	}
+}
+
+func TestClient_FetchServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer srv.Close()
-
-	client := NewRegistryClient(srv.URL)
-	_, err := client.Fetch(context.Background(), "")
-	if err == nil {
-		t.Error("expected error on 500")
+	if _, err := NewClient(srv.URL, "rgt_x").Fetch(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "502") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
-func TestRegistryClient_Fetch_ConnectionRefused(t *testing.T) {
-	client := NewRegistryClient("http://127.0.0.1:1")
-	_, err := client.Fetch(context.Background(), "")
-	if err == nil {
-		t.Error("expected error on connection refused")
+func TestClient_FetchConnectionRefused(t *testing.T) {
+	if _, err := NewClient("http://127.0.0.1:1", "rgt_x").Fetch(context.Background(), ""); err == nil {
+		t.Fatal("expected an error")
 	}
 }
 
-func TestRegistryClient_Fetch_AdminKey(t *testing.T) {
-	var gotKey string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotKey = r.Header.Get("X-Admin-Key")
-		w.Header().Set("ETag", "x")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"yaml_content": "", "etag": "x", "composition_count": 0, "composition_names": []string{},
-		})
+func TestClient_FetchRefusesOversizedArtifact(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("a", composition.MaxArtifactBytes+1)))
 	}))
 	defer srv.Close()
-
-	client := NewRegistryClient(srv.URL, WithAdminKey("secret"))
-	_, err := client.Fetch(context.Background(), "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotKey != "secret" {
-		t.Errorf("X-Admin-Key = %q, want %q", gotKey, "secret")
-	}
-}
-
-func TestRegistryClient_Fetch_ContextCanceled(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
-	}))
-	defer srv.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	client := NewRegistryClient(srv.URL)
-	_, err := client.Fetch(ctx, "")
-	if err == nil {
-		t.Error("expected error on canceled context")
-	}
-}
-
-// TestRegistryClient_Fetch_OversizedBundle covers finding H4: a bundle
-// larger than the limit must be rejected, not decoded.
-func TestRegistryClient_Fetch_OversizedBundle(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"yaml_content": "` + strings.Repeat("a", maxBundleBytes) + `"}`))
-	}))
-	defer srv.Close()
-
-	client := NewRegistryClient(srv.URL)
-	_, err := client.Fetch(context.Background(), "")
-	if err == nil {
-		t.Fatal("expected error for oversized bundle")
-	}
-	if !strings.Contains(err.Error(), "exceeds") {
-		t.Errorf("error = %v, want a size-limit error", err)
+	if _, err := NewClient(srv.URL, "rgt_x").Fetch(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("err = %v", err)
 	}
 }

@@ -16,6 +16,7 @@ package hotreload
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync/atomic"
@@ -29,24 +30,30 @@ type PollStatus struct {
 	LastPollTime      time.Time `json:"last_poll"`
 	LastSuccessTime   time.Time `json:"last_success"`
 	LastETag          string    `json:"etag"`
-	CompositionCount  int       `json:"composition_count"`
+	Version           int       `json:"version"`
 	LastError         string    `json:"error"`
 	ErrorType         string    `json:"error_type"`
 	ConsecutiveErrors int       `json:"consecutive_errors"`
 }
 
 type Poller struct {
-	client    *RegistryClient
+	client    *Client
 	interval  time.Duration
 	reloadFn  func(yaml []byte) (string, error)
 	triggerCh chan struct{}
 	status    atomic.Pointer[PollStatus]
 	metrics   *observability.Metrics
 	bo        *backoff.ExponentialBackOff
+	// onApplied runs after every version the reload function accepted.
+	onApplied func(version int)
 }
 
+// OnApplied sets a callback that runs after each applied version. The
+// gateway uses it to turn /ready on after the first one.
+func (p *Poller) OnApplied(fn func(version int)) { p.onApplied = fn }
+
 func NewPoller(
-	client *RegistryClient,
+	client *Client,
 	interval time.Duration,
 	reloadFn func(yaml []byte) (string, error),
 	metrics *observability.Metrics,
@@ -92,9 +99,13 @@ func (p *Poller) Run(ctx context.Context) error {
 			p.status.Store(&s)
 			p.recordMetricsResult("error")
 
-			slog.Error("registry poll failed",
-				"error", pollErr, "type", errType,
-				"consecutive", consecutiveErrors)
+			if errors.Is(pollErr, ErrNoVersion) {
+				slog.Info("waiting for the first published version", "consecutive", consecutiveErrors)
+			} else {
+				slog.Error("artifact pull failed",
+					"error", pollErr, "type", errType,
+					"consecutive", consecutiveErrors)
+			}
 
 			wait := p.bo.NextBackOff()
 			if !p.sleepOrTrigger(ctx, wait) {
@@ -116,7 +127,7 @@ func (p *Poller) Run(ctx context.Context) error {
 		} else {
 			lastETag = result.ETag
 			s.LastETag = result.ETag
-			s.CompositionCount = result.CompositionCount
+			s.Version = result.Version
 			s.LastSuccessTime = now
 			p.status.Store(&s)
 			p.recordMetricsResult("success")
@@ -139,13 +150,16 @@ func (p *Poller) poll(ctx context.Context, lastETag string) (*FetchResult, error
 	if _, err := p.reloadFn(result.YAML); err != nil {
 		return nil, fmt.Errorf("reload: %w", err)
 	}
+	if p.onApplied != nil {
+		p.onApplied(result.Version)
+	}
 	return result, nil
 }
 
 func (p *Poller) Trigger() {
 	select {
 	case p.triggerCh <- struct{}{}:
-		slog.Info("registry poll triggered")
+		slog.Info("artifact pull triggered")
 	default:
 	}
 }
@@ -172,6 +186,12 @@ func (p *Poller) sleepOrTrigger(ctx context.Context, d time.Duration) bool {
 
 func classifyError(err error) string {
 	msg := err.Error()
+	if errors.Is(err, ErrNoVersion) {
+		return "no_version"
+	}
+	if errors.Is(err, ErrTokenRejected) {
+		return "token"
+	}
 	if len(msg) >= 6 && msg[:6] == "fetch:" {
 		return "fetch"
 	}

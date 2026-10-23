@@ -16,46 +16,54 @@ package hotreload
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 	"github.com/alternayte/restitch-gateway/v2/internal/upstream"
 )
 
-// maxBundleBytes bounds the registry bundle response body. A broken or
-// malicious registry cannot exhaust gateway memory (finding H4).
-const maxBundleBytes = composition.MaxArtifactBytes
+// ErrNoVersion means the environment has no published version yet. The
+// gateway keeps polling and stays not ready.
+var ErrNoVersion = errors.New("the environment has no published version yet")
 
+// ErrTokenRejected means Studio refused the gateway token.
+var ErrTokenRejected = errors.New("studio rejected the gateway token")
+
+// FetchResult is one pull of the environment's current artifact.
 type FetchResult struct {
-	YAML             []byte
-	ETag             string
-	CompositionCount int
-	NotModified      bool
+	YAML        []byte
+	ETag        string
+	Version     int
+	NotModified bool
 }
 
-type ClientOption func(*RegistryClient)
+// ClientOption configures a Client.
+type ClientOption func(*Client)
 
-func WithAdminKey(key string) ClientOption {
-	return func(c *RegistryClient) { c.adminKey = key }
-}
-
+// WithHTTPClient replaces the HTTP client (tests use it).
 func WithHTTPClient(hc *http.Client) ClientOption {
-	return func(c *RegistryClient) { c.httpClient = hc }
+	return func(c *Client) { c.httpClient = hc }
 }
 
-type RegistryClient struct {
+// Client pulls the current artifact version from Studio with a gateway
+// token. The token names the environment.
+type Client struct {
 	url        string
+	token      string
 	httpClient *http.Client
-	adminKey   string
 }
 
-func NewRegistryClient(url string, opts ...ClientOption) *RegistryClient {
-	c := &RegistryClient{
-		url:        url,
+// NewClient returns a client for the Studio at studioURL.
+func NewClient(studioURL, token string, opts ...ClientOption) *Client {
+	c := &Client{
+		url:        strings.TrimRight(studioURL, "/"),
+		token:      token,
 		httpClient: &http.Client{Timeout: 15 * time.Second},
 	}
 	for _, o := range opts {
@@ -64,62 +72,45 @@ func NewRegistryClient(url string, opts ...ClientOption) *RegistryClient {
 	return c
 }
 
-func (c *RegistryClient) Fetch(ctx context.Context, lastETag string) (*FetchResult, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+"/api/v1/registry/bundle", nil)
+// Fetch pulls the current version. lastETag makes an unchanged version
+// answer NotModified without a body.
+func (c *Client) Fetch(ctx context.Context, lastETag string) (*FetchResult, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url+"/gateway/v1/artifact", nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
 	if lastETag != "" {
 		req.Header.Set("If-None-Match", lastETag)
-	}
-	if c.adminKey != "" {
-		req.Header.Set("X-Admin-Key", c.adminKey)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch bundle: %w", err)
+		return nil, fmt.Errorf("pull artifact: %w", err)
 	}
 	defer upstream.DrainAndClose(resp.Body)
 
-	if resp.StatusCode == http.StatusNotModified {
-		return &FetchResult{
-			NotModified: true,
-			ETag:        resp.Header.Get("ETag"),
-		}, nil
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotModified:
+		return &FetchResult{NotModified: true, ETag: resp.Header.Get("ETag")}, nil
+	case http.StatusNotFound:
+		return nil, ErrNoVersion
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return nil, ErrTokenRejected
+	default:
+		return nil, fmt.Errorf("studio returned status %d", resp.StatusCode)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
-	}
-
-	var bundle struct {
-		YAMLContent      string   `json:"yaml_content"`
-		ETag             string   `json:"etag"`
-		CompositionCount int      `json:"composition_count"`
-		CompositionNames []string `json:"composition_names"`
-	}
-	// The bundle body is bounded so a broken or malicious registry cannot
-	// exhaust gateway memory with an unbounded yaml_content (finding H4).
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBundleBytes+1))
+	// The body is bounded so a broken Studio cannot exhaust gateway memory.
+	// Studio refuses to publish anything larger.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, composition.MaxArtifactBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("read bundle: %w", err)
+		return nil, fmt.Errorf("read artifact: %w", err)
 	}
-	if len(body) > maxBundleBytes {
-		return nil, fmt.Errorf("bundle exceeds %d bytes", maxBundleBytes)
+	if len(body) > composition.MaxArtifactBytes {
+		return nil, fmt.Errorf("artifact exceeds %d bytes", composition.MaxArtifactBytes)
 	}
-	if err := json.Unmarshal(body, &bundle); err != nil {
-		return nil, fmt.Errorf("decode bundle: %w", err)
-	}
-
-	etag := resp.Header.Get("ETag")
-	if etag == "" {
-		etag = bundle.ETag
-	}
-
-	return &FetchResult{
-		YAML:             []byte(bundle.YAMLContent),
-		ETag:             etag,
-		CompositionCount: bundle.CompositionCount,
-	}, nil
+	version, _ := strconv.Atoi(resp.Header.Get("Restitch-Artifact-Version"))
+	return &FetchResult{YAML: body, ETag: resp.Header.Get("ETag"), Version: version}, nil
 }

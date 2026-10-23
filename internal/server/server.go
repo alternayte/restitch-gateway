@@ -38,6 +38,10 @@ type Server struct {
 	httpServer  *http.Server
 	httpsServer *http.Server
 	ready       atomic.Bool
+	// unconfigured holds /ready at 503 until the first artifact is applied
+	// (managed mode). It is false by default, so standalone mode is ready
+	// once the listener is bound.
+	unconfigured atomic.Bool
 	startTime   time.Time
 }
 
@@ -117,9 +121,16 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	return s.httpsServer.ServeTLS(ln, "", "")
 }
 
-// Ready returns whether the server is ready to accept requests.
+// Ready returns whether the server is ready to accept requests: the
+// listener is bound and a config is applied.
 func (s *Server) Ready() bool {
-	return s.ready.Load()
+	return s.ready.Load() && !s.unconfigured.Load()
+}
+
+// SetConfigured records whether a config is applied. A managed gateway
+// starts unconfigured and turns configured after its first pull.
+func (s *Server) SetConfigured(configured bool) {
+	s.unconfigured.Store(!configured)
 }
 
 // SetReady sets the server's ready state.

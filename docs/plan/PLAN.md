@@ -18,7 +18,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C07 — Publish validates the draft, returns a diff and writes an artifact version
 - [x] C08 — Rollback and promote write new versions and drafts without changing history
 - [x] C09 — A gateway token pulls its environment's artifact version with an ETag
-- [ ] C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
+- [x] C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
 - [ ] C11 — Studio lists each gateway instance with its applied artifact version
 - [ ] C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
 - [ ] C13 — Gateways push sampled requests with redacted headers and no bodies
@@ -170,7 +170,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C09, C04
 - **Files:** `internal/hotreload/client.go`, `internal/hotreload/poller.go`, `cmd/restitch/run.go`, `internal/server/health.go`, `internal/hotreload/poller_test.go`
 - **Goal:** With RESTITCH_STUDIO_URL and RESTITCH_GATEWAY_TOKEN the gateway pulls and applies versions; while Studio is unreachable /health is 200 and /ready is 503 until the first version.
@@ -178,6 +178,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and an e2e spec in `tests/` starts a gateway before Studio, then serves traffic after a publish.
 - **Spec:** Decision on cold start.
 - **Notes:** No disk cache. Keep the last good version in memory on a failed pull. The old bundle endpoint and registry key are gone.
+  Done: `hotreload.Client` pulls /gateway/v1/artifact with the gateway token (ErrNoVersion on 404, ErrTokenRejected on 401/403); `Poller.OnApplied` turns /ready on through `server.SetConfigured`. `gatewayCmd` starts every mode with a probes-only pipeline and applies every config through one `reloadFromBytes`. Flags -studio-url and -gateway-token replace -registry-url and -registry-key. The end-to-end check is `TestManagedGatewaySurvivesStudioOutage` in `cmd/restitch/managed_test.go`, not in `tests/`: it runs the gateway as a helper process against an in-process Studio. `deploy/` and `examples/registry` still pass the removed registry flags: C26 rewrites them. The old `cmd/restitch-studio` and `internal/registry` stay until C24/C26 delete them.
 
 ---
 

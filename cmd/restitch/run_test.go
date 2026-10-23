@@ -27,7 +27,7 @@ import (
 )
 
 func TestGatewayCmd_MutualExclusivity(t *testing.T) {
-	code := gatewayCmd([]string{"-config", "x.yaml", "-registry-url", "http://example.com"})
+	code := gatewayCmd([]string{"-config", "x.yaml", "-studio-url", "http://example.com", "-gateway-token", "rgt_x"})
 	if code != 2 {
 		t.Errorf("expected exit 2 for mutual exclusivity, got %d", code)
 	}

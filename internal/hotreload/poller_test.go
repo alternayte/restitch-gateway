@@ -16,28 +16,69 @@ package hotreload
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/alternayte/restitch-gateway/v2/internal/server"
 )
 
-func bundleHandler(yaml, etag string, count int) http.HandlerFunc {
+// bundleHandler serves one artifact version the way Studio does.
+func bundleHandler(yaml, etag string, version int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", etag)
 		if r.Header.Get("If-None-Match") == etag {
-			w.Header().Set("ETag", etag)
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
-		w.Header().Set("ETag", etag)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"yaml_content":      yaml,
-			"etag":              etag,
-			"composition_count": count,
-			"composition_names": []string{},
-		})
+		w.Header().Set("Restitch-Artifact-Version", strconv.Itoa(version))
+		_, _ = w.Write([]byte(yaml))
+	}
+}
+
+func TestReadyStays503UntilFirstArtifact(t *testing.T) {
+	var published atomic.Bool
+	studio := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !published.Load() {
+			http.Error(w, "no published version", http.StatusNotFound)
+			return
+		}
+		bundleHandler("upstreams: {}\n", `"staging-1"`, 1)(w, r)
+	}))
+	defer studio.Close()
+
+	srv := server.New(server.Config{Port: 0})
+	srv.SetReady(true) // the listener is bound
+	srv.SetConfigured(false)
+
+	p := NewPoller(NewClient(studio.URL, "rgt_test"), 20*time.Millisecond,
+		func([]byte) (string, error) { return "h", nil }, nil)
+	p.OnApplied(func(int) { srv.SetConfigured(true) })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = p.Run(ctx) }()
+
+	time.Sleep(100 * time.Millisecond)
+	if srv.Ready() {
+		t.Fatal("ready before any version was published")
+	}
+	if got := p.Status().ErrorType; got != "no_version" {
+		t.Errorf("error type = %q, want no_version", got)
+	}
+	published.Store(true)
+	p.Trigger()
+	deadline := time.Now().Add(2 * time.Second)
+	for !srv.Ready() {
+		if time.Now().After(deadline) {
+			t.Fatal("never became ready after the first publish")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if v := p.Status().Version; v != 1 {
+		t.Errorf("version = %d, want 1", v)
 	}
 }
 
@@ -51,7 +92,7 @@ func TestPoller_HappyPath(t *testing.T) {
 		return "hash1", nil
 	}
 
-	client := NewRegistryClient(srv.URL)
+	client := NewClient(srv.URL, "rgt_test")
 	p := NewPoller(client, 50*time.Millisecond, reloadFn, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -80,7 +121,7 @@ func TestPoller_NotModified_NoReload(t *testing.T) {
 		return "hash1", nil
 	}
 
-	client := NewRegistryClient(srv.URL)
+	client := NewClient(srv.URL, "rgt_test")
 	p := NewPoller(client, 50*time.Millisecond, reloadFn, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -100,7 +141,7 @@ func TestPoller_FetchError_Backoff(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRegistryClient(srv.URL)
+	client := NewClient(srv.URL, "rgt_test")
 	p := NewPoller(client, 50*time.Millisecond, func([]byte) (string, error) { return "", nil }, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -121,14 +162,11 @@ func TestPoller_Trigger_ImmediatePoll(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqCount.Add(1)
 		w.Header().Set("ETag", "e1")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"yaml_content": "x: y\n", "etag": "e1",
-			"composition_count": 0, "composition_names": []string{},
-		})
+		_, _ = w.Write([]byte("x: y\n"))
 	}))
 	defer srv.Close()
 
-	client := NewRegistryClient(srv.URL)
+	client := NewClient(srv.URL, "rgt_test")
 	p := NewPoller(client, 10*time.Second, func([]byte) (string, error) { return "", nil }, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -158,14 +196,11 @@ func TestPoller_Trigger_BypassesBackoff(t *testing.T) {
 			return
 		}
 		w.Header().Set("ETag", "e1")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"yaml_content": "x: y\n", "etag": "e1",
-			"composition_count": 0, "composition_names": []string{},
-		})
+		_, _ = w.Write([]byte("x: y\n"))
 	}))
 	defer srv.Close()
 
-	client := NewRegistryClient(srv.URL)
+	client := NewClient(srv.URL, "rgt_test")
 	p := NewPoller(client, 10*time.Second, func([]byte) (string, error) { return "", nil }, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -207,7 +242,7 @@ func TestPoller_ContextCancel_CleansUp(t *testing.T) {
 	srv := httptest.NewServer(bundleHandler("x: y\n", "e1", 0))
 	defer srv.Close()
 
-	client := NewRegistryClient(srv.URL)
+	client := NewClient(srv.URL, "rgt_test")
 	p := NewPoller(client, time.Hour, func([]byte) (string, error) { return "", nil }, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
