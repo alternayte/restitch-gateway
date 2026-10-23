@@ -327,7 +327,7 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 				DurationMS:    t.DurationMS,
 				HTTPStatus:    httpStatus,
 				Upstream:      t.Upstream,
-				URL:           t.URL,
+				URL:           reqlog.RedactURL(t.URL),
 				StartOffsetMS: t.StartOffsetMS,
 				BodySize:      t.BodySize,
 				Error:         t.Error,
@@ -344,6 +344,7 @@ func (h *Handler) serveComposition(w http.ResponseWriter, r *http.Request, compo
 			Status:      response.Status,
 			DurationMS:  durationMS,
 			Partial:     result.IsPartial,
+			Headers:     reqlog.RedactHeaders(r.Header),
 			Steps:       steps,
 		}
 		if sc := trace.SpanFromContext(ctx).SpanContext(); sc.HasTraceID() {

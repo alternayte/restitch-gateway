@@ -171,8 +171,13 @@ func gatewayCmd(args []string) int {
 	// A managed gateway accumulates usage per minute and pushes it to
 	// Studio; a standalone gateway reports through /metrics only.
 	var acc *admin.Accumulator
+	var sampler *hotreload.RequestSampler
+	var client *hotreload.Client
+	instanceID := hotreload.NewInstanceID()
 	if managed {
 		acc = admin.NewAccumulator()
+		client = hotreload.NewClient(opts.studioURL, opts.gatewayToken)
+		sampler = &hotreload.RequestSampler{Client: client, InstanceID: instanceID, Dropped: metrics.TelemetryDroppedTotal}
 	}
 
 	// Every pipeline serves the probes. The first one serves only them:
@@ -235,7 +240,7 @@ func gatewayCmd(args []string) int {
 		router := server.NewRouter()
 		handler := composition.NewHandler(compiled, authenticator)
 		if acc != nil {
-			handler.SetRecorder(&admin.MultiRecorder{Accumulator: acc})
+			handler.SetRecorder(&admin.MultiRecorder{Accumulator: acc, Samples: sampler})
 		}
 		handler.RegisterRoutes(router)
 		withProbes(router)
@@ -266,7 +271,6 @@ func gatewayCmd(args []string) int {
 		// until its first pull; a Studio outage never crash-loops it.
 		srv.SetConfigured(false)
 		metrics.RegisterRegistryMetrics()
-		client := hotreload.NewClient(opts.studioURL, opts.gatewayToken)
 		poller := hotreload.NewPoller(client, opts.pollInterval, reloadFromBytes, metrics)
 		applied := make(chan struct{}, 1)
 		poller.OnApplied(func(v int) {
@@ -277,7 +281,6 @@ func gatewayCmd(args []string) int {
 			default:
 			}
 		})
-		instanceID := hotreload.NewInstanceID()
 		go hotreload.RunHeartbeat(bgCtx, client, hotreload.HeartbeatInterval, applied, func() hotreload.Heartbeat {
 			st := poller.Status()
 			return hotreload.Heartbeat{
@@ -313,8 +316,12 @@ func gatewayCmd(args []string) int {
 			},
 		}
 		go pusher.Run(bgCtx, hotreload.UsageInterval)
-		// The last minute goes out after traffic stopped.
-		shutdown.final = pusher.Push
+		go sampler.Run(bgCtx, hotreload.RequestsInterval)
+		// The last minute of usage and samples goes out after traffic stopped.
+		shutdown.final = func(ctx context.Context) {
+			pusher.Push(ctx)
+			sampler.Push(ctx)
+		}
 		slog.Info("managed mode", "studio_url", opts.studioURL, "poll_interval", opts.pollInterval.String())
 	} else {
 		raw, err := os.ReadFile(opts.configFile)

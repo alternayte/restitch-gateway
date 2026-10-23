@@ -21,7 +21,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C10 — `restitch gateway` in managed mode pulls, applies and survives a Studio outage
 - [x] C11 — Studio lists each gateway instance with its applied artifact version
 - [x] C12 — Gateways push one-minute aggregates, and Studio keeps them for the retention period
-- [ ] C13 — Gateways push sampled requests with redacted headers and no bodies
+- [x] C13 — Gateways push sampled requests with redacted headers and no bodies
 - [ ] C14 — `restitch publish` and YAML import and export use the publish path
 - [ ] C15 — `restitch dev` runs both roles in one process on SQLite
 
@@ -211,12 +211,13 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C13 — Gateways push sampled requests with redacted headers and no bodies
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C12
 - **Files:** `internal/admin/recorder.go`, `internal/hotreload/telemetry.go`, `internal/studio/requests.go`, `internal/studio/requests_test.go`
 - **Goal:** Every failed request and a capped sample of successes reach Studio with step timings and redacted headers.
 - **First failing test:** `internal/studio/requests_test.go` — "TestSampleNeverCarriesBodyOrAuthorization"
 - **Done when:** the test command passes and the success sample cap is a per-environment setting.
+- **Notes:** Done: `reqlog.Record` gains Headers (from `reqlog.RedactHeaders`); step URLs pass through `reqlog.RedactURL` (query values and user info become [redacted]); Studio runs `Record.Redact` again at ingest. The gateway's `hotreload.RequestSampler` keeps every failed or partial request and up to 60 successes a minute, queues at most 1000, pushes every 10s to POST /gateway/v1/requests and on shutdown, and counts drops in `restitch_telemetry_dropped_total{kind="requests"}`. Studio keeps failures and up to `request_samples_per_minute` (default 10) successes per minute in `studio_requests`, deleted after the usage retention. GET/PATCH /api/v1/environments/{env} reads and changes both settings (PATCH is owner-only). GET /api/v1/environments/{env}/requests lists samples.
 - **Spec:** Decision on sampled requests.
 
 ---

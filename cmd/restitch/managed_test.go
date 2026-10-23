@@ -165,7 +165,9 @@ func TestManagedGatewaySurvivesStudioOutage(t *testing.T) {
 	sc.call(http.MethodPost, "/api/v1/environments/prod/publish", map[string]string{"message": "first"})
 
 	waitStatus(t, gw+"/ready", http.StatusOK, 10*time.Second)
-	resp, err := http.Get(gw + "/user")
+	userReq, _ := http.NewRequest(http.MethodGet, gw+"/user", nil)
+	userReq.Header.Set("Authorization", "Bearer leaked-secret")
+	resp, err := http.DefaultClient.Do(userReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,5 +203,11 @@ func TestManagedGatewaySurvivesStudioOutage(t *testing.T) {
 	}
 	if requests != 1 {
 		t.Fatalf("usage after shutdown = %v, want 1 request for composition user", usage)
+	}
+	samples := sc.call(http.MethodGet, "/api/v1/environments/prod/requests", nil)
+	list, _ := samples["requests"].([]any)
+	raw, _ := json.Marshal(samples)
+	if len(list) != 1 || strings.Contains(string(raw), "leaked-secret") || !strings.Contains(string(raw), "[redacted]") {
+		t.Fatalf("sampled requests = %s, want one with the Authorization header redacted", raw)
 	}
 }

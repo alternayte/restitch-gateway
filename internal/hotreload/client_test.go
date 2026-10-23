@@ -30,6 +30,7 @@ import (
 
 	"github.com/alternayte/restitch-gateway/v2/internal/admin"
 	"github.com/alternayte/restitch-gateway/v2/internal/composition"
+	"github.com/alternayte/restitch-gateway/v2/internal/reqlog"
 )
 
 func TestClient_FetchSendsTokenAndReadsVersion(t *testing.T) {
@@ -176,5 +177,34 @@ func TestUsagePusherRetriesOnceThenDrops(t *testing.T) {
 	}
 	if requests != 2 || push.Breakers["users"] != "closed" || push.InstanceID != "gw-a" {
 		t.Fatalf("push = %+v (orders requests %d, want 2: the kept window plus the new one)", push, requests)
+	}
+}
+
+func TestRequestSamplerKeepsFailuresAndCapsSuccesses(t *testing.T) {
+	got := make(chan RequestsPush, 2)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var p RequestsPush
+		_ = json.NewDecoder(r.Body).Decode(&p)
+		got <- p
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	s := &RequestSampler{Client: NewClient(srv.URL, "rgt_x"), InstanceID: "gw-a"}
+	now := time.Now()
+	for i := 0; i < successesPerMinute+20; i++ {
+		s.Record(reqlog.Record{ID: "ok", Status: 200, Time: now})
+	}
+	s.Record(reqlog.Record{ID: "bad", Status: 502, Time: now})
+	s.Push(context.Background())
+	push := <-got
+	failures := 0
+	for _, r := range push.Requests {
+		if r.Status >= 500 {
+			failures++
+		}
+	}
+	if len(push.Requests) != successesPerMinute+1 || failures != 1 {
+		t.Fatalf("pushed %d samples with %d failures, want %d and 1", len(push.Requests), failures, successesPerMinute+1)
 	}
 }

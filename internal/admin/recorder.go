@@ -16,13 +16,17 @@ package admin
 
 import "github.com/alternayte/restitch-gateway/v2/internal/reqlog"
 
-// MultiRecorder feeds request records to the time-series accumulator.
-// The gateway pushes the accumulated buckets to Studio.
+// MultiRecorder feeds request records to the time-series accumulator and
+// to the request sampler. The gateway pushes both to Studio.
 type MultiRecorder struct {
 	Accumulator *Accumulator
+	Samples     reqlog.Recorder
 }
 
 func (mr *MultiRecorder) Record(rec reqlog.Record) {
+	if mr.Samples != nil {
+		mr.Samples.Record(rec)
+	}
 	if mr.Accumulator == nil {
 		return
 	}
