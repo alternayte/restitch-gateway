@@ -25,7 +25,7 @@ import (
 type gatewayShutdown struct {
 	// servers stop accepting traffic and drain in-flight requests, in order.
 	servers []func(context.Context) error
-	// stopBackground stops the registry poller and the file watcher.
+	// stopBackground stops the artifact poller and the file watcher.
 	stopBackground func()
 	// final runs last, after traffic and background work stopped, with its
 	// own deadline: the last telemetry push goes here.

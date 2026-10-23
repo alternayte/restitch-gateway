@@ -124,7 +124,7 @@ tests:
   # --- RestitchConfigReloadFailing: POSITIVE (sustained failures past 10m) ---
   - interval: 1m
     input_series:
-      - series: 'restitch_registry_polls_total{result="error"}'
+      - series: 'restitch_studio_pulls_total{result="error"}'
         values: '0+6x20'
     alert_rule_test:
       - eval_time: 15m
@@ -134,13 +134,25 @@ tests:
               severity: warning
               result: error
             exp_annotations:
-              summary: "Gateway registry polls have been failing for 10m"
-              description: "Failing poll rate is 0.1/s. The gateway keeps serving its last known good config."
+              summary: "Gateway pulls from Studio have been failing for 10m"
+              description: "Failing pull rate is 0.1/s. The gateway keeps serving its last known good config."
 
-  # --- RestitchConfigReloadFailing: NEGATIVE (only successful polls) ---
+  # --- RestitchConfigReloadFailing: NEGATIVE (only successful pulls) ---
   - interval: 1m
     input_series:
-      - series: 'restitch_registry_polls_total{result="success"}'
+      - series: 'restitch_studio_pulls_total{result="success"}'
+        values: '0+6x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RestitchConfigReloadFailing
+        exp_alerts: []
+
+  # --- RestitchConfigReloadFailing: NEGATIVE (a healthy gateway whose pulls
+  #     answer 304) --- A managed gateway records not_modified on every poll
+  #     while the version is unchanged; that is steady state, not a failure.
+  - interval: 1m
+    input_series:
+      - series: 'restitch_studio_pulls_total{result="not_modified"}'
         values: '0+6x20'
     alert_rule_test:
       - eval_time: 15m
@@ -151,14 +163,14 @@ tests:
   #     poller recovers, checked before the 10m `for:` window elapses) ---
   # This is the case alerts.yml:31-34 documents: a transient fetch failure is
   # normal self-healing (exponential backoff retry) and must NOT page. The
-  # rate condition decays back toward 0 once polls stop failing, but not
+  # rate condition decays back toward 0 once pulls stop failing, but not
   # instantly (the [5m] window trails), so eval_time: 8m still reads a
   # nonzero failing rate. The 10m `for:` catches that this is still within
   # its window (elapsed true duration since t=0 is only 8m); anything
   # shorter would already have fired.
   - interval: 1m
     input_series:
-      - series: 'restitch_registry_polls_total{result="error"}'
+      - series: 'restitch_studio_pulls_total{result="error"}'
         values: '0+6x6 36x14'
     alert_rule_test:
       - eval_time: 8m

@@ -19,10 +19,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/alternayte/restitch-gateway/v2/internal/observability"
 	"github.com/alternayte/restitch-gateway/v2/internal/server"
 )
 
@@ -279,5 +281,47 @@ func TestPollerKeepsIntervalWhileNoVersionExists(t *testing.T) {
 	// fixed interval allows about 20.
 	if n := calls.Load(); n < 12 {
 		t.Fatalf("polled %d times in 400ms; waiting for a first version must not back off", n)
+	}
+}
+
+// TestPullMetricsAreNamedForStudio pins the managed-mode pull metric names:
+// dashboards and alerts query them by name.
+func TestPullMetricsAreNamedForStudio(t *testing.T) {
+	studio := httptest.NewServer(bundleHandler("upstreams: {}\n", "e1", 1))
+	defer studio.Close()
+
+	m := observability.NewMetrics()
+	m.RegisterStudioPullMetrics()
+	p := NewPoller(NewClient(studio.URL, "rgt_test"), time.Hour,
+		func([]byte) (string, error) { return "h", nil }, m)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = p.Run(ctx) }()
+
+	scrape := func() string {
+		rec := httptest.NewRecorder()
+		m.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+		return rec.Body.String()
+	}
+	want := `restitch_studio_pulls_total{result="success"} 1`
+	deadline := time.Now().Add(2 * time.Second)
+	body := scrape()
+	for !strings.Contains(body, want) {
+		if time.Now().After(deadline) {
+			t.Fatalf("metrics missing %q:\n%s", want, body)
+		}
+		time.Sleep(10 * time.Millisecond)
+		body = scrape()
+	}
+	for _, name := range []string{
+		"restitch_studio_pull_duration_seconds_count 1",
+		"restitch_studio_last_pull_success_timestamp ",
+	} {
+		if !strings.Contains(body, name) {
+			t.Errorf("metrics missing %q", name)
+		}
+	}
+	if strings.Contains(body, "restitch_registry_") {
+		t.Errorf("metrics still carry v1 registry names:\n%s", body)
 	}
 }
