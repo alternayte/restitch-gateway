@@ -1,15 +1,15 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, Workflow, X } from "lucide-react";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { signOut as signOutRequest } from "@/api/sdk.gen";
+import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, Workflow, X } from "lucide-react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { CommandPalette } from "@/app/command-palette";
+import { ShortcutSheet, useGlobalShortcuts } from "@/app/keyboard";
 import { navItems, settingsItems, type NavItem } from "@/app/nav";
 import { Toaster } from "@/components/ui/toast";
 import { useTheme, themes } from "@/lib/theme";
-import { useCurrentUser } from "@/lib/auth";
+import { useCurrentUser, useSignOut } from "@/lib/auth";
 import { can } from "@/lib/roles";
-import { cn } from "@/lib/utils";
+import { cn, isMac } from "@/lib/utils";
 
 const collapsedStorageKey = "restitch-nav-collapsed";
 
@@ -154,6 +154,34 @@ function Nav({ onNavigate, collapsed = false }: { onNavigate?: () => void; colla
   );
 }
 
+function SearchButton({ onClick, collapsed = false }: { onClick: () => void; collapsed?: boolean }) {
+  if (collapsed) {
+    return (
+      <NavTip label="Search" show>
+        <button
+          type="button"
+          onClick={onClick}
+          className="pressable flex h-8 w-full items-center justify-center rounded-control text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
+        >
+          <Search className="h-4 w-4" aria-hidden />
+          <span className="sr-only">Open the command palette</span>
+        </button>
+      </NavTip>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="pressable flex h-8 w-full items-center gap-2 rounded-control bg-foreground/[0.05] px-2.5 text-sm text-muted-foreground shadow-[inset_0_0_0_0.5px_var(--border)] hover:bg-foreground/[0.08] dark:bg-white/[0.05]"
+    >
+      <Search className="h-3.5 w-3.5" aria-hidden />
+      <span className="flex-1 text-left">Search</span>
+      <kbd className="font-sans text-xs">{isMac ? "⌘K" : "Ctrl K"}</kbd>
+    </button>
+  );
+}
+
 function initials(email: string, name?: string): string {
   const src = name?.trim() || email;
   const parts = src.split(/[\s@._-]+/).filter(Boolean);
@@ -162,20 +190,7 @@ function initials(email: string, name?: string): string {
 
 function UserBox({ collapsed = false }: { collapsed?: boolean }) {
   const me = useCurrentUser();
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
-
-  const signOut = async () => {
-    setBusy(true);
-    try {
-      await signOutRequest();
-    } finally {
-      qc.clear();
-      setBusy(false);
-      void navigate({ to: "/login" });
-    }
-  };
+  const { signOut, busy } = useSignOut();
 
   if (collapsed) {
     return (
@@ -238,6 +253,8 @@ function Brand() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [collapsed, setCollapsedState] = useState(readCollapsed);
   const setCollapsed = (v: boolean) => {
     setCollapsedState(v);
@@ -247,6 +264,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       // Storage is not available. The state lasts for this page load.
     }
   };
+  const togglePalette = useCallback(() => setPaletteOpen((v) => !v), []);
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  const openShortcuts = useCallback(() => {
+    setPaletteOpen(false);
+    setSheetOpen(true);
+  }, []);
+  useGlobalShortcuts({ togglePalette, openShortcuts });
   const Toggle = collapsed ? PanelLeftOpen : PanelLeftClose;
 
   return (
@@ -272,6 +296,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             </NavTip>
           </div>
+          <SearchButton onClick={openPalette} collapsed={collapsed} />
           <Nav collapsed={collapsed} />
           <div className="mt-auto">
             <UserBox collapsed={collapsed} />
@@ -288,6 +313,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </button>
             <Brand />
+            <button
+              type="button"
+              onClick={openPalette}
+              className="pressable ml-auto flex h-8 w-8 items-center justify-center rounded-control hover:bg-muted"
+            >
+              <Search className="h-4 w-4" aria-hidden />
+              <span className="sr-only">Open the command palette</span>
+            </button>
           </header>
           {open && (
             <div className="flex animate-enter flex-col gap-3 border-b bg-panel p-3 md:hidden">
@@ -299,6 +332,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="mx-auto w-full max-w-[1440px]">{children}</div>
           </main>
         </div>
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onShortcuts={openShortcuts} />
+        <ShortcutSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
         <Toaster />
       </div>
     </Tooltip.Provider>

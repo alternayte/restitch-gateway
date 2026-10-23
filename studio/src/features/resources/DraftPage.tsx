@@ -92,7 +92,7 @@ export function DraftPage({ env }: { env: string }) {
   );
 }
 
-function NewResourceDialog({ env, open, onClose }: { env: string; open: boolean; onClose: () => void }) {
+export function NewResourceDialog({ env, open, onClose }: { env: string; open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
   const [kind, setKind] = useState<Kind>("upstream");
   const [name, setName] = useState("");
