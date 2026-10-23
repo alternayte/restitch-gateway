@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { Layers, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import {
@@ -60,7 +61,11 @@ export function EnvironmentsPage() {
             <TBody>
               {(data.environments ?? []).map((env) => (
                 <Tr key={env.name}>
-                  <Td className="font-medium">{env.name}</Td>
+                  <Td className="font-medium">
+                    <Link to="/environments/$env" params={{ env: env.name }} className="hover:underline">
+                      {env.name}
+                    </Link>
+                  </Td>
                   <Td>{formatTime(env.created_at)}</Td>
                   <Td>{env.created_by}</Td>
                 </Tr>

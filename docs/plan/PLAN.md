@@ -28,7 +28,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 ### Studio UI
 - [x] C16 — The new UI shell signs in and renders environments through the generated client
 - [x] C17 — Studio serves a JSON Schema of the artifact that covers every config field
-- [ ] C18 — A resource form generated from the schema saves a resource, with a YAML tab
+- [x] C18 — A resource form generated from the schema saves a resource, with a YAML tab
 - [ ] C19 — The step graph widget edits depends_on
 - [ ] C20 — Expression fields show server lint errors as the user types
 - [ ] C21 — The secret picker inserts ${VAR} names and the environment lists required names
@@ -279,7 +279,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C18 — A resource form generated from the schema saves a resource, with a YAML tab
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C16, C17
 - **Files:** `studio/src/features/resources/`, `studio/src/routes/environments.$env.tsx`
 - **Goal:** The draft page lists resources in a TanStack Table; each resource opens a schema-driven form and a YAML tab on the same object; a stale save shows a reload prompt.
@@ -287,6 +287,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and request_schema edits in a CodeMirror JSON editor.
 - **Spec:** Decisions on forms and the shared object.
 - **Notes:** The form library is open; see HANDOVER Open questions.
+  Done: a hand-written renderer (`studio/src/features/resources/schema-form.tsx`) over GET /api/v1/schema, not rjsf: rjsf's theme layer clashes with the ported sluice components and the schema uses few shapes. Shapes: $ref and object sections (added and removed explicitly; an added empty section stays), string maps (headers), scalar arrays as comma lists, object arrays as repeatable cards, schema `true` and open objects as YAML/JSON CodeMirror fields, durations with the schema pattern checked inline. `CodeField` uses sluice's CodeMirror theme (`code-theme.ts`) and follows the light/dark class. Routes: /environments/$env (draft list with a New resource dialog) and /environments/$env/resources/$kind/$name (Form and YAML tabs on one object, Save with base_revision, Delete with confirm, a Reload banner on 409). A 404 on GET means a new resource (base_revision 0). Verified in a browser against `restitch dev`: an upstream and a composition with a step and a YAML response body saved through the forms and read back from the API unchanged. Wording to polish in C25: array items read "Steps 1" and "Add steps".
 
 ---
 

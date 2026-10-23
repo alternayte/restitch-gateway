@@ -4,7 +4,7 @@ Updated: 2026-10-23, session 4 (closed)
 
 ## Where we are
 
-C01-C17 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The new frontend in `studio/` (TanStack, generated client, sluice UI layer) signs in and lists and creates environments; `restitch studio` serves it from `internal/studio/dist`. The old Studio binary, registry and session packages are gone. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
+C01-C18 are done. Studio has environments, typed draft resources with 409 on stale saves, publish with a diff, numbered append-only versions, rollback, promote, and per-environment gateway tokens. A gateway in managed mode (RESTITCH_STUDIO_URL + RESTITCH_GATEWAY_TOKEN) pulls its environment's current version, stays /ready 503 until the first one, and survives a Studio outage. The gateway has no admin API; /metrics is on the optional ops port. `restitch publish` imports and publishes a file from CI with an API key; `restitch dev` runs Studio (127.0.0.1:3080, dev@restitch.local / restitch-dev-password) and a managed gateway in one process. GET /api/v1/schema serves the artifact JSON Schema. The new frontend in `studio/` (TanStack, generated client, sluice UI layer) signs in and lists and creates environments; `restitch studio` serves it from `internal/studio/dist`. The old Studio binary, registry and session packages are gone. Each managed gateway sends a heartbeat every 15s, and Studio lists instances per environment with the version each applied and a stale flag. Managed gateways also push one-minute usage aggregates and sampled requests (redacted, no bodies); Studio sums instances and applies per-environment retention and sample caps.
 
 ## Prove it
 
@@ -13,11 +13,11 @@ Expect: golangci-lint "0 issues.", every Go package ok (internal/studio runs its
 
 ## Active chunk
 
-None. Unblocked next: C18 (resource forms), C22 (publish screen), C23 (tokens and users), C24 (dashboards). C19-C21 need C18; C25 needs C22-C24.
+None. Unblocked next: C19 (step graph), C20 (expression lint), C21 (secret picker), C22 (publish screen), C23 (tokens and users), C24 (dashboards).
 
 ## Next action
 
-Start C18: add a route `studio/src/routes/environments.$env.tsx` that lists the draft's resources (listResourcesOptions) and opens a resource in a form built from GET /api/v1/schema (getArtifactSchemaOptions; `definitions` names the $defs entry per kind). Decide the form library first (see Open questions) and record the choice here. Write "saves an upstream created through the form" in `studio/src/features/resources/resource-form.test.tsx`. Verify in a browser with the verify-ui skill against `bin/restitch dev -port 18080 -studio-port 13080 -data-dir <scratch>` (sign in as dev@restitch.local / restitch-dev-password).
+Start C22 (it makes the UI usable end to end): a versions route under /environments/$env with the publish preview diff (previewPublishMutation), a message field and Publish (publishMutation), the history (listVersionsOptions), and rollback and promote behind ConfirmDialog. Write "shows validation errors and blocks publish" in `studio/src/features/publish/publish.test.tsx` first. sluice has a diff view at `../sluice/ui/src/components/diff-view.tsx`.
 
 ## Decisions
 
@@ -35,7 +35,6 @@ Start C18: add a route `studio/src/routes/environments.$env.tsx` that lists the 
 
 ## Open questions
 
-- The form library for C18 is open. Assumption: try `@rjsf/core` with a shadcn theme first; drop it for a small hand-written renderer over the C17 schema if it cannot render the custom widgets. Record the choice here.
 - `cmd/mockupstream` is in the image today. Assumption: tests need it, the image does not (C26).
 - README, docs, `deploy/` and `examples/registry` still show v1 server:/admin: blocks and the removed -registry-url/-registry-key flags. C26 and C27 rewrite them; do not patch them piecemeal.
 - `AGENTS.md` still describes v1 in its Run section (`cmd/restitch-studio/dist`, `bin/restitch dev` finding `bin/restitch-studio`) and its registry and bundle domain words. Only init-agents or an accepted agents-audit item may change it: run agents-audit as part of C27, or earlier if a session trips over it.
