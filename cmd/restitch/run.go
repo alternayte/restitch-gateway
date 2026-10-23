@@ -267,17 +267,16 @@ func gatewayCmd(args []string) int {
 		}
 
 		var authenticator *inbound.Authenticator
-		if gwcfg.Auth != nil {
-			authCfg := gwconfigToInboundAuth(gwcfg.Auth)
+		if cfg.Auth != nil {
 			var authErr error
-			authenticator, authErr = inbound.New(context.Background(), authCfg)
+			authenticator, authErr = inbound.New(context.Background(), *cfg.Auth)
 			if authErr != nil {
 				slog.Error("failed to initialize inbound auth", "error", authErr)
 				return 1
 			}
 			slog.Info("inbound authentication enabled",
-				"api_keys", len(gwcfg.Auth.APIKeys),
-				"jwt", gwcfg.Auth.JWT != nil)
+				"api_keys", len(cfg.Auth.APIKeys),
+				"jwt", cfg.Auth.JWT != nil)
 		}
 
 		handler := composition.NewHandler(compiled, authenticator)
@@ -360,7 +359,7 @@ func gatewayCmd(args []string) int {
 		router.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
 		router.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
 		router.Finalize()
-		pipe.Handler = pipelineRateLimit(router, gwcfg.RateLimit)
+		pipe.Handler = pipelineRateLimit(router, cfg.RateLimit)
 
 		swapper := newSwapper(pipe)
 
@@ -410,9 +409,8 @@ func gatewayCmd(args []string) int {
 			}
 
 			var newAuth *inbound.Authenticator
-			if newGwcfg.Auth != nil {
-				authCfg := gwconfigToInboundAuth(newGwcfg.Auth)
-				newAuth, err = inbound.New(context.Background(), authCfg)
+			if newCfg.Auth != nil {
+				newAuth, err = inbound.New(context.Background(), *newCfg.Auth)
 				if err != nil {
 					return "", fmt.Errorf("inbound auth: %w", err)
 				}
@@ -431,7 +429,7 @@ func gatewayCmd(args []string) int {
 			newRouter.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
 			newRouter.Handle(http.MethodGet, "/ready", server.ReadyHandler(srv))
 			newRouter.Finalize()
-			newPipe.Handler = pipelineRateLimit(newRouter, newGwcfg.RateLimit)
+			newPipe.Handler = pipelineRateLimit(newRouter, newCfg.RateLimit)
 
 			old := swapper.Swap(newPipe)
 			if old != nil {
@@ -645,15 +643,11 @@ func applyMiddleware(h http.Handler, mws ...func(http.Handler) http.Handler) htt
 // or returns h unchanged when cfg is nil. It is applied to each pipeline as
 // it is built, so a reload that changes server.rate_limit takes effect
 // instead of being frozen at startup (finding L11).
-func pipelineRateLimit(h http.Handler, cfg *gwconfig.RateLimitConfig) http.Handler {
+func pipelineRateLimit(h http.Handler, cfg *ratelimit.Config) http.Handler {
 	if cfg == nil {
 		return h
 	}
-	rl := ratelimit.New(ratelimit.Config{
-		RequestsPerSecond: cfg.RequestsPerSecond,
-		Burst:             cfg.Burst,
-		Key:               cfg.Key,
-	})
+	rl := ratelimit.New(*cfg)
 	slog.Info("global rate limit enabled",
 		"rps", cfg.RequestsPerSecond,
 		"burst", cfg.Burst,
@@ -765,18 +759,4 @@ func upstreamsFromPipeline(p *Pipeline, checker *atomic.Pointer[upstream.Checker
 		result = append(result, ui)
 	}
 	return result
-}
-
-func gwconfigToInboundAuth(auth *gwconfig.InboundAuthConfig) inbound.InboundAuthConfig {
-	cfg := inbound.InboundAuthConfig{
-		APIKeys: auth.APIKeys,
-	}
-	if auth.JWT != nil {
-		cfg.JWT = &inbound.JWTConfig{
-			JWKSURL:  auth.JWT.JWKSURL,
-			Issuer:   auth.JWT.Issuer,
-			Audience: auth.JWT.Audience,
-		}
-	}
-	return cfg
 }

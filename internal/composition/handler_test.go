@@ -63,6 +63,7 @@ upstreams:
 compositions:
   user-posts:
     path: /api/user-posts
+    public: true
     method: GET
     steps:
       - name: user
@@ -155,6 +156,7 @@ upstreams:
 compositions:
   user:
     path: "/api/users/{id}"
+    public: true
     method: GET
     steps:
       - name: u
@@ -223,6 +225,7 @@ upstreams:
 compositions:
   protected:
     path: /api/protected
+    public: true
     method: GET
     steps:
       - name: data
@@ -302,6 +305,7 @@ upstreams:
 compositions:
   protected:
     path: /api/protected
+    public: true
     method: GET
     steps:
       - name: data
@@ -372,6 +376,7 @@ upstreams:
 compositions:
   api:
     path: /api/data
+    public: true
     method: GET
     steps:
       - name: data
@@ -437,6 +442,7 @@ upstreams:
 compositions:
   partial:
     path: /p
+    public: true
     steps:
       - name: user
         upstream: mock
@@ -521,6 +527,7 @@ upstreams:
 compositions:
   fail:
     path: /fail
+    public: true
     steps:
       - name: s
         upstream: dead
@@ -569,6 +576,7 @@ upstreams:
 compositions:
   timeout:
     path: /timeout
+    public: true
     steps:
       - name: s
         upstream: slow
@@ -619,6 +627,7 @@ upstreams:
 compositions:
   buggy:
     path: /buggy
+    public: true
     steps:
       - name: s
         upstream: mock
@@ -664,6 +673,7 @@ upstreams:
 compositions:
   limited:
     path: /limited
+    public: true
     method: GET
     rate_limit:
       requests_per_second: 1
@@ -733,6 +743,7 @@ upstreams:
 compositions:
   tiny:
     path: /tiny
+    public: true
     method: POST
     max_request_bytes: 16
     steps:
@@ -802,6 +813,7 @@ upstreams:
 compositions:
   validated:
     path: /validated
+    public: true
     method: POST
     request_schema:
       type: object
@@ -914,6 +926,7 @@ upstreams:
 compositions:
   validated:
     path: /validated
+    public: true
     method: POST
     request_schema:
       type: object
@@ -932,6 +945,7 @@ compositions:
         data: "{{ steps.s.body }}"
   open:
     path: /open
+    public: true
     method: POST
     steps:
       - name: s
@@ -1023,6 +1037,7 @@ upstreams:
 compositions:
   fail:
     path: /fail
+    public: true
     steps:
       - name: s
         upstream: dead

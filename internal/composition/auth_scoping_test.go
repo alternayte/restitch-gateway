@@ -60,6 +60,7 @@ upstreams:
 compositions:
   scoped:
     path: /scoped
+    public: true
     method: GET
     steps:
       - name: a

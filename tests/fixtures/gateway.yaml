@@ -9,6 +9,7 @@ upstreams:
 compositions:
   user:
     path: "/api/users/{id}"
+    public: true
     method: GET
     steps:
       - name: user
@@ -21,6 +22,7 @@ compositions:
 
   partial:
     path: "/partial"
+    public: true
     method: GET
     steps:
       - name: main
@@ -37,6 +39,7 @@ compositions:
 
   timeout:
     path: "/timeout"
+    public: true
     method: GET
     steps:
       - name: slow
@@ -49,6 +52,7 @@ compositions:
 
   echo:
     path: "/echo"
+    public: true
     method: GET
     steps:
       - name: e

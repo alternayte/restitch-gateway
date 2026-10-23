@@ -44,6 +44,7 @@ upstreams:
 compositions:
   test-comp:
     path: "/test"
+    public: true
     method: GET
     steps:
       - name: s1

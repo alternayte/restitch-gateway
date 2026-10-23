@@ -108,35 +108,6 @@ func TestLoadRejectsUnknownTopLevelKey(t *testing.T) {
 	}
 }
 
-func TestLoadReadsTopLevelAuthAndRateLimit(t *testing.T) {
-	f, err := Load(writeConfig(t, `
-auth:
-  api_keys: ["k1"]
-  jwt:
-    jwks_url: https://issuer/jwks.json
-rate_limit:
-  requests_per_second: 10
-  burst: 5
-  key: ip
-block_private_upstreams: true
-upstreams:
-  test:
-    url: "http://localhost:8081"
-`))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if f.Auth == nil || len(f.Auth.APIKeys) != 1 || f.Auth.JWT == nil {
-		t.Errorf("auth = %+v", f.Auth)
-	}
-	if f.RateLimit == nil || f.RateLimit.Burst != 5 {
-		t.Errorf("rate_limit = %+v", f.RateLimit)
-	}
-	if f.Hash() == "" {
-		t.Error("hash should not be empty")
-	}
-}
-
 func TestLoad_Defaults(t *testing.T) {
 	yaml := `
 upstreams:

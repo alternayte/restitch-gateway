@@ -50,17 +50,12 @@ func (d Duration) MarshalYAML() (interface{}, error) {
 	return d.String(), nil
 }
 
-// File is the loaded gateway configuration: the artifact keys from the
-// YAML file, plus the process settings that come from flags and env only.
+// File holds the gateway process settings, which come from flags and env
+// only, and the hash of the artifact file. composition.Config owns the
+// artifact itself.
 type File struct {
-	Server ServerConfig `yaml:"-"`
-	Admin  AdminConfig  `yaml:"-"`
-
-	Auth                  *InboundAuthConfig     `yaml:"auth"`
-	RateLimit             *RateLimitConfig       `yaml:"rate_limit"`
-	BlockPrivateUpstreams bool                   `yaml:"block_private_upstreams"`
-	Upstreams             map[string]interface{} `yaml:"upstreams"`
-	Compositions          map[string]interface{} `yaml:"compositions"`
+	Server ServerConfig
+	Admin  AdminConfig
 
 	raw []byte // original bytes for hash
 }
@@ -78,13 +73,6 @@ var v1Moved = map[string]string{
 	"admin.storage":          "",
 }
 
-// RateLimitConfig configures gateway-wide rate limiting.
-type RateLimitConfig struct {
-	RequestsPerSecond float64 `yaml:"requests_per_second"`
-	Burst             int     `yaml:"burst"`
-	Key               string  `yaml:"key"` // "ip", "header:X-Client-ID", "api-key"
-}
-
 // ServerConfig holds the gateway process settings. Flags and their
 // RESTITCH_ env twins set them; the YAML file never does.
 type ServerConfig struct {
@@ -97,19 +85,6 @@ type ServerConfig struct {
 	ShutdownTimeout Duration
 	LogFormat       string
 	LogLevel        string
-}
-
-// InboundAuthConfig configures gateway-level authentication.
-type InboundAuthConfig struct {
-	APIKeys []string   `yaml:"api_keys"`
-	JWT     *JWTConfig `yaml:"jwt"`
-}
-
-// JWTConfig configures JWT validation via JWKS.
-type JWTConfig struct {
-	JWKSURL  string `yaml:"jwks_url"`
-	Issuer   string `yaml:"issuer"`
-	Audience string `yaml:"audience"`
 }
 
 // AdminConfig holds admin API server settings, set from RESTITCH_ADMIN_*
@@ -160,14 +135,10 @@ func Load(path string) (*File, error) {
 // LoadBytes parses already-expanded YAML bytes into a File.
 // raw is the original (unexpanded) bytes used for hashing.
 func LoadBytes(expanded []byte, raw []byte) (*File, error) {
-	if err := checkTopLevelKeys(expanded); err != nil {
+	if err := CheckArtifactKeys(expanded); err != nil {
 		return nil, err
 	}
-	var f File
-	if err := yaml.Unmarshal(expanded, &f); err != nil {
-		return nil, fmt.Errorf("parsing config: %w", err)
-	}
-	f.raw = raw
+	f := File{raw: raw}
 
 	applyDefaults(&f)
 
@@ -178,12 +149,12 @@ func LoadBytes(expanded []byte, raw []byte) (*File, error) {
 	return &f, nil
 }
 
-// checkTopLevelKeys refuses the v1 server: and admin: blocks, naming where
+// CheckArtifactKeys refuses the v1 server: and admin: blocks, naming where
 // each key went, and any other key an artifact does not hold.
-func checkTopLevelKeys(doc []byte) error {
+func CheckArtifactKeys(doc []byte) error {
 	var root yaml.Node
 	if err := yaml.Unmarshal(doc, &root); err != nil {
-		return fmt.Errorf("parsing config: %w", err)
+		return fmt.Errorf("invalid YAML: %w", err)
 	}
 	if len(root.Content) == 0 {
 		return nil
@@ -290,12 +261,6 @@ func (f *File) Validate() error {
 	logLevel := strings.ToLower(f.Server.LogLevel)
 	if logLevel != "debug" && logLevel != "info" && logLevel != "warn" && logLevel != "error" {
 		errs = append(errs, fmt.Errorf("RESTITCH_LOG_LEVEL must be debug/info/warn/error, got %q", f.Server.LogLevel))
-	}
-
-	if f.Auth != nil && f.Auth.JWT != nil {
-		if f.Auth.JWT.JWKSURL == "" {
-			errs = append(errs, fmt.Errorf("auth.jwt.jwks_url is required when jwt is configured"))
-		}
 	}
 
 	switch f.Admin.Storage.Type {

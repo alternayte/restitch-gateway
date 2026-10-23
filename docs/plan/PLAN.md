@@ -9,7 +9,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 ### Gateway runtime
 - [x] C01 — `restitch gateway` runs standalone from RESTITCH_CONFIG under the /v2 module
 - [x] C02 — A v1 file with server: or admin: is refused with the replacement env var named
-- [ ] C03 — An artifact with a non-public composition and no auth policy is refused
+- [x] C03 — An artifact with a non-public composition and no auth policy is refused
 - [ ] C04 — The gateway has no admin API; probes on the data port, metrics on the ops port
 
 ### Studio core
@@ -73,14 +73,15 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C03 — An artifact with a non-public composition and no auth policy is refused
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C02
 - **Files:** `internal/composition/config.go`, `internal/composition/parser.go`, `internal/composition/validate.go`, `internal/composition/validate_test.go`, `cmd/restitch/check.go`
 - **Goal:** One function validates an artifact: auth policy, rate-limit policies, reserved paths and the existing compile, and both gateway load and `restitch check` call it.
 - **First failing test:** `internal/composition/validate_test.go` — "TestValidateRejectsNonPublicWithoutAuthPolicy"
 - **Done when:** the test command passes, a composition on /health or /ready is refused, and `handler.go` has no path that serves a non-public route without an authenticator.
 - **Spec:** Decisions on the artifact contents, the fail-open route, one validator, reserved probe paths.
-- **Notes:** auth and rate_limit are already top-level keys on `gwconfig.File` (C02); move them into the composition config so one type owns the artifact. `restitch check` today runs only `composition.ParseConfig` and prints "Syntax OK" for a v1 file; it must call the shared validator. ${VAR} checks name syntax only; expansion happens on the gateway after validation of names.
+- **Notes:** auth and rate_limit are already top-level keys on `gwconfig.File` (C02); move them into the composition config so one type owns the artifact. `restitch check` today runs only `composition.ParseConfig` and prints "Syntax OK" for a v1 file; it must call the shared validator.
+  Done: `composition.Config` owns auth (inbound.InboundAuthConfig) and rate_limit (ratelimit.Config); `gwconfig.File` holds only process settings and the hash. `composition.ParseConfig` runs `gwconfig.CheckArtifactKeys`, decodes with KnownFields, and refuses a non-public composition without auth and the /health and /ready paths. `composition.Validate` wraps parse plus compile. The handler answers 503 for a non-public route with no authenticator. Every test fixture and example that relied on the old open default now says public: true. testenv builds its authenticator from the artifact's auth block. ${VAR} checks without expansion are still open: C07 needs them for Studio-side validation. ${VAR} checks name syntax only; expansion happens on the gateway after validation of names.
 
 ---
 

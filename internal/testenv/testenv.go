@@ -52,7 +52,6 @@ type UpstreamSpec struct {
 type Config struct {
 	YAML      string
 	Upstreams map[string]UpstreamSpec
-	APIKeys   []string // if set, enables inbound API key auth
 }
 
 // Env provides access to the running gateway for tests.
@@ -129,12 +128,12 @@ func Run(t *testing.T, cfg Config, fn func(t *testing.T, env *Env)) {
 		t.Fatalf("CompileConfig: %v", err)
 	}
 
+	// The artifact's auth policy builds the authenticator, as the gateway
+	// does.
 	var authenticator *inbound.Authenticator
-	if len(cfg.APIKeys) > 0 {
+	if parsed.Auth != nil {
 		var authErr error
-		authenticator, authErr = inbound.New(context.Background(), inbound.InboundAuthConfig{
-			APIKeys: cfg.APIKeys,
-		})
+		authenticator, authErr = inbound.New(context.Background(), *parsed.Auth)
 		if authErr != nil {
 			t.Fatalf("inbound auth: %v", authErr)
 		}

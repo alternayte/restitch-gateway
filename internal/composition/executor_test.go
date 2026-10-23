@@ -62,6 +62,7 @@ func TestExecutor(t *testing.T) {
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: user
         upstream: test-upstream
@@ -138,6 +139,7 @@ compositions:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: user
         upstream: test-upstream
@@ -207,6 +209,7 @@ compositions:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: step1
         upstream: test-upstream
@@ -277,6 +280,7 @@ compositions:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: user
         upstream: test-upstream
@@ -332,6 +336,7 @@ compositions:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: step1
         upstream: test-upstream
@@ -363,6 +368,7 @@ compositions:
 compositions:
   existing:
     path: /existing
+    public: true
     steps: []
     response:
       status: 200
@@ -405,6 +411,7 @@ upstreams:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: a
         upstream: dead
@@ -499,6 +506,7 @@ func TestStepCacheKeysOnEvaluatedHeaders(t *testing.T) {
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: s1
         upstream: test-upstream
@@ -563,6 +571,7 @@ func TestStepCacheSkipsPrivateResponses(t *testing.T) {
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: c1
         upstream: test-upstream
@@ -611,6 +620,7 @@ func TestStepCacheKeyUsesEscapedURL(t *testing.T) {
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: s1
         upstream: test-upstream
@@ -656,6 +666,7 @@ func TestStepCacheKeyIncludesForwardedHeaders(t *testing.T) {
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: s1
         upstream: test-upstream
@@ -704,6 +715,7 @@ func TestStepCacheHitsForIdenticalRequests(t *testing.T) {
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: s1
         upstream: test-upstream
@@ -759,6 +771,7 @@ func TestCoalescedPrivateResponseNotShared(t *testing.T) {
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: s1
         upstream: test-upstream

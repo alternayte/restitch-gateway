@@ -4,6 +4,7 @@ upstreams:
 compositions:
   test:
     path: /test
+    public: true
     steps:
       - name: fetch
         upstream: svc

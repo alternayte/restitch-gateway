@@ -20,6 +20,7 @@ upstreams:
 compositions:
   flaky-endpoint:
     path: "/api/flaky"
+    public: true
     method: GET
     steps:
       - name: data
@@ -31,6 +32,7 @@ compositions:
 
   cached-user:
     path: "/api/cached-user"
+    public: true
     method: GET
     steps:
       - name: user

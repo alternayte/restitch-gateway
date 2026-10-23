@@ -35,6 +35,7 @@ upstreams:
 compositions:
   test-comp:
     path: "/test"
+    public: true
     method: GET
     steps:
       - name: s1
@@ -52,6 +53,7 @@ upstreams:
 compositions:
   test-comp-2:
     path: "/test2"
+    public: true
     method: GET
     steps:
       - name: s1
@@ -401,6 +403,7 @@ upstreams:
 compositions:
   ` + compName + `:
     path: "/test"
+    public: true
     method: GET
     steps:
       - name: s1

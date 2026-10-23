@@ -91,8 +91,17 @@ func (h *Handler) RegisterRoutes(router *server.Router) {
 			h.serveComposition(w, r, name, params)
 		})
 
-		if !comp.Public && h.authenticator != nil {
-			handler = h.authenticator.Middleware(handler)
+		if !comp.Public {
+			if h.authenticator != nil {
+				handler = h.authenticator.Middleware(handler)
+			} else {
+				// Validation refuses a non-public route without an auth
+				// policy, so this only runs when auth init was skipped.
+				// Fail closed: never serve the route unauthenticated.
+				handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					h.writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "authentication is not available"})
+				})
+			}
 		}
 
 		if comp.RateLimit != nil {

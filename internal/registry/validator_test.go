@@ -26,6 +26,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     method: GET
     steps:
       - name: s1
@@ -42,6 +43,7 @@ const missingUpstreamYAML = `
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: s1
         upstream: nonexistent
@@ -128,6 +130,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     method: GET
     steps:
       - name: s1
@@ -158,6 +161,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     method: GET
     steps:
       - name: s1

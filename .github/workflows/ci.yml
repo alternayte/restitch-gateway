@@ -194,6 +194,7 @@ jobs:
             loadtest:
               path: "/loadtest"
               method: GET
+              public: true
               steps:
                 - name: s1
                   upstream: mock

@@ -246,6 +246,7 @@ upstreams:
 compositions:
   notfound:
     path: /notfound
+    public: true
     method: GET
     response:
       status: 404
@@ -284,6 +285,7 @@ upstreams:
 compositions:
   bad:
     path: /bad
+    public: true
     method: GET
     response:
       status: ` + fmt.Sprintf("%v", bad) + `
@@ -307,6 +309,7 @@ upstreams:
 compositions:
   bad:
     path: /bad
+    public: true
     method: GET
     response:
       status: "not-a-template"

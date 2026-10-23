@@ -9,6 +9,7 @@ upstreams:
 compositions:
   user-dashboard:
     path: "/api/users/{id}/dashboard"
+    public: true
     method: GET
     steps:
       - name: user
@@ -24,6 +25,7 @@ compositions:
 
   echo:
     path: "/api/echo"
+    public: true
     method: GET
     steps:
       - name: e

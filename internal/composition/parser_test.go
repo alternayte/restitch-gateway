@@ -34,6 +34,7 @@ upstreams:
 compositions:
   user-with-orders:
     path: "/api/user-orders"
+    public: true
     steps:
       - name: user
         upstream: user-service
@@ -113,6 +114,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: step1
         upstream: nonexistent
@@ -141,6 +143,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: step1
         upstream: user-service
@@ -172,6 +175,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - upstream: user-service
         path: "/test"
@@ -199,6 +203,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: user
         upstream: user-service
@@ -259,6 +264,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: user
         upstream: user-service
@@ -292,6 +298,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: user
         upstream: user-service
@@ -325,6 +332,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: user
         upstream: user-service
@@ -385,6 +393,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     method: GET
     steps:
       - name: a
@@ -425,6 +434,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     method: GET
     steps:
       - name: a
@@ -467,6 +477,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: step1
         upstream: api
@@ -505,6 +516,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: step1
         upstream: api
@@ -543,6 +555,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: step1
         upstream: api
@@ -576,6 +589,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: step1
         upstream: api
@@ -617,6 +631,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: user
         upstream: api

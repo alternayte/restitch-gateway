@@ -31,6 +31,7 @@ upstreams:
 compositions:
   user-with-orders:
     path: "/api/user-orders"
+    public: true
     method: GET
     steps:
       - name: user
@@ -146,6 +147,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: step1
         upstream: test
@@ -179,6 +181,7 @@ upstreams:
 compositions:
   test:
     path: "/test"
+    public: true
     steps:
       - name: step1
         upstream: nonexistent
