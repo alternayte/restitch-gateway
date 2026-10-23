@@ -236,15 +236,14 @@ compositions:
 
 ### Global Gateway
 
-Applied before composition dispatch. Configured under `server.rate_limit`
-with the same fields as above:
+Applied before composition dispatch. Configured under the top-level
+`rate_limit` key of the artifact with the same fields as above:
 
 ```yaml
-server:
-  rate_limit:
-    requests_per_second: 1000
-    burst: 50
-    key: "ip"
+rate_limit:
+  requests_per_second: 1000
+  burst: 50
+  key: "ip"
 ```
 
 When both global and per-composition limits are configured, a request must
@@ -257,12 +256,6 @@ Requests that exceed the rate limit receive:
 - HTTP **429 Too Many Requests**
 - `Retry-After: 1` header
 - Body: `{"error":"rate limit exceeded"}`
-
-### Admin API Rate Limiting
-
-Admin mutation endpoints (`POST /admin/api/reload`, `POST /admin/api/validate`)
-are rate-limited at 10 requests per second per IP with a burst of 5. This is
-always active and not configurable.
 
 ---
 
@@ -285,6 +278,8 @@ upstreams:
 compositions:
   dashboard:
     path: "/api/dashboard"
+    method: GET
+    public: true
     steps:
       - name: data
         upstream: backend
@@ -311,6 +306,7 @@ compositions:
   create:
     path: "/api/create"
     method: POST
+    public: true
     steps:
       - name: submit
         upstream: api

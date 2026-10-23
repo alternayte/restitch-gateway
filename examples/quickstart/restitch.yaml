@@ -1,5 +1,5 @@
 # Quick start example — run with: go run ./cmd/mockupstream &
-# then: ./bin/restitch -config examples/quickstart/restitch.yaml
+# then: RESTITCH_CONFIG=examples/quickstart/restitch.yaml ./bin/restitch gateway
 
 upstreams:
   mock:

@@ -9,35 +9,37 @@ There are no LTS branches yet.
 
 RESTitch is a gateway: it sits on the trust boundary between clients and
 upstream services, and its control plane manages the routing of secrets.
-The model, enforced by the code since the 2026-09 hardening pass:
+The v2 model:
 
-- **Gateway admin API** (`admin.*`): requires `admin.api_key`. With no key
-  configured, every request is rejected. Binds `127.0.0.1` by default
-  (`admin.bind`); `GET /metrics` and `GET /health` are the only open
-  endpoints. `OPTIONS` preflights require the key too, which prevents CSRF
-  against `POST /admin/api/reload`.
-- **Studio registry API** (`/api/v1/configs*`, `/api/v1/registry/bundle`):
-  requires `X-Admin-Key` matching the Studio's `-registry-key`. With no key
-  configured, every request is rejected. Cross-origin requests are rejected.
-  The Studio binds `127.0.0.1` by default (`-bind`).
-- **Gateway-to-Studio polling**: the gateway sends its `-registry-key` as
-  `X-Admin-Key`; operator must set the same key on both sides.
-- **Browser preferences API** (`/api/v1/preferences`): cookie-bound only
-  (256-bit random id, `HttpOnly`, `SameSite=Strict`), stores no secrets.
-- **Inbound authentication** for the data plane is opt-in per composition
-  (`public: false` requires an API key or JWT).
-- **Studio never exposes the admin key to the browser**: it is attached
-  server-side by the proxy, and gateway CORS headers are stripped at the
-  Studio boundary.
+- **The gateway has no admin API.** The data port serves compositions,
+  `/health` and `/ready`. The optional ops port (`RESTITCH_OPS_PORT`) serves
+  `/metrics` only.
+- **Studio API** (`/api/v1/*`): requires a session cookie or an API key. A
+  request with neither gets 401. A cookie request from another origin gets
+  403. Each operation requires the role viewer, editor or owner. Studio has
+  no public sign-up.
+- **Gateway API** (`/gateway/v1/*`): requires a gateway token. A token
+  belongs to one environment, can only pull that environment's artifact and
+  push telemetry, is stored hashed, is shown once and is revocable.
+- **Studio never calls a gateway.** Gateways pull artifacts and push
+  telemetry.
+- **Inbound authentication** for the data plane: a composition that is not
+  `public: true` requires the artifact's `auth` policy (API key or JWT).
+  Publish and gateway load refuse an artifact that has such a composition
+  and no `auth` policy.
+- **Telemetry** carries no request or response bodies. Sampled requests
+  carry redacted headers.
 
 What this means operationally:
 
-- Never run the admin or registry APIs without a key.
-- Never bind the Studio or the admin API to a non-loopback address on an
-  untrusted network.
-- The registry bundle may contain `${VAR}` references that the gateway
-  expands from its own environment; treat the registry as trusted, exactly
-  as you treat the config file.
+- Serve Studio over HTTPS and set `RESTITCH_PUBLIC_URL` to its `https://`
+  URL, so the session cookie is `Secure`.
+- Treat a gateway token and an API key as secrets. Revoke them when they
+  leak.
+- An artifact may contain `${VAR}` references that the gateway expands from
+  its own environment. The values never reach Studio. Treat everyone who
+  can publish to an environment as trusted with that environment's
+  gateway environment variables.
 
 ## Reporting a vulnerability
 

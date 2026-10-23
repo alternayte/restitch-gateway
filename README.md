@@ -4,59 +4,84 @@
 [![Go version](https://img.shields.io/badge/go-1.25.7-blue.svg)](go.mod)
 [![CI](https://img.shields.io/github/actions/workflow/status/alternayte/restitch-gateway/ci.yml?branch=main)](https://github.com/alternayte/restitch-gateway/actions)
 
-A production-grade REST API composition gateway. Declare multi-step API
-compositions in YAML — Restitch executes the DAG of upstream calls in
-parallel, wires results together with expressions, and returns a single
-merged response. No BFF code required.
+A REST API composition gateway. You declare compositions in YAML. Restitch
+runs the graph of upstream calls in parallel, connects the results with
+expressions, and returns one merged response. You write no BFF code.
 
 ## Install
 
-Requirements: Go 1.25.7 and Node.js 24 (for the Studio).
+Container image (one image for every role):
+
+```bash
+docker pull ghcr.io/alternayte/restitch-gateway:<version>
+```
+
+From source. You need Go 1.25.7 and Node.js 24:
 
 ```bash
 git clone https://github.com/alternayte/restitch-gateway.git
 cd restitch-gateway
-make build-all         # gateway + Studio binaries under bin/
+make build-all         # builds the frontend, then bin/restitch
 ./bin/restitch version
 ```
 
-Release binaries and container images are published with each tagged
-release; `make docker` builds the image locally. See [VERSIONING.md] for the
-compatibility policy.
+Each tagged release publishes the image and the binaries. See
+[VERSIONING.md](VERSIONING.md) for the compatibility policy.
 
 ## Architecture
 
-RESTitch has two processes plus the data sources they talk to:
+Restitch is one binary, `restitch`. The command picks the role:
 
-- **Gateway** (`./bin/restitch`): the data plane. It loads a YAML config
-  (file or Studio registry), compiles every composition into a DAG once at
-  startup, and serves the composed HTTP routes. Request handling is: inbound
-  auth → rate limit → route → wave-parallel step execution (per-upstream
-  retry, circuit breaker, cache, coalescing) → template evaluation → merged
-  response. A separate admin server (port 9090, loopback by default) serves
-  metrics, request records, stats, and config reload.
-- **Studio** (`./bin/restitch-studio`): the control plane. An embedded React
-  SPA for dashboards, request inspection, and a visual composition builder.
-  It proxies read-only gateway admin calls, and optionally owns a config
-  registry that the gateway polls instead of a file.
-- **Upstreams**: plain HTTP services. The gateway never modifies them.
+- **`restitch gateway`**: the data plane. It loads an artifact, compiles every
+  composition into a step graph once, and serves the composed routes. A
+  request goes through inbound auth, the rate limit, routing, wave-parallel
+  step execution (retry, circuit breaker, cache and coalescing per
+  upstream), template evaluation and the merged response.
+- **`restitch studio`**: the control plane. A web UI and API on Postgres.
+  People edit the draft of each environment and publish numbered artifact
+  versions.
+- **Upstreams**: plain HTTP services. The gateway never changes them.
 
-Requests never touch the Studio; the Studio going down does not affect the
-data plane. The gateway keeps its last known-good config when the registry
-is unreachable. See [docs/architecture.md] for the request lifecycle and the
-trust boundaries between the processes.
+A gateway runs in one of two modes:
+
+- **Managed mode**: `RESTITCH_STUDIO_URL` and `RESTITCH_GATEWAY_TOKEN`. The
+  gateway pulls the current artifact version of its environment and sends
+  heartbeats and telemetry to Studio. Studio never calls a gateway.
+- **Standalone mode**: `RESTITCH_CONFIG` names one artifact file. No Studio.
+
+Requests never reach Studio. When Studio is down, managed gateways keep
+serving the last version they applied. See
+[docs/architecture.md](docs/architecture.md).
 
 ## Quick Start
 
+### With Studio
+
 ```bash
-# Build
-make build
+make build-all
+./bin/restitch dev
+```
+
+`restitch dev` runs Studio and a managed gateway in one process on SQLite,
+with no setup:
+
+- Studio: http://localhost:3080. Sign in as `dev@restitch.local` /
+  `restitch-dev-password`.
+- Gateway: http://localhost:8080, which serves the `dev` environment.
+
+Add an upstream and a composition in the `dev` environment, then publish.
+The gateway applies the version within one second.
+
+### Standalone
+
+```bash
+make build-all
 
 # Start the mock upstream (ships with the repo)
 go run ./cmd/mockupstream &
 
-# Write a config
-cat > restitch.yaml <<'EOF'
+# Write an artifact
+cat > restitch.yaml <<'YAML'
 upstreams:
   mock:
     url: "http://localhost:8081"
@@ -65,6 +90,7 @@ compositions:
   user-posts:
     path: "/api/user-posts"
     method: GET
+    public: true
     steps:
       - name: user
         upstream: mock
@@ -76,10 +102,10 @@ compositions:
       body:
         user: "{{ steps.user.body }}"
         orders: "{{ steps.orders.body }}"
-EOF
+YAML
 
 # Run the gateway
-./bin/restitch -config restitch.yaml
+RESTITCH_CONFIG=restitch.yaml ./bin/restitch gateway
 
 # Test
 curl -s "http://localhost:8080/api/user-posts?id=1" | python3 -m json.tool
@@ -87,41 +113,37 @@ curl -s "http://localhost:8080/api/user-posts?id=1" | python3 -m json.tool
 
 ## Configuration
 
-### Full Schema
+Process settings are flags and `RESTITCH_` environment variables. The
+artifact holds the rest. [docs/configuration.md](docs/configuration.md)
+lists every variable and every field.
+
+### Process settings
+
+| Role | Required variables |
+|------|--------------------|
+| Studio | `RESTITCH_DATABASE_URL`, `RESTITCH_BOOTSTRAP_EMAIL`, `RESTITCH_BOOTSTRAP_PASSWORD`, `RESTITCH_PUBLIC_URL` |
+| Managed gateway | `RESTITCH_STUDIO_URL`, `RESTITCH_GATEWAY_TOKEN` |
+| Standalone gateway | `RESTITCH_CONFIG` |
+
+Each flag has one variable: `RESTITCH_` plus the flag name in upper snake
+case. A flag wins over its variable, and the variable wins over the default.
+
+### Artifact schema
 
 ```yaml
-server:                          # all optional
-  port: 8080
-  tls_port: 8443
-  tls_cert: ""
-  tls_key: ""
-  read_timeout: 10s
-  write_timeout: 30s
-  shutdown_timeout: 30s
-  log_format: json               # json | text
-  log_level: info                # debug | info | warn | error
-  rate_limit:                    # optional global rate limiter
-    requests_per_second: 1000
-    burst: 50
-    key: "ip"                    # ip | header:<name> | api-key
-  auth:                          # inbound auth; omit = open
-    api_keys: ["${GATEWAY_KEY}"]
-    jwt:
-      jwks_url: "https://issuer/.well-known/jwks.json"
-      issuer: "https://issuer"
-      audience: "restitch"
+auth:                            # inbound auth policy; required unless every composition is public
+  api_keys: ["${GATEWAY_KEY}"]
+  jwt:
+    jwks_url: "https://issuer/.well-known/jwks.json"
+    issuer: "https://issuer"
+    audience: "restitch"
 
-admin:
-  enabled: true
-  port: 9090
-  bind: "127.0.0.1"           # 0.0.0.0 only in a trusted network
-  api_key: "${ADMIN_KEY}"     # required; requests without a key are rejected
-  request_log_size: 500
-  storage:                       # optional; in-memory ring buffer if omitted
-    type: sqlite                 # memory | sqlite (turso is rejected)
-    url: "file:studio.db"
-    auth_token: ""
-    retention: 168h
+rate_limit:                      # optional gateway-wide rate limiter
+  requests_per_second: 1000
+  burst: 50
+  key: "ip"                      # ip | header:<name> | api-key
+
+block_private_upstreams: false   # true refuses literal private IP upstream hosts
 
 upstreams:
   users-api:
@@ -185,6 +207,10 @@ compositions:
         user: "{{ steps.user.body }}"
 ```
 
+`${VAR}` values expand from the environment of the gateway, so secrets
+never reach Studio. A v1 file with a `server:` or `admin:` block is refused,
+and the error names the replacement variable.
+
 ### Expression Language
 
 Expressions use [Expr](https://expr-lang.org/) syntax inside `{{ }}` delimiters.
@@ -233,10 +259,10 @@ Failed step references evaluate to `null` in templates (no 500).
 
 ### Authentication
 
-**Inbound** (gateway-level, per `server.auth`):
+**Inbound** (the top-level `auth` policy):
 - **API keys**: `X-API-Key` header, constant-time compare
 - **JWT/JWKS**: `Authorization: Bearer <token>`, validates issuer/audience/expiry
-- Per-composition `public: true` to skip auth
+- Per-composition `public: true` to skip auth. A composition that is not public needs the `auth` policy, or the artifact is refused
 
 **Upstream** (per-upstream, one of):
 - `header`: Static header injection (`X-API-Key`, etc.)
@@ -264,12 +290,13 @@ Failed step references evaluate to `null` in templates (no 500).
 
 **Rate Limiting** (per-composition or global):
 - Token-bucket limiter keyed by IP, header, or API key
-- Per-composition `rate_limit` and global `server.rate_limit`
+- Per-composition `rate_limit` and the top-level `rate_limit`
 - Exceeded requests receive 429 with `Retry-After` header
 
 ### Observability
 
-**Prometheus Metrics** (on admin port):
+**Prometheus metrics** are on `GET /metrics` on the ops port. Set
+`RESTITCH_OPS_PORT` (for example `9090`) to turn it on.
 
 | Metric | Type | Labels |
 |--------|------|--------|
@@ -288,183 +315,84 @@ Failed step references evaluate to `null` in templates (no 500).
 | `restitch_registry_poll_duration_seconds` | histogram | — |
 | `restitch_registry_last_success_timestamp` | gauge | — |
 
-**Admin API** (default port 9090):
+The `restitch_registry_*` metrics count the pulls of a managed gateway from
+Studio.
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /admin/api/info` | Version, uptime, config hash |
-| `GET /admin/api/compositions` | Compositions with steps and wave layout |
-| `GET /admin/api/compositions/{name}` | One composition |
-| `GET /admin/api/upstreams` | Upstreams with health status |
-| `GET /admin/api/requests?limit=100` | Request ring buffer (newest first) |
-| `GET /admin/api/requests/{id}` | One request record with step detail |
-| `GET /admin/api/stats` | Per-composition count/errors/avg/p95 |
-| `GET /admin/api/stats/steps` | Per-step aggregates for a composition |
-| `GET /admin/api/stats/timeseries` | Bucketed request/error/partial counts |
-| `GET /admin/api/registry/status` | Last poll time, ETag, count, error state (registry mode only) |
-| `POST /admin/api/validate` | Validate YAML config |
-| `POST /admin/api/reload` | Trigger hot config reload |
-| `GET /metrics` | Prometheus metrics |
-| `GET /health` | Admin liveness |
+**Probes** are on the data port. `GET /health` answers 200 while the process
+runs. `GET /ready` answers 503 until the gateway applies its first artifact,
+then 200.
 
-Protected by `admin.api_key` (via `X-Admin-Key` header). The key is required:
-with no key configured, every admin request is rejected. The admin server
-binds `127.0.0.1` by default; set `admin.bind` only for a trusted network.
+**Studio telemetry**: each managed gateway sends heartbeats, one-minute usage
+aggregates and sampled requests to Studio. The environment overview in
+Studio shows them for every replica.
 
-**Distributed Tracing**: OpenTelemetry support via OTLP HTTP exporter. Set
-`OTEL_EXPORTER_OTLP_ENDPOINT` to enable. Spans are created per composition
-and per step, and trace IDs are included in request records.
+**Distributed tracing**: OpenTelemetry through the OTLP HTTP exporter. Set
+`OTEL_EXPORTER_OTLP_ENDPOINT` to turn it on. The gateway makes one span per
+composition and one per step.
 
-**Structured Logging**: JSON by default, every line includes `request_id`
-from context. Use `-log-level debug` for step-level detail.
+**Structured logging**: JSON by default. Every line has the `request_id`.
+Set `RESTITCH_LOG_LEVEL=debug` for step-level detail.
+
+See [docs/observability.md](docs/observability.md).
 
 ### CLI
 
 ```
-restitch run [flags]            # Start the gateway (default when no subcommand)
-restitch check -config f        # Validate config, print wave layout, exit 0/1
-restitch dev [flags]            # Run gateway + Studio together (see Dev Mode)
-restitch import openapi <spec>  # Generate a composition from an OpenAPI spec
-restitch version                # Print version and Go version
+restitch gateway [flags]                 # Run a gateway (managed or standalone)
+restitch studio [flags]                  # Run Studio
+restitch dev [flags]                     # Run Studio and a managed gateway in one process
+restitch publish -env NAME [-m MSG] FILE # Import a file into a draft and publish it
+restitch check -config FILE              # Validate an artifact, print the wave layout
+restitch import openapi <spec> [flags]   # Generate an artifact from an OpenAPI spec
+restitch healthcheck <url>               # Exit 0 when the URL answers 2xx (container probes)
+restitch version                         # Print the version
 ```
 
-`restitch -config restitch.yaml` (no subcommand) works as `run` for
-backwards compatibility.
+A bare `restitch` prints usage and exits with status 2.
 
-`run` flags: `-port`, `-tls-port`, `-cert`, `-key`, `-log-format`,
-`-log-level`, `-config`, and the registry-mode flags `-registry-url`,
-`-registry-key`, `-poll-interval`. `-config` and `-registry-url` are
-mutually exclusive.
+### Hot reload
 
-`import openapi` flags: `-upstream` (upstream name), `-base-url`,
-`-ops` (comma-separated operation IDs), `-o` (output file).
+- **Standalone mode**: the gateway reloads the file when it changes, and on
+  SIGHUP.
+- **Managed mode**: the gateway pulls every `RESTITCH_POLL_INTERVAL` (10s).
+  SIGHUP pulls at once.
 
-### Hot Reload
-
-Config can be reloaded without restart:
-
-- **SIGHUP**: `kill -HUP <pid>`
-- **File watch**: Automatic on config file change (debounced 500ms)
-- **Admin API**: `POST /admin/api/reload`
-
-Reload validates the new config first — a bad config never takes down the
-running gateway (validate-then-atomic-swap via `atomic.Pointer`).
-
-### Registry Mode
-
-Instead of a config file, the gateway can poll Studio's registry for its
-compositions:
-
-```bash
-restitch-studio -registry-key "$REGISTRY_KEY"
-restitch run -registry-url http://localhost:3080 -registry-key "$REGISTRY_KEY"
-```
-
-The Studio registry API requires `X-Admin-Key`; the gateway's `-registry-key`
-must match the Studio's `-registry-key`, or the poll is rejected. Studio
-binds `127.0.0.1` by default.
-
-The poller uses ETag change detection, so an unchanged bundle costs a 304.
-Transient fetch failures back off exponentially and the gateway keeps serving
-the last known-good config; a bundle that parses but fails validation is
-rejected without disturbing the running pipeline. SIGHUP triggers an immediate
-poll, skipping the backoff timer.
-
-`-config` and `-registry-url` are mutually exclusive.
+The gateway validates each new artifact first. An invalid artifact never
+replaces the running one. The swap is atomic, so a reload never blocks a
+request.
 
 ### Studio
 
-Restitch Studio is a web UI for inspecting the running gateway.
+Studio has environments, drafts of typed resources, publish with a diff,
+numbered artifact versions, rollback, promote, gateway tokens, users with
+the roles viewer, editor and owner, and API keys for CI.
+
+Publish from CI:
 
 ```bash
-# Build the frontend
-make studio
-
-# Run (gateway must be running with admin API on :9090)
-./bin/restitch-studio
-
-# Open http://localhost:3080
+RESTITCH_STUDIO_URL=https://studio.example.com RESTITCH_API_KEY=rak_... \
+  restitch publish -env production -m "Release 42" restitch.yaml
 ```
 
-Pages: **Dashboard** (stat tiles, request-rate and latency charts, time-range
-selector), **Compositions** (route table with pinning) and its detail view
-(step metrics, dependency graph), **Requests** (live request log with status,
-duration and partial filters), **Builder** (visual composition editor), and
-**Config** (YAML editor with validation).
-
-#### Config Registry
-
-Studio can own the compositions rather than reading them from a file. Configs
-are versioned, validated by compiling them through the gateway parser before
-they are stored, and served to the gateway as a single bundle.
-
-```
-POST   /api/v1/configs                              Create
-GET    /api/v1/configs                              List
-GET    /api/v1/configs/{id}                         Get
-PUT    /api/v1/configs/{id}                         Update content (new version)
-PATCH  /api/v1/configs/{id}                         Update metadata
-DELETE /api/v1/configs/{id}                         Delete
-GET    /api/v1/configs/{id}/versions                Version history
-POST   /api/v1/configs/{id}/versions/{n}/activate   Activate a version
-POST   /api/v1/configs/validate                     Validate without storing
-GET    /api/v1/registry/bundle                      Active configs as one YAML (ETag)
-```
-
-Point a gateway at it with `restitch run -registry-url ...` (see Registry Mode).
-The registry API is protected by `-registry-key` (`X-Admin-Key`); Studio binds
-loopback by default and warns when told to bind elsewhere.
-
-#### Browser Preferences
-
-Studio remembers per-browser UI state with no login. A `restitch_browser_id`
-cookie (256-bit, `HttpOnly`, `SameSite=Strict`, one year) identifies the
-browser; preferences are stored server-side against it.
-
-```
-GET /api/v1/preferences    # pinned compositions, sidebar state, default time range
-PUT /api/v1/preferences
-```
-
-Pinned compositions sort to the top of the Compositions table, the sidebar
-remembers whether it was collapsed, and the Dashboard reopens on the time range
-you last chose. State is mirrored to `localStorage` so the first paint is
-correct, then reconciled with the server.
-
-### Dev Mode
-
-`restitch dev` runs the gateway and Studio together with colour-prefixed logs,
-health-check gating and automatic restart on crash:
-
-```bash
-restitch dev
-# Gateway:  http://localhost:8080
-# Admin:    http://localhost:9090
-# Studio:   http://localhost:3080
-```
-
-Ports are fixed. Pass flags through to either child with `--gateway-args` and
-`--studio-args`, e.g. `restitch dev --gateway-args="-log-level debug"`.
-Ctrl+C shuts both down cleanly.
+See [docs/studio.md](docs/studio.md).
 
 ## Production Deployment
 
-`deploy/` holds a Compose stack running the gateway, Studio, Prometheus and
-Jaeger together:
+Studio needs Postgres and four variables. A managed gateway needs two. The
+generic guide for any platform that runs an image with env vars is
+[docs/deployment.md](docs/deployment.md).
 
-```bash
-cp deploy/.env.example deploy/.env    # set image tags and secrets
-docker compose -f deploy/docker-compose.yml up -d
-```
+`deploy/` holds a Docker Compose stack (Postgres, Studio, two managed
+gateways, a mock upstream and Prometheus) and plain Kubernetes manifests.
+CI lints both with `make deploy-lint`. See
+[deploy/README.md](deploy/README.md).
 
-Prometheus ships with recording rules (pre-computed request rate, P50/P95/P99
-latency and error rate per composition) and alert rules for sustained high
-latency, elevated error rate, config reload failures and gateway-down. See
-`deploy/README.md`.
+Prometheus ships with recording rules (request rate, P50/P95/P99 latency and
+error rate per composition) and alert rules.
 
-Load tests live in `tests/loadtest/`. The k6 suite runs in CI on `release/*`
-branches, tags, and manual dispatch — deliberately not on every push, where a
-hard latency threshold would flake on shared-runner noise.
+Load tests live in `tests/loadtest/`. The k6 suite runs in CI on
+`release/*` branches, tags and manual dispatch, not on every push: a hard
+latency threshold flakes on shared runners.
 
 ## Error Taxonomy
 
@@ -484,24 +412,26 @@ Internal error details are never exposed to clients (D17).
 ## Development
 
 ```bash
-make build          # Build gateway binary
-make run            # Build and run the gateway
+make studio         # Build the Studio frontend into internal/studio/dist
+make build          # Build bin/restitch
+make build-all      # Build the frontend when it is missing, then bin/restitch
+make run            # Run the gateway
 make test           # Run tests
-make race           # Run tests with race detector
+make race           # Run tests with the race detector
 make vet            # Go vet
 make lint           # golangci-lint
 make ci             # vet + lint + race
-make studio         # Build Studio frontend
-make build-all      # Build gateway + studio binaries
-make e2e            # Run E2E specs
-make docker         # Build Docker image
-make verify GATE=M3 # Run one milestone verification gate
-make verify-all     # Run every gate
-make ledger-check   # Check every plan task has green evidence
+make e2e            # Run the golden specs in tests/
+make docker         # Build the image restitch:dev
+make deploy-lint    # Lint deploy/ with docker compose config and kubeconform
 ```
 
-`build-all` builds the frontend automatically when `cmd/restitch-studio/dist`
-has no assets, since that directory is a build artifact and is not committed.
+The binary embeds `internal/studio/dist`. That directory is a build output
+and is not committed, so `go build ./...` fails on a fresh clone until
+`make studio` has run.
+
+The Studio tests in `internal/studio` also run against Postgres when
+`RESTITCH_TEST_DATABASE_URL` is set.
 
 ### Repository notes
 
@@ -513,29 +443,27 @@ of the public tree. The user-facing docs are `docs/` and this README.
 ### Project Structure
 
 ```
-cmd/restitch/              Subcommand dispatch, run, check, dev, import, version
-cmd/restitch-studio/       Embedded SPA + admin proxy + registry/preferences API
-cmd/mockupstream/          Dev/demo mock upstream server
-internal/gwconfig/         Root config, env expansion, validation
-internal/composition/      Parser, template engine, DAG, executor, handler
+cmd/restitch/              Subcommands: gateway, studio, dev, publish, check, import, healthcheck, version
+cmd/mockupstream/          Mock upstream server for development and demos
+internal/gwconfig/         Env naming rule, env expansion, artifact key checks
+internal/composition/      Parser, validator, template engine, DAG, executor, handler
 internal/upstream/         Per-upstream client, retry, breaker, cache, coalesce, health
-internal/auth/             Strategies (header, basic, passthrough, oauth2)
+internal/auth/             Upstream auth strategies (header, basic, passthrough, oauth2)
 internal/inbound/          Inbound auth middleware (API key, JWT/JWKS)
-internal/ratelimit/        Token-bucket limiters, global and per-composition
-internal/server/           Server, router, middleware, TLS, shutdown
-internal/admin/            Admin API server, request ring buffer, stats, storage
-internal/hotreload/        File watcher, registry client, polling engine, signals
-internal/registry/         Config registry store, validation, migrations
-internal/session/          Browser session cookie, preferences store
-internal/devmode/          Process supervision and prefixed output for `restitch dev`
+internal/ratelimit/        Token-bucket limiters, gateway-wide and per composition
+internal/server/           Server, router, middleware, TLS, probes
+internal/hotreload/        Studio client, poller, heartbeat, usage and request push
+internal/admin/            Usage aggregation of a managed gateway
+internal/studio/           Studio server, API, store, migrations, embedded UI
 internal/observability/    Request ID, slog setup, Prometheus metrics, OTel tracing
-internal/reqlog/           Request record types (shared)
+internal/reqlog/           Request record types
 internal/mockupstream/     Mock upstream handlers (shared with cmd/)
-internal/testenv/          Test helpers for spinning up gateways and upstreams
-studio/                    React SPA (Vite + Tailwind v4)
-deploy/                    Production Docker Compose stack, Prometheus rules
+internal/testenv/          Test helpers for gateways and upstreams
+studio/                    Studio web UI (Vite, React, TanStack, Tailwind v4)
+api/openapi.yaml           Studio API description, generated and committed
+deploy/                    Docker Compose stack, Kubernetes manifests, Prometheus rules
 tests/                     E2E specs and k6 load tests
-examples/                  Example configs
+examples/                  Example artifacts
 docs/                      Topic docs
 ```
 

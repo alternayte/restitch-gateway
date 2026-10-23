@@ -39,7 +39,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### Delivery
 - [x] C26 — One image runs every role, with Compose and Kubernetes files linted in CI
-- [ ] C27 — The docs describe v2: container platforms, configuration, Studio, CHANGELOG
+- [x] C27 — The docs describe v2: container platforms, configuration, Studio, CHANGELOG
 
 ---
 
@@ -379,7 +379,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C26 — One image runs every role, with Compose and Kubernetes files linted in CI
 
-- **Status:** done locally; the CI lint steps have not run, because the branch is not pushed
+- **Status:** done; `make deploy-lint` passed in CI on PR #34 (merged as 5306310)
 - **Depends on:** C15
 - **Files:** `Dockerfile`, `deploy/docker-compose.yml`, `deploy/kubernetes/`, `.github/workflows/ci.yml`, `Makefile`
 - **Goal:** The image has entrypoint `/restitch`; Compose and plain manifests run Studio on Postgres and two gateways.
@@ -392,10 +392,11 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C27 — The docs describe v2: container platforms, configuration, Studio, CHANGELOG
 
-- **Status:** todo
+- **Status:** done; AGENTS.md updated through agents-audit items 1-14, accepted by the user on 2026-10-24
 - **Depends on:** C26
 - **Files:** `docs/deployment.md`, `docs/configuration.md`, `docs/studio.md`, `README.md`, `CHANGELOG.md`
 - **Goal:** A reader deploys Studio and gateways to any image-and-env-vars platform from the generic guide, and every env var in the code appears once in the docs.
 - **First failing test:** `tests/readme_test.go` — "TestDocsListEveryEnvVar"
 - **Done when:** the test command passes and AGENTS.md lines for registry and bundle are replaced by an accepted agents-audit item.
 - **Notes:** The test reads the env names from the C01 derivation function, so docs cannot drift.
+  Done: `TestDocsListEveryEnvVar` parses `cmd/restitch/*.go`, takes every flag of each flag set passed to `gwconfig.BindEnv`, names it with `gwconfig.EnvName`, and checks one `| \`RESTITCH_X\` | commands |` row per name in `docs/configuration.md`, with the right commands and no unknown name. README, configuration, deployment (generic container platforms), studio, architecture, observability, resilience, SECURITY, VERSIONING and CONTRIBUTING describe v2; CHANGELOG has a v2.0.0 entry. deploy/README.md no longer claims an import button: the UI has none, import is the API and `restitch publish`.

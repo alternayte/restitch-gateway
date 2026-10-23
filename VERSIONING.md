@@ -5,8 +5,8 @@
 RESTitch follows [Semantic Versioning](https://semver.org/) with tags of the
 form `vMAJOR.MINOR.PATCH` on the `main` branch.
 
-- **MAJOR**: breaking changes to the YAML config schema, the admin API, or
-  the module path.
+- **MAJOR**: breaking changes to the artifact schema, the `RESTITCH_`
+  environment variables, the Studio and gateway APIs, or the module path.
 - **MINOR**: backward-compatible features and behavioral additions.
 - **PATCH**: backward-compatible bug fixes and security fixes.
 
@@ -17,13 +17,15 @@ between minor versions, documented in the CHANGELOG.
 
 For a given MAJOR:
 
-1. **Config schema**: keys documented in `docs/configuration.md` and the
-   README full schema remain valid. New keys are additive. Removals and
-   renames land only in a MAJOR.
-2. **Admin API**: `/admin/api/*` response shapes are additive only. New
-   endpoints may appear in a MINOR.
-3. **Go module path**: `github.com/alternayte/restitch-gateway` is stable
-   for the 0.x and 1.x lines.
+1. **Artifact schema and env vars**: keys and `RESTITCH_` variables
+   documented in `docs/configuration.md` remain valid. New keys and
+   variables are additive. Removals and renames land only in a MAJOR.
+2. **Studio API and gateway API**: `/api/v1/*` (described in
+   `api/openapi.yaml`) and `/gateway/v1/*` response shapes are additive
+   only. New endpoints may appear in a MINOR. A gateway of one MAJOR pulls
+   from a Studio of the same MAJOR.
+3. **Go module path**: `github.com/alternayte/restitch-gateway/v2` is stable
+   for the 2.x line. The 1.x line used `github.com/alternayte/restitch-gateway`.
 4. **Go and Node floors**: `go.mod` and the CI workflow declare the minimum
    toolchain; raising the floor is a MINOR+ change announced in the
    CHANGELOG.
