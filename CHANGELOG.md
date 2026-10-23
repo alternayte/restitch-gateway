@@ -1,23 +1,103 @@
 # Changelog
 
-## Unreleased
+## v2.0.0 — Unreleased
 
-- **Fix:** `request_schema` validation can no longer be bypassed. A non-empty body with a missing or non-JSON Content-Type returns 415, an empty or `null` body is validated as JSON `null`, and a body read error returns 400 instead of executing the composition. JSON detection now parses the media type (`application/json` or `+json`) instead of matching the substring "json".
-- Fix: the per-step cache and coalesce key is derived from the outgoing
-  upstream request (method, escaped URL, headers including forwarded
+Studio becomes a multi-environment control plane, and gateways pull
+published artifact versions from it. One binary and one image serve every
+role. No v1 compatibility layer and no v1 config converter exist. See
+[docs/configuration.md](docs/configuration.md#moving-from-a-v1-file) for the
+move from a v1 file.
+
+### Breaking Changes
+
+- **Module path** is `github.com/alternayte/restitch-gateway/v2`. Change
+  every import path.
+- **`server:` and `admin:` are refused.** A config file is now an artifact:
+  `auth`, `rate_limit`, `block_private_upstreams`, `upstreams` and
+  `compositions` only. The load error names the replacement of each key, for
+  example `server.port moved to RESTITCH_PORT`. `server.auth` and
+  `server.rate_limit` moved to the top-level `auth` and `rate_limit` keys.
+  `admin.request_log_size` and `admin.storage` are removed.
+- **Process settings are flags and env vars only.** Each flag has one env
+  var: `RESTITCH_` plus the flag name in upper snake case, with flag over
+  env over default. `-cert` and `-key` are now `-tls-cert` and `-tls-key`
+  (`RESTITCH_TLS_CERT`, `RESTITCH_TLS_KEY`). The Studio env vars
+  `STUDIO_*` are replaced by `RESTITCH_*` names.
+- **The gateway admin API is removed**, with its port 9090, `X-Admin-Key`,
+  the request ring buffer, the stats endpoints, `POST /admin/api/reload`,
+  `POST /admin/api/validate` and gateway-side storage. `/health` and `/ready`
+  are on the data port. `/metrics` is on the optional ops port
+  (`RESTITCH_OPS_PORT`, off by default). Studio shows usage, instances and
+  sampled requests.
+- **Registry mode is replaced by managed mode.** `-registry-url` and
+  `-registry-key` are removed. A managed gateway sets `RESTITCH_STUDIO_URL`
+  and `RESTITCH_GATEWAY_TOKEN`, and pulls the current artifact version of
+  one environment. The config registry, its bundle and `/api/v1/configs` are
+  removed. `RESTITCH_CONFIG` and `RESTITCH_STUDIO_URL` together exit with
+  status 2.
+- **A composition that is not public needs an auth policy.** Publish,
+  `restitch check` and the gateway refuse an artifact with a composition
+  that is not `public: true` when the artifact has no top-level `auth`
+  block. v1 served such a route with no auth.
+- **`/health` and `/ready` are reserved.** A composition cannot use them.
+- **One image with no default command.** The image holds only `/restitch`.
+  The container command picks the role: `gateway` or `studio`. The separate
+  `restitch-studio` binary and its `--entrypoint` override are removed.
+- **CLI**: `restitch run` and the bare `restitch -config ...` form are
+  removed. Use `restitch gateway`. A bare `restitch` prints usage and exits
+  with status 2. `restitch dev` no longer supervises two child processes,
+  and `--gateway-args` and `--studio-args` are removed.
+- **Studio storage**: Studio uses Postgres when deployed, and SQLite on local
+  disk for one node. The v1 registry and browser-preference data are not
+  migrated.
+
+### Features
+
+- **Environments, drafts and resources**: each environment owns one draft
+  and its artifact versions. Resources are typed (upstream, composition,
+  auth policy, rate limit, settings), with names unique per environment. A
+  stale save gets 409 and a reload prompt.
+- **Publish**: validates the whole draft with the gateway validator, shows a
+  diff and writes an immutable, numbered artifact version with author and
+  message. Rollback publishes an old version again as a new version.
+  Promote copies a version into the draft of another environment.
+- **Gateway tokens**: one environment per token, shown once, stored hashed,
+  revocable. A token can only pull the artifact and push telemetry.
+- **Managed gateways**: pull with ETag, retry with backoff when Studio is
+  down, keep the last good version in memory, and answer `/ready` with 503
+  until the first version. Each instance sends a heartbeat, one-minute usage
+  aggregates and sampled requests with redacted headers and no bodies.
+- **Users and roles**: local users, OIDC sign-in, the roles viewer, editor
+  and owner, a bootstrap owner from env, and API keys for CI.
+- **`restitch publish -env NAME FILE`**: imports a file into a draft and
+  publishes it from CI with an API key.
+- **`restitch dev`**: Studio and a managed gateway in one process on SQLite,
+  with no env vars.
+- **Studio UI**: rebuilt on TanStack Router and Query with a generated API
+  client, forms derived from the artifact JSON Schema, a YAML view, server
+  lint of expressions, an environment overview with usage charts,
+  instances and sampled requests, and user and token management.
+- **Deployment**: a generic container-platform guide
+  ([docs/deployment.md](docs/deployment.md)), a Docker Compose stack and
+  plain Kubernetes manifests in `deploy/`, linted in CI.
+
+### Bug Fixes
+
+- `request_schema` validation can no longer be bypassed. A non-empty body
+  with a missing or non-JSON Content-Type returns 415, an empty or `null`
+  body is validated as JSON `null`, and a body read error returns 400
+  instead of executing the composition. JSON detection now parses the media
+  type (`application/json` or `+json`) instead of matching the substring
+  "json".
+- The per-step cache and coalesce key is derived from the outgoing upstream
+  request (method, escaped URL, headers including forwarded
   `Accept`/`Accept-Language`, body, inbound `Authorization`). Path params
   that differ only in `/` placement and requests with different forwarded
   headers no longer share an entry. Coalesced callers no longer share a
   response that carries `Set-Cookie` or `Cache-Control: private`/`no-store`.
-- **Ordered gateway shutdown**: shutdown now runs in a fixed order (HTTP and
-  admin servers, registry poller and file watcher, final time-series flush,
-  request-record drain, storage close) instead of LIFO defers. The final
-  time-series window is no longer written to a closed store. The record drain
-  has one `server.shutdown_timeout` deadline instead of 5s per record. Records
-  sent after shutdown begins are dropped instead of panicking the process.
-  Dropped request records increment the new
-  `restitch_request_records_dropped_total{reason}` counter and log at most one
-  line per 10s.
+- Gateway shutdown runs in a fixed order: servers drain, then the poller and
+  the file watcher stop, then the last telemetry push runs with its own
+  `RESTITCH_SHUTDOWN_TIMEOUT` deadline.
 
 ## v1.2.0 — 2026-09-02
 

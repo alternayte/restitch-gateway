@@ -1,186 +1,263 @@
 # Restitch Studio
 
-Restitch Studio is a web UI for monitoring and managing the Restitch gateway.
-It runs as a separate binary that proxies to the gateway's admin API.
+Studio is the control plane of Restitch. People sign in, edit the config of
+each environment, and publish numbered artifact versions. Managed gateways
+pull the current version of their environment and send telemetry back.
+Studio never connects to a gateway.
 
-## Architecture
+Studio is the `restitch studio` command of the one binary. The binary
+embeds the web UI. To run Studio in a container, see
+[deployment.md](deployment.md).
 
-```
-Browser → restitch-studio (:3080) → restitch admin API (:9090)
-                │
-         embedded React SPA
-```
+## Concepts
 
-- **`restitch-studio`** is a Go binary that embeds the built React SPA via
-  `go:embed`.
-- All `/api/*` requests are reverse-proxied to the gateway's admin API
-  (rewriting `/api/*` → `/admin/api/*`).
-- The `X-Admin-Key` header is attached automatically when configured.
-- Everything else serves the SPA with client-side routing fallback.
+| Word | Meaning |
+|------|---------|
+| environment | A named deployment target, for example `staging` or `production`. It owns one draft and a list of artifact versions. |
+| draft | The editable set of resources of one environment. Gateways never see the draft. |
+| resource | One typed config item in a draft: an upstream, a composition, the auth policy, the rate limit, or the settings. |
+| publish | Validate the whole draft and write a new artifact version. |
+| artifact version | An immutable, numbered, validated copy of the config of an environment. It records the author and a message. |
+| promote | Copy an artifact version of one environment into the draft of another environment. |
+| gateway token | A credential of one environment. A gateway uses it to pull artifact versions and push telemetry. |
 
-## Setup
+## Environments
 
-### Build from source
+The **Environments** page lists every environment. An owner creates an
+environment with **New environment**. A new environment has an empty draft
+and no version.
+
+Each environment has these pages:
+
+- **Overview**: usage charts, gateway instances and sampled requests.
+- **Draft**: the resources of the draft.
+- **Publish and history**: publish, the version list, rollback and promote.
+- **Gateway tokens**: owners only.
+
+## Drafts and resources
+
+The **Draft** page lists the resources of the draft with their revision and
+the time of the last change. To add a resource, click **New resource**,
+select the kind and enter the name.
+
+| Kind | Artifact key | Name |
+|------|--------------|------|
+| Upstream | `upstreams.<name>` | Your choice. |
+| Composition | `compositions.<name>` | Your choice. |
+| Auth policy | `auth` | Always `default`. One per draft. |
+| Rate limit | `rate_limit` | Always `default`. One per draft. |
+| Settings | `block_private_upstreams` | Always `default`. One per draft. |
+
+A resource name starts with a letter or a digit and holds up to 128
+letters, digits, `_`, `.` and `-`. A name is unique per kind in an
+environment.
+
+The resource editor has two views of the same data: a form and YAML. The
+form covers every field. Studio derives the form from the JSON Schema of the
+artifact types, which `GET /api/v1/schema` also serves. Studio stores the
+resource, not the text, so it does not keep YAML comments.
+
+Studio validates each resource when you save it. Expression fields are
+checked by the server as you type.
+
+### Concurrent edits
+
+Each save carries the revision that you opened. When another person saved
+the resource after you opened it, Studio refuses your save with 409 and
+shows a reload prompt. Reload to see their version. Your edits are
+discarded.
+
+### Secrets
+
+Do not put a secret in a resource. Write `${NAME}` in its place. The gateway
+expands the variable from its own environment. Studio validates the draft
+with every variable replaced by `x`, and never sees the value. See
+[configuration.md](configuration.md#environment-variable-expansion).
+
+## Publish
+
+On **Publish and history**, click **Publish**. Studio compiles the whole
+draft with the same validator that the gateway uses. Then it shows:
+
+- the errors, when the draft does not validate, or
+- the diff from the current version to the draft.
+
+Enter a message and publish. Studio writes the next version number with
+your email as the author. Each managed gateway of the environment applies
+the version within one poll interval.
+
+A composition that is not `public: true` needs an auth policy. Publish
+refuses the draft without one.
+
+### Versions and rollback
+
+The history lists every version with its message, author and time. The
+newest version is the current version. Versions never change and are never
+deleted.
+
+To roll back, click the rollback action of an old version. Studio publishes
+that version's YAML again as a new version. The draft does not change.
+
+### Promote
+
+To promote, open the environment that receives the config and click
+**Promote from another environment**. Select the source environment and the
+version. Studio replaces the draft of this environment with the resources
+of that version and shows the diff. Publish to apply it.
+
+## Gateway tokens
+
+Owners manage gateway tokens on the **Gateway tokens** page of an
+environment.
+
+1. Click the create action and enter a name for the token.
+2. Copy the token. It starts with `rgt_`. Studio shows it once and stores
+   only its hash.
+3. Set `RESTITCH_STUDIO_URL` and `RESTITCH_GATEWAY_TOKEN` on the gateway.
+
+The list shows when each token was last used. Revoke a token to stop every
+gateway that uses it. A gateway token can only pull the artifact of its
+environment and push telemetry. It cannot call the Studio API.
+
+## Overview and telemetry
+
+Each managed gateway sends to Studio:
+
+- a heartbeat every 15 seconds, with its instance ID, binary version, the
+  artifact version it applied and the result of its last pull,
+- one-minute usage aggregates per composition, step and upstream,
+- every failed request, and a capped sample of successful requests. A sample
+  holds step timings and redacted headers. It never holds a body.
+
+The **Overview** page sums the data of every instance. It shows requests per
+minute, p95 latency, the error rate, per-upstream counts, the instances with
+the version each one runs, and the sampled requests. An instance that has
+has sent no heartbeat for one minute is marked stale.
+
+Studio keeps usage for 7 days and 10 successful samples per minute by
+default. An owner changes both per environment with
+`PATCH /api/v1/environments/{env}`, fields `usage_retention_days` (1 to 365)
+and `request_samples_per_minute` (0 to 1000). Studio always keeps failed
+requests.
+
+## Users and roles
+
+| Role | Can |
+|------|-----|
+| viewer | Read environments, drafts, versions and telemetry. |
+| editor | Everything a viewer can, and change drafts, publish, roll back, promote and import. |
+| owner | Everything an editor can, and create environments, manage gateway tokens, manage users and change telemetry settings. |
+
+The first owner comes from `RESTITCH_BOOTSTRAP_EMAIL` and
+`RESTITCH_BOOTSTRAP_PASSWORD`. Studio has no public sign-up.
+
+Owners manage users on **Settings > Users**:
+
+- **Add user**: enter the email and the role. Studio generates a temporary
+  password. The user changes it at the first sign-in.
+- Change the role of a user.
+- Reset the password of a user.
+- Disable a user. Every session and API key of that user stops working at
+  once. You can enable the user again.
+
+To use single sign-on, set `RESTITCH_OIDC_ISSUER`, `RESTITCH_OIDC_CLIENT_ID`
+and `RESTITCH_OIDC_CLIENT_SECRET`. A person who signs in through OIDC needs
+no invite and gets the viewer role.
+
+## API keys and CI
+
+An API key lets a script call the Studio API. A key starts with `rak_`. Its
+role is the role of its owner, or a lower role that you request. Create the
+key as the person who owns it. Studio has no page for API keys, so use the
+API:
 
 ```bash
-make build-all    # builds both restitch and restitch-studio
+STUDIO=https://studio.example.com
+curl -s -c jar -H "Origin: $STUDIO" -H 'Content-Type: application/json' \
+  -d '{"email":"ci@example.com","password":"..."}' "$STUDIO/api/auth/sign-in/email"
+curl -s -b jar -H "Origin: $STUDIO" -H 'Content-Type: application/json' \
+  -d '{"name":"ci","role":"editor"}' "$STUDIO/api/auth/api-keys"
 ```
 
-Or build Studio separately:
+The response holds the key in `plaintext`. Studio shows it once. Send the
+key as `Authorization: Bearer rak_...`. Revoke a key with
+`POST /api/auth/api-keys/{id}/revoke`.
+
+### restitch publish
+
+`restitch publish` replaces the draft of an environment with a file and
+publishes it. It takes the same path as the UI. Run it from CI with an API
+key of an editor or an owner:
 
 ```bash
-make studio       # builds the React app (npm ci + npm run build)
-go build -o bin/restitch-studio ./cmd/restitch-studio
+export RESTITCH_STUDIO_URL=https://studio.example.com
+export RESTITCH_API_KEY=rak_...
+restitch publish -env production -m "Release 42" restitch.yaml
 ```
 
-### Prerequisites
+The command prints the diff and then `Published production version N.`. It
+exits with status 1 when the file does not validate, and the draft does not
+change. It exits with status 2 when a setting is missing.
 
-- Go 1.25.7+
-- Node.js 24+ (the CI floor; see `.github/workflows/ci.yml`)
-- npm
+## Import and export
 
-## Running
+The artifact format is the same in three places: export, import and the
+file of a standalone gateway.
 
-Start the gateway first, then Studio:
+| Operation | API | Role |
+|-----------|-----|------|
+| Export the draft as YAML | `GET /api/v1/environments/{env}/export` | viewer |
+| Read the YAML of a version | `GET /api/v1/environments/{env}/versions/{number}` | viewer |
+| Replace the draft with a YAML file | `POST /api/v1/environments/{env}/import`, body `{"yaml": "..."}` | editor |
+
+Import validates the whole file first. Studio refuses an invalid file and
+the draft does not change. Import returns the diff from the old draft.
+`restitch publish` is import followed by publish.
+
+## The Studio API
+
+The API is under `/api/v1`. `api/openapi.yaml` in the repository describes
+every operation. A request needs a session cookie or an API key. A request
+with neither gets 401. A browser request from another origin gets 403.
+
+Gateways use a separate API under `/gateway/v1` with a gateway token.
+Studio serves each artifact version with an ETag, so an unchanged version
+costs a 304.
+
+## restitch dev
+
+`restitch dev` runs Studio and one managed gateway in one process. It needs
+no environment variables and no database server.
 
 ```bash
-# Terminal 1: start the gateway
-restitch run -config restitch.yaml
-
-# Terminal 2: start Studio
-restitch-studio
+restitch dev
 ```
 
-Studio is available at `http://localhost:3080`.
+| Item | Value |
+|------|-------|
+| Studio | http://localhost:3080, bound to `127.0.0.1` |
+| Sign-in | `dev@restitch.local` / `restitch-dev-password` |
+| Environment | `dev` |
+| Gateway | http://localhost:8080 |
+| Database | SQLite in `.restitch/studio.db` |
 
-## Configuration
+Edit resources in the `dev` environment and publish. The gateway pulls every
+second. Change the ports with `-port` and `-studio-port`, and the database
+directory with `-data-dir`.
 
-### Flags
+## Develop the UI
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-port` | `3080` | Studio HTTP port |
-| `-bind` | `127.0.0.1` | Bind address. Use `0.0.0.0` only for deliberate remote access |
-| `-gateway-admin-url` | `http://localhost:9090` | Gateway admin API URL to proxy to |
-| `-admin-key` | (none) | Admin API key (attached to proxied requests) |
-| `-registry-key` | (none) | Registry API key. The gateway's `-registry-key` must match it, or the gateway cannot poll the bundle |
-
-### Environment Variables
-
-| Variable | Overrides |
-|----------|-----------|
-| `STUDIO_PORT` | `-port` |
-| `STUDIO_BIND` | `-bind` |
-| `STUDIO_GATEWAY_ADMIN_URL` | `-gateway-admin-url` |
-| `STUDIO_ADMIN_KEY` | `-admin-key` |
-| `STUDIO_REGISTRY_KEY` | `-registry-key` |
-
-### Registry API Authentication
-
-Every `/api/v1/configs*` and `/api/v1/registry/bundle` handler requires an
-`X-Admin-Key` header that matches the configured `-registry-key`. With no key
-configured, the registry API rejects every request. Run the gateway with the
-same key:
+The UI source is in `studio/`. It uses Vite, React, TanStack Router and
+Query, and a client generated from `api/openapi.yaml`.
 
 ```bash
-restitch-studio -registry-key "$REGISTRY_KEY"
-restitch run -registry-url http://localhost:3080 -registry-key "$REGISTRY_KEY"
-```
-
-The browser preferences API (`/api/v1/preferences`) stays cookie-bound and
-needs no key.
-
-## Pages
-
-### Dashboard
-
-Overview of gateway status:
-
-- **Stat tiles** — total requests, error rate, partial responses, composition
-  count.
-- **Per-composition table** — request counts, errors, average and p95
-  latency.
-- **Upstream health strip** — health badge per upstream (green/red) with
-  latency and error details.
-
-### Compositions
-
-- **List view** — all compositions with method, path, step count, and public
-  badge.
-- **Detail view** (`/compositions/:name`) with three tabs:
-  - **Graph** — DAG visualization of the step execution plan (React Flow).
-    Nodes show step name, upstream, method, and optional badge. Edges show
-    dependencies. Layout is by wave (execution level).
-  - **Steps** — table with all step details (name, upstream, method, timeout,
-    optional, depends_on).
-  - **Route** — method, path, public flag, and a copyable `curl` example.
-
-### Requests
-
-Request explorer backed by the admin API's ring buffer:
-
-- **Table** — time, composition, method + path, status badge, duration,
-  partial badge.
-- **Expandable rows** — step waterfall visualization showing each step's
-  timing, wave, status, and HTTP response code as color-coded bars.
-- **Limit selector** — view 50, 100, or 500 recent requests.
-
-### Config
-
-YAML configuration editor with validation:
-
-- **CodeMirror** editor with YAML syntax highlighting.
-- **Validate** — sends the YAML to the gateway's validate endpoint and
-  displays errors.
-- **Download** — download the config as `restitch.yaml`.
-- **Load current** — regenerates YAML from the gateway's runtime state
-  (secrets and comments are not included).
-
-Config editing is validate-and-download only. Deployment stays git-driven;
-reload is triggered explicitly via the Dashboard or admin API.
-
-### Builder
-
-Visual composition builder — a form-based interface for creating
-compositions:
-
-- **Composition meta** — name, path, method, public toggle.
-- **Upstreams** — add/remove upstream definitions.
-- **Steps** — add/remove steps with upstream, method, path, optional toggle,
-  timeout, and dependencies.
-- **Response** — body template as a YAML fragment.
-- **Live preview** — generated YAML updates in real time.
-- **DAG preview** — inferred dependency graph with wave layout.
-- **Actions** — validate against the gateway, copy, or download.
-
-## Development Workflow
-
-For frontend development with hot reload:
-
-```bash
-# Terminal 1: mock upstream
-go run ./cmd/mockupstream
-
-# Terminal 2: gateway with config
-restitch run -config examples/quickstart/restitch.yaml
-
-# Terminal 3: Studio binary (proxies admin API)
-go run ./cmd/restitch-studio
-
-# Terminal 4: Vite dev server (hot reload, proxies to Studio)
+make studio            # npm ci and npm run build into internal/studio/dist
 cd studio && npm run dev
+cd studio && npm run test
 ```
 
-The Vite dev server (port 5173) proxies `/api` to Studio (port 3080), which
-proxies to the gateway admin API (port 9090).
+The Vite dev server sends API calls to the Studio at `127.0.0.1:3080`. Run
+`restitch dev` beside it. Set `VITE_API_TARGET` to use another Studio.
 
-## Tech Stack
-
-- [React 19](https://react.dev/) + TypeScript (strict mode)
-- [Vite](https://vitejs.dev/) (build tool)
-- [Tailwind CSS v4](https://tailwindcss.com/) (styling)
-- [shadcn/ui](https://ui.shadcn.com/) (component library)
-- [React Flow](https://reactflow.dev/) (DAG visualization)
-- [CodeMirror 6](https://codemirror.net/) (YAML editor)
-- [js-yaml](https://github.com/nodeca/js-yaml) (YAML generation)
-- [Lucide React](https://lucide.dev/) (icons)
+`go build ./...` fails until `make studio` produced `internal/studio/dist`,
+because the binary embeds that directory.

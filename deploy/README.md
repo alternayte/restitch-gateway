@@ -52,9 +52,10 @@ Compose stops restarting it after five attempts.
 
 ### Step 3: publish
 
-Add resources to the draft, or import an artifact file on the environment
-page. The mock upstream is `http://mockupstream:8081`;
-`examples/docker-compose/restitch.yaml` is an artifact that uses it. Publish.
+Add resources to the draft and publish, or publish an artifact file with
+`restitch publish` and an API key (see `docs/studio.md`). The mock upstream
+is `http://mockupstream:8081`; `examples/docker-compose/restitch.yaml` is an
+artifact that uses it.
 Each gateway applies the new version within one poll interval (10s).
 
 ```bash

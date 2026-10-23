@@ -7,8 +7,8 @@ the quality bar, and the rules the maintainers apply.
 
 Use the GitHub issue templates. A good bug report includes:
 
-- the version (`restitch version`) and how the gateway was run (config file
-  or registry mode);
+- the version (`restitch version`) and how the gateway was run (standalone
+  mode or managed mode);
 - the composition YAML involved;
 - the exact request that failed and the response;
 - logs at `-log-level debug`.
@@ -18,8 +18,9 @@ Use the GitHub issue templates. A good bug report includes:
 Requirements: Go 1.25.7, Node.js 24, Docker (for container work).
 
 ```bash
-make build        # gateway binary
-make build-all    # gateway + studio binaries
+make studio       # Studio frontend into internal/studio/dist
+make build        # bin/restitch (needs the frontend)
+make build-all    # frontend when missing, then bin/restitch
 make ci           # vet + lint + race
 make e2e          # golden end-to-end specs
 cd studio && npm ci && npm run test
