@@ -38,3 +38,12 @@ Append only. Newest entry at the bottom. Never edit an older entry.
 - **Decided:** a gateway token on a user route answers 401 (it is no user credential), not 403 as the plan said; the plan row now says 401. The managed-mode end-to-end test lives in `cmd/restitch` as a helper-process test, because it needs `gatewayCmd` and an in-process Studio. `composition.MaxArtifactBytes` is the one size limit for publish and pull.
 - **Blocked:** none.
 - **Chunks (continued):** C11 done: heartbeats and the instances list. Session closed near the context budget the user set.
+
+---
+
+## 2026-10-23 — session 3, continued
+
+- **Chunks:** C12, C13 done.
+- **Did:** usage push and query (`internal/studio/usage.go`, `internal/hotreload/usage.go`), sampled requests with redaction (`internal/reqlog`, `internal/studio/requests.go`, `internal/hotreload/requests.go`), environment settings (GET/PATCH /api/v1/environments/{env}).
+- **Decided:** `restitch_telemetry_dropped_total{kind}` replaced the request-records metric, which lost its user when C04 removed the store. Upstream health is the per-upstream error count from pushed step metrics, plus breaker states; v2 has no active health probe. The gateway caps successful samples at 60 a minute and Studio applies the environment cap on top.
+- **Blocked:** none.
