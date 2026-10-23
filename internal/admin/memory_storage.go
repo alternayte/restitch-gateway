@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/v2/internal/reqlog"
 )
 
 type MemoryStorage struct {

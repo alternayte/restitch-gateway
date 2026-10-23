@@ -26,7 +26,7 @@ import (
 	"testing"
 	"testing/iotest"
 
-	"github.com/alternayte/restitch-gateway/internal/server"
+	"github.com/alternayte/restitch-gateway/v2/internal/server"
 )
 
 func TestHandler_ServeHTTP(t *testing.T) {

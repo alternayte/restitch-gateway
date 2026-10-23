@@ -24,9 +24,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/auth"
-	"github.com/alternayte/restitch-gateway/internal/gwconfig"
-	"github.com/alternayte/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/v2/internal/auth"
+	"github.com/alternayte/restitch-gateway/v2/internal/gwconfig"
+	"github.com/alternayte/restitch-gateway/v2/internal/upstream"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )

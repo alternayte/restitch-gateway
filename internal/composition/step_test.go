@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	upstreampkg "github.com/alternayte/restitch-gateway/internal/upstream"
+	upstreampkg "github.com/alternayte/restitch-gateway/v2/internal/upstream"
 )
 
 func mustCompileTemplate(t *testing.T, raw string) *Template {

@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/admin"
-	"github.com/alternayte/restitch-gateway/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/v2/internal/admin"
+	"github.com/alternayte/restitch-gateway/v2/internal/reqlog"
 )
 
 // eventStorage records the order of writes and the close, and rejects

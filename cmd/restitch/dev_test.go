@@ -35,7 +35,7 @@ func TestBuildGatewayArgs(t *testing.T) {
 			extra:      "",
 			port:       8080,
 			want: []string{
-				"run",
+				"gateway",
 				"--config=restitch.yaml",
 				"--log-format=text",
 				"--port=8080",
@@ -48,7 +48,7 @@ func TestBuildGatewayArgs(t *testing.T) {
 			extra:      "   ",
 			port:       8080,
 			want: []string{
-				"run",
+				"gateway",
 				"--config=restitch.yaml",
 				"--log-format=text",
 				"--port=8080",
@@ -61,7 +61,7 @@ func TestBuildGatewayArgs(t *testing.T) {
 			extra:      "--verbose",
 			port:       8080,
 			want: []string{
-				"run",
+				"gateway",
 				"--config=restitch.yaml",
 				"--log-format=text",
 				"--port=8080",
@@ -75,7 +75,7 @@ func TestBuildGatewayArgs(t *testing.T) {
 			extra:      "--verbose --trace-sample=1.0",
 			port:       8080,
 			want: []string{
-				"run",
+				"gateway",
 				"--config=restitch.yaml",
 				"--log-format=text",
 				"--port=8080",
@@ -90,7 +90,7 @@ func TestBuildGatewayArgs(t *testing.T) {
 			extra:      "--port=9999",
 			port:       8080,
 			want: []string{
-				"run",
+				"gateway",
 				"--config=restitch.yaml",
 				"--log-format=text",
 				"--port=8080",

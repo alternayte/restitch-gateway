@@ -31,8 +31,8 @@ package composition
 import (
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/auth"
-	"github.com/alternayte/restitch-gateway/internal/ratelimit"
+	"github.com/alternayte/restitch-gateway/v2/internal/auth"
+	"github.com/alternayte/restitch-gateway/v2/internal/ratelimit"
 )
 
 // Config represents the complete composition configuration loaded from YAML.

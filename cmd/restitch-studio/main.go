@@ -30,8 +30,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/registry"
-	"github.com/alternayte/restitch-gateway/internal/session"
+	"github.com/alternayte/restitch-gateway/v2/internal/registry"
+	"github.com/alternayte/restitch-gateway/v2/internal/session"
 )
 
 //go:embed all:dist

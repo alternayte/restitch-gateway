@@ -181,17 +181,15 @@ func TestApplyEnvOverrides(t *testing.T) {
 	f := &File{}
 	applyDefaults(f)
 
+	// Server settings are flags bound by BindEnv (see cmd/restitch
+	// TestGatewayFlagOverEnvOverDefault); only admin env stays here.
 	t.Setenv("RESTITCH_PORT", "9999")
-	t.Setenv("RESTITCH_LOG_FORMAT", "text")
 	t.Setenv("RESTITCH_ADMIN_PORT", "9191")
 
 	ApplyEnvOverrides(f)
 
-	if f.Server.Port != 9999 {
-		t.Errorf("port = %d, want 9999", f.Server.Port)
-	}
-	if f.Server.LogFormat != "text" {
-		t.Errorf("log_format = %s, want text", f.Server.LogFormat)
+	if f.Server.Port != 8080 {
+		t.Errorf("port = %d, want the default 8080: ApplyEnvOverrides must not read server env", f.Server.Port)
 	}
 	if f.Admin.Port != 9191 {
 		t.Errorf("admin.port = %d, want 9191", f.Admin.Port)

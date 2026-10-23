@@ -28,51 +28,74 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/admin"
-	"github.com/alternayte/restitch-gateway/internal/composition"
-	"github.com/alternayte/restitch-gateway/internal/gwconfig"
-	"github.com/alternayte/restitch-gateway/internal/hotreload"
-	"github.com/alternayte/restitch-gateway/internal/inbound"
-	"github.com/alternayte/restitch-gateway/internal/observability"
-	"github.com/alternayte/restitch-gateway/internal/ratelimit"
-	"github.com/alternayte/restitch-gateway/internal/server"
-	"github.com/alternayte/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/v2/internal/admin"
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
+	"github.com/alternayte/restitch-gateway/v2/internal/gwconfig"
+	"github.com/alternayte/restitch-gateway/v2/internal/hotreload"
+	"github.com/alternayte/restitch-gateway/v2/internal/inbound"
+	"github.com/alternayte/restitch-gateway/v2/internal/observability"
+	"github.com/alternayte/restitch-gateway/v2/internal/ratelimit"
+	"github.com/alternayte/restitch-gateway/v2/internal/server"
+	"github.com/alternayte/restitch-gateway/v2/internal/upstream"
 )
 
-func runCmd(args []string) int {
-	flags := flag.NewFlagSet("run", flag.ExitOnError)
-	port := flags.Int("port", 8080, "HTTP server port")
-	tlsPort := flags.Int("tls-port", 8443, "HTTPS server port")
-	logFormat := flags.String("log-format", "json", "Log format: json or text")
-	logLevel := flags.String("log-level", "info", "Log level: debug, info, warn, error")
-	certFile := flags.String("cert", "", "Path to TLS certificate file")
-	keyFile := flags.String("key", "", "Path to TLS private key file")
-	configFile := flags.String("config", "restitch.yaml", "path to composition config file")
-	registryURL := flags.String("registry-url", "", "Registry URL for polling mode")
-	registryKey := flags.String("registry-key", "", "Admin API key for registry auth")
-	pollInterval := flags.Duration("poll-interval", 10*time.Second, "Registry poll interval")
-	_ = flags.Parse(args)
+// gatewayOptions holds the process settings of `restitch gateway`. set
+// names the flags given on the command line or through their env twin.
+type gatewayOptions struct {
+	port         int
+	tlsPort      int
+	logFormat    string
+	logLevel     string
+	tlsCert      string
+	tlsKey       string
+	configFile   string
+	registryURL  string
+	registryKey  string
+	pollInterval time.Duration
+	set          map[string]bool
+}
 
-	if *registryURL == "" {
-		if v := os.Getenv("RESTITCH_REGISTRY_URL"); v != "" {
-			*registryURL = v
-		}
+func parseGatewayFlags(args []string, lookup func(string) (string, bool)) (*gatewayOptions, error) {
+	var o gatewayOptions
+	flags := flag.NewFlagSet("gateway", flag.ContinueOnError)
+	flags.IntVar(&o.port, "port", 8080, "HTTP server port")
+	flags.IntVar(&o.tlsPort, "tls-port", 8443, "HTTPS server port")
+	flags.StringVar(&o.logFormat, "log-format", "json", "Log format: json or text")
+	flags.StringVar(&o.logLevel, "log-level", "info", "Log level: debug, info, warn, error")
+	flags.StringVar(&o.tlsCert, "tls-cert", "", "Path to TLS certificate file")
+	flags.StringVar(&o.tlsKey, "tls-key", "", "Path to TLS private key file")
+	flags.StringVar(&o.configFile, "config", "restitch.yaml", "Path to the artifact file (standalone mode)")
+	flags.StringVar(&o.registryURL, "registry-url", "", "Registry URL for polling mode")
+	flags.StringVar(&o.registryKey, "registry-key", "", "Key for registry auth")
+	flags.DurationVar(&o.pollInterval, "poll-interval", 10*time.Second, "Registry poll interval")
+	if err := flags.Parse(args); err != nil {
+		return nil, err
 	}
-	if *registryKey == "" {
-		if v := os.Getenv("RESTITCH_REGISTRY_KEY"); v != "" {
-			*registryKey = v
-		}
+	if err := gwconfig.BindEnv(flags, lookup); err != nil {
+		return nil, err
 	}
-	if v := os.Getenv("RESTITCH_POLL_INTERVAL"); v != "" && !isFlagSet(flags, "poll-interval") {
-		if d, err := time.ParseDuration(v); err == nil {
-			*pollInterval = d
+	o.set = map[string]bool{}
+	flags.Visit(func(f *flag.Flag) { o.set[f.Name] = true })
+	return &o, nil
+}
+
+func gatewayCmd(args []string) int {
+	opts, err := parseGatewayFlags(args, os.LookupEnv)
+	if err != nil {
+		if !errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintf(os.Stderr, "gateway: %v\n", err)
 		}
+		return 2
 	}
+	configFile := &opts.configFile
+	registryURL := &opts.registryURL
+	registryKey := &opts.registryKey
+	pollInterval := &opts.pollInterval
 
 	registryMode := *registryURL != ""
-	if registryMode && isFlagSet(flags, "config") {
-		slog.Error("--config and --registry-url are mutually exclusive")
-		return 1
+	if registryMode && opts.set["config"] {
+		fmt.Fprintln(os.Stderr, "gateway: -config (RESTITCH_CONFIG) and -registry-url (RESTITCH_REGISTRY_URL) are mutually exclusive")
+		return 2
 	}
 
 	// configPath is a display value for logs and the admin API: the config
@@ -138,24 +161,24 @@ func runCmd(args []string) int {
 	}
 	gwconfig.ApplyEnvOverrides(gwcfg)
 
-	// Flag overrides win over env overrides and YAML
-	if isFlagSet(flags, "port") {
-		gwcfg.Server.Port = *port
+	// Flags, and their env twins, win over YAML.
+	if opts.set["port"] {
+		gwcfg.Server.Port = opts.port
 	}
-	if isFlagSet(flags, "tls-port") {
-		gwcfg.Server.TLSPort = *tlsPort
+	if opts.set["tls-port"] {
+		gwcfg.Server.TLSPort = opts.tlsPort
 	}
-	if isFlagSet(flags, "log-format") {
-		gwcfg.Server.LogFormat = *logFormat
+	if opts.set["log-format"] {
+		gwcfg.Server.LogFormat = opts.logFormat
 	}
-	if isFlagSet(flags, "log-level") {
-		gwcfg.Server.LogLevel = *logLevel
+	if opts.set["log-level"] {
+		gwcfg.Server.LogLevel = opts.logLevel
 	}
-	if isFlagSet(flags, "cert") {
-		gwcfg.Server.TLSCert = *certFile
+	if opts.set["tls-cert"] {
+		gwcfg.Server.TLSCert = opts.tlsCert
 	}
-	if isFlagSet(flags, "key") {
-		gwcfg.Server.TLSKey = *keyFile
+	if opts.set["tls-key"] {
+		gwcfg.Server.TLSKey = opts.tlsKey
 	}
 
 	// Env and flag overrides land after the initial validation, so validate
@@ -601,16 +624,6 @@ func runCmd(args []string) int {
 	}
 
 	return 0
-}
-
-func isFlagSet(fs *flag.FlagSet, name string) bool {
-	found := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
-		}
-	})
-	return found
 }
 
 func nilIfEmpty(s string) any {

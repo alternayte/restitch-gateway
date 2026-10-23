@@ -27,10 +27,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/admin"
-	"github.com/alternayte/restitch-gateway/internal/composition"
-	"github.com/alternayte/restitch-gateway/internal/inbound"
-	"github.com/alternayte/restitch-gateway/internal/server"
+	"github.com/alternayte/restitch-gateway/v2/internal/admin"
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
+	"github.com/alternayte/restitch-gateway/v2/internal/inbound"
+	"github.com/alternayte/restitch-gateway/v2/internal/server"
 )
 
 // ScriptedResponse defines a canned response for a scripted upstream.

@@ -17,7 +17,7 @@ package composition
 import (
 	"context"
 
-	"github.com/alternayte/restitch-gateway/internal/inbound"
+	"github.com/alternayte/restitch-gateway/v2/internal/inbound"
 )
 
 // buildRequestEnv creates the environment for expression evaluation.

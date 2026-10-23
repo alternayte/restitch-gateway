@@ -38,3 +38,4 @@ COPY --from=builder /data /data
 USER nonroot
 EXPOSE 8080 8443 9090 3080
 ENTRYPOINT ["/restitch"]
+CMD ["gateway"]

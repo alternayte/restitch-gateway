@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alternayte/restitch-gateway/internal/registry"
+	"github.com/alternayte/restitch-gateway/v2/internal/registry"
 )
 
 // RegistryAPI holds HTTP handlers for the Studio-native config registry

@@ -24,7 +24,7 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (registers as "sqlite")
 
-	"github.com/alternayte/restitch-gateway/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/v2/internal/reqlog"
 )
 
 // SQLStorage is a Storage implementation backed by SQLite. It uses

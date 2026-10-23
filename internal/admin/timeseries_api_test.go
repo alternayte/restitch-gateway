@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/reqlog"
+	"github.com/alternayte/restitch-gateway/v2/internal/reqlog"
 )
 
 func TestHandleTimeSeries(t *testing.T) {

@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/v2/internal/upstream"
 	"github.com/cenkalti/backoff/v5"
 )
 

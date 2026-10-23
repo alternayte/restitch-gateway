@@ -27,7 +27,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/devmode"
+	"github.com/alternayte/restitch-gateway/v2/internal/devmode"
 )
 
 const (
@@ -148,7 +148,7 @@ func devCmd(args []string) int {
 // semantics: last occurrence wins).
 func buildGatewayArgs(configFile, logFormat, extra string, port int) []string {
 	args := []string{
-		"run",
+		"gateway",
 		"--config=" + configFile,
 		"--log-format=" + logFormat,
 		fmt.Sprintf("--port=%d", port),

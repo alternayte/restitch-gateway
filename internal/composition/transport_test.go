@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/upstream"
+	"github.com/alternayte/restitch-gateway/v2/internal/upstream"
 )
 
 // The transport: block is documented in docs/configuration.md and PLAN.md but

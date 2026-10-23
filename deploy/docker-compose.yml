@@ -52,7 +52,7 @@ services:
         VERSION: ${RESTITCH_IMAGE_TAG:-dev}
     entrypoint: ["/restitch"]
     command:
-      - "run"
+      - "gateway"
       - "-registry-url=http://studio:3080"
       - "-registry-key=${RESTITCH_REGISTRY_KEY:-restitch-dev}"
       - "-poll-interval=10s"

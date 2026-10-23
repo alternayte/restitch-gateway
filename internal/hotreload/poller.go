@@ -21,7 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/observability"
+	"github.com/alternayte/restitch-gateway/v2/internal/observability"
 	"github.com/cenkalti/backoff/v5"
 )
 

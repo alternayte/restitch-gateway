@@ -185,7 +185,7 @@ jobs:
                 body:
                   name: "{{ steps.s1.body.name }}"
           YAML
-          ./bin/restitch run -config /tmp/ci_load.yaml -port 18080 -log-format json &
+          ./bin/restitch gateway -config /tmp/ci_load.yaml -port 18080 -log-format json &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:18080/loadtest >/dev/null && break
             sleep 1

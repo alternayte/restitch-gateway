@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	upstreampkg "github.com/alternayte/restitch-gateway/internal/upstream"
+	upstreampkg "github.com/alternayte/restitch-gateway/v2/internal/upstream"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"

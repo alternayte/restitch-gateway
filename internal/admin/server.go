@@ -26,7 +26,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/ratelimit"
+	"github.com/alternayte/restitch-gateway/v2/internal/ratelimit"
 )
 
 // Config holds admin server configuration.

@@ -25,7 +25,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/alternayte/restitch-gateway/internal/admin"
+	"github.com/alternayte/restitch-gateway/v2/internal/admin"
 )
 
 // Duration wraps time.Duration for YAML unmarshaling from Go duration strings.
@@ -244,30 +244,9 @@ func (f *File) Hash() string {
 	return fmt.Sprintf("%x", h)
 }
 
-// ApplyEnvOverrides applies RESTITCH_* environment variables per §2.5.
+// ApplyEnvOverrides applies the RESTITCH_ADMIN_* environment variables.
+// Server settings are flags, bound to env by BindEnv.
 func ApplyEnvOverrides(f *File) {
-	if v := os.Getenv("RESTITCH_PORT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			f.Server.Port = n
-		}
-	}
-	if v := os.Getenv("RESTITCH_TLS_PORT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			f.Server.TLSPort = n
-		}
-	}
-	if v := os.Getenv("RESTITCH_TLS_CERT"); v != "" {
-		f.Server.TLSCert = v
-	}
-	if v := os.Getenv("RESTITCH_TLS_KEY"); v != "" {
-		f.Server.TLSKey = v
-	}
-	if v := os.Getenv("RESTITCH_LOG_FORMAT"); v != "" {
-		f.Server.LogFormat = v
-	}
-	if v := os.Getenv("RESTITCH_LOG_LEVEL"); v != "" {
-		f.Server.LogLevel = v
-	}
 	if v := os.Getenv("RESTITCH_ADMIN_PORT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			f.Admin.Port = n

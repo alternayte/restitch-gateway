@@ -20,7 +20,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/internal/admin"
+	"github.com/alternayte/restitch-gateway/v2/internal/admin"
 )
 
 // gatewayShutdown stops the gateway's components in a fixed order. The

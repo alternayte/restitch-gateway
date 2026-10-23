@@ -7,7 +7,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 ## Chunks
 
 ### Gateway runtime
-- [ ] C01 — `restitch gateway` runs standalone from RESTITCH_CONFIG under the /v2 module
+- [x] C01 — `restitch gateway` runs standalone from RESTITCH_CONFIG under the /v2 module
 - [ ] C02 — A v1 file with server: or admin: is refused with the replacement env var named
 - [ ] C03 — An artifact with a non-public composition and no auth policy is refused
 - [ ] C04 — The gateway has no admin API; probes on the data port, metrics on the ops port
@@ -45,7 +45,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C01 — `restitch gateway` runs standalone from RESTITCH_CONFIG under the /v2 module
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** none
 - **Files:** `go.mod`, `cmd/restitch/main.go`, `cmd/restitch/run.go`, `internal/gwconfig/env.go`, `cmd/restitch/run_test.go`
 - **Goal:** `restitch gateway` reads every flag and its RESTITCH_ env twin with flag over env over default, and serves the file named by RESTITCH_CONFIG with reload on change and SIGHUP.
@@ -53,6 +53,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes, `go list -m` prints `github.com/alternayte/restitch-gateway/v2`, and `restitch run` no longer exists.
 - **Spec:** Decisions on one binary, the naming rule, standalone mode, v2.0.0.
 - **Notes:** The env name is RESTITCH_ plus the flag name in upper snake case; derive it in one function, never by hand. Rewrite every import path in the same commit. RESTITCH_CONFIG and RESTITCH_STUDIO_URL together exit 2 (the second flag lands in C10; reserve the check here).
+  Done: `gwconfig.EnvName` and `gwconfig.BindEnv` own the rule; `parseGatewayFlags` in `cmd/restitch/run.go` is testable. `-cert`/`-key` became `-tls-cert`/`-tls-key`. Bare `restitch` prints usage; the Dockerfile CMD is `gateway`. Admin env vars still go through `ApplyEnvOverrides` until C04. The registry-url check exits 2 and moves to the studio-url flag in C10.
 
 ---
 

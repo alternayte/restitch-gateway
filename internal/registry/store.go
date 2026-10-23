@@ -29,7 +29,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"gopkg.in/yaml.v3"
 
-	"github.com/alternayte/restitch-gateway/internal/composition"
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 )
 
 // defaultListLimit is used when ListConfigsParams.Limit is not set.

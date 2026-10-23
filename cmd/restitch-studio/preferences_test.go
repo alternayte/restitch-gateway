@@ -25,8 +25,8 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (registers as "sqlite")
 
-	"github.com/alternayte/restitch-gateway/internal/registry"
-	"github.com/alternayte/restitch-gateway/internal/session"
+	"github.com/alternayte/restitch-gateway/v2/internal/registry"
+	"github.com/alternayte/restitch-gateway/v2/internal/session"
 )
 
 func prefsMux(t *testing.T) *http.ServeMux {

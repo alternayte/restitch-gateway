@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/alternayte/restitch-gateway/internal/composition"
+	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 )
 
 func checkCmd(args []string) int {

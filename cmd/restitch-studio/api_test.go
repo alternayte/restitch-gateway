@@ -25,7 +25,7 @@ import (
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver (registers as "sqlite")
 
-	"github.com/alternayte/restitch-gateway/internal/registry"
+	"github.com/alternayte/restitch-gateway/v2/internal/registry"
 )
 
 const sampleYAML = `

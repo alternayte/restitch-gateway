@@ -46,7 +46,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
     command:
-      - "run"
+      - "gateway"
       - "-registry-url=http://studio:3080"
       - "-registry-key=example-registry-key"
       - "-poll-interval=5s"
