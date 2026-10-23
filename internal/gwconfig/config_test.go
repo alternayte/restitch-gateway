@@ -92,7 +92,7 @@ upstreams:
 		"server.tls_cert moved to RESTITCH_TLS_CERT",
 		"server.shutdown_timeout moved to RESTITCH_SHUTDOWN_TIMEOUT",
 		"server.auth moved to the top-level auth key",
-		"admin.api_key moved to RESTITCH_ADMIN_API_KEY",
+		"admin.api_key removed in v2: the gateway has no admin API",
 		"admin.storage removed in v2",
 	} {
 		if !strings.Contains(msg, want) {
@@ -135,12 +135,6 @@ compositions:
 	if f.Server.LogFormat != "json" {
 		t.Errorf("default log_format = %s, want json", f.Server.LogFormat)
 	}
-	if f.Admin.Port != 9090 {
-		t.Errorf("default admin.port = %d, want 9090", f.Admin.Port)
-	}
-	if f.Admin.RequestLogSize != 500 {
-		t.Errorf("default request_log_size = %d, want 500", f.Admin.RequestLogSize)
-	}
 }
 
 func TestValidate_MultipleErrors(t *testing.T) {
@@ -149,9 +143,6 @@ func TestValidate_MultipleErrors(t *testing.T) {
 			Port:      99999,
 			LogFormat: "invalid",
 			LogLevel:  "bad",
-		},
-		Admin: AdminConfig{
-			Port: -1,
 		},
 	}
 
@@ -169,40 +160,5 @@ func TestValidate_MultipleErrors(t *testing.T) {
 	}
 	if !strings.Contains(s, "RESTITCH_LOG_LEVEL") {
 		t.Error("should report the log level error")
-	}
-	if !strings.Contains(s, "admin.port") {
-		t.Error("should report admin.port error")
-	}
-}
-
-func TestApplyEnvOverrides(t *testing.T) {
-	f := &File{}
-	applyDefaults(f)
-
-	// Server settings are flags bound by BindEnv (see cmd/restitch
-	// TestGatewayFlagOverEnvOverDefault); only admin env stays here.
-	t.Setenv("RESTITCH_PORT", "9999")
-	t.Setenv("RESTITCH_ADMIN_PORT", "9191")
-
-	ApplyEnvOverrides(f)
-
-	if f.Server.Port != 8080 {
-		t.Errorf("port = %d, want the default 8080: ApplyEnvOverrides must not read server env", f.Server.Port)
-	}
-	if f.Admin.Port != 9191 {
-		t.Errorf("admin.port = %d, want 9191", f.Admin.Port)
-	}
-}
-
-func TestAdminConfig_IsEnabled(t *testing.T) {
-	a := AdminConfig{}
-	if !a.IsEnabled() {
-		t.Error("default should be enabled")
-	}
-
-	f := false
-	a.Enabled = &f
-	if a.IsEnabled() {
-		t.Error("should be disabled")
 	}
 }

@@ -17,31 +17,26 @@ package main
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"time"
-
-	"github.com/alternayte/restitch-gateway/v2/internal/admin"
 )
 
-// gatewayShutdown stops the gateway's components in a fixed order. The
-// order used to follow defer registration (LIFO), which closed the store
-// before the final accumulator flush.
+// gatewayShutdown stops the gateway's components in a fixed order instead
+// of defer order (LIFO), which once closed storage before its final flush.
 type gatewayShutdown struct {
 	// servers stop accepting traffic and drain in-flight requests, in order.
 	servers []func(context.Context) error
-	// stopBackground stops the registry poller, the file watcher, and the
-	// periodic flusher, and returns once none of them touches the store.
+	// stopBackground stops the registry poller and the file watcher.
 	stopBackground func()
-	acc            *admin.Accumulator
-	store          admin.Storage
-	// timeout bounds the server drain, and separately the storage flush and
-	// drain (server.shutdown_timeout).
+	// final runs last, after traffic and background work stopped, with its
+	// own deadline: the last telemetry push goes here.
+	final func(context.Context)
+	// timeout bounds the server drain, and separately the final step
+	// (RESTITCH_SHUTDOWN_TIMEOUT).
 	timeout time.Duration
 }
 
-// run executes the shutdown order: servers, background work, accumulator
-// flush, async store drain, storage close. It returns the server shutdown
-// errors; storage errors are logged.
+// run executes the shutdown order: servers, background work, final step.
+// It returns the server shutdown errors.
 func (g *gatewayShutdown) run() error {
 	var errs []error
 	srvCtx, cancel := context.WithTimeout(context.Background(), g.timeout)
@@ -55,27 +50,10 @@ func (g *gatewayShutdown) run() error {
 	if g.stopBackground != nil {
 		g.stopBackground()
 	}
-
-	if g.store == nil {
-		return errors.Join(errs...)
-	}
-
-	storeCtx, cancel := context.WithTimeout(context.Background(), g.timeout)
-	defer cancel()
-	if g.acc != nil {
-		for _, b := range g.acc.Flush() {
-			if err := g.store.RecordBucket(storeCtx, b); err != nil {
-				slog.Error("failed to flush time-series bucket on shutdown", "error", err)
-			}
-		}
-	}
-	if as, ok := g.store.(*admin.AsyncStore); ok {
-		if err := as.Drain(storeCtx); err != nil {
-			slog.Error("request record queue not fully drained", "error", err)
-		}
-	}
-	if err := g.store.Close(); err != nil {
-		slog.Error("failed to close storage", "error", err)
+	if g.final != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), g.timeout)
+		defer cancel()
+		g.final(ctx)
 	}
 	return errors.Join(errs...)
 }

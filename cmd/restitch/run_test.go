@@ -14,7 +14,17 @@
 
 package main
 
-import "testing"
+import (
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"syscall"
+	"testing"
+	"time"
+)
 
 func TestGatewayCmd_MutualExclusivity(t *testing.T) {
 	code := gatewayCmd([]string{"-config", "x.yaml", "-registry-url", "http://example.com"})
@@ -61,5 +71,96 @@ func TestGatewayEnvRejectsInvalidValue(t *testing.T) {
 	}
 	if _, err := parseGatewayFlags(nil, lookup); err == nil {
 		t.Fatal("expected an error for RESTITCH_PORT=eighty")
+	}
+}
+
+// TestHelperGatewayProcess runs gatewayCmd when the parent test starts the
+// test binary as a child process; it does nothing in a normal run.
+func TestHelperGatewayProcess(t *testing.T) {
+	if os.Getenv("RESTITCH_HELPER_GATEWAY") != "1" {
+		t.Skip("helper process only")
+	}
+	os.Exit(gatewayCmd(nil))
+}
+
+func freePort(t *testing.T) int {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+func TestGatewayOpensNoAdminListener(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "artifact.yaml")
+	if err := os.WriteFile(cfgPath, []byte(`
+upstreams:
+  api:
+    url: http://127.0.0.1:1
+compositions:
+  hello:
+    path: /hello
+    public: true
+    steps: [{name: s, upstream: api, path: /x, optional: true}]
+    response: {body: {ok: true}}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	port, opsPort := freePort(t), freePort(t)
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestHelperGatewayProcess$")
+	cmd.Env = append(os.Environ(),
+		"RESTITCH_HELPER_GATEWAY=1",
+		"RESTITCH_CONFIG="+cfgPath,
+		"RESTITCH_PORT="+strconv.Itoa(port),
+		"RESTITCH_OPS_PORT="+strconv.Itoa(opsPort),
+		"RESTITCH_LOG_LEVEL=error",
+	)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Signal(syscall.SIGTERM)
+		_ = cmd.Wait()
+	})
+
+	base := "http://127.0.0.1:" + strconv.Itoa(port)
+	ops := "http://127.0.0.1:" + strconv.Itoa(opsPort)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		resp, err := http.Get(base + "/ready")
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("gateway never became ready")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	status := func(url string) int {
+		resp, err := http.Get(url)
+		if err != nil {
+			t.Fatalf("GET %s: %v", url, err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if got := status(base + "/health"); got != http.StatusOK {
+		t.Errorf("/health on the data port: %d", got)
+	}
+	if got := status(ops + "/metrics"); got != http.StatusOK {
+		t.Errorf("/metrics on the ops port: %d", got)
+	}
+	for _, url := range []string{base + "/admin/api/info", ops + "/admin/api/info", ops + "/health"} {
+		if got := status(url); got != http.StatusNotFound {
+			t.Errorf("%s: got %d, want 404", url, got)
+		}
 	}
 }

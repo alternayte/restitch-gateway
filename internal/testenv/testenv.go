@@ -23,13 +23,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/v2/internal/admin"
 	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 	"github.com/alternayte/restitch-gateway/v2/internal/inbound"
+	"github.com/alternayte/restitch-gateway/v2/internal/reqlog"
 	"github.com/alternayte/restitch-gateway/v2/internal/server"
 )
 
@@ -58,8 +59,33 @@ type Config struct {
 type Env struct {
 	GatewayURL string
 	Client     *http.Client
-	Requests   *admin.RingBuffer
+	Requests   *RecordLog
 	hits       map[string]*atomic.Int64
+}
+
+// RecordLog keeps every request record the handler emits, newest first
+// in List.
+type RecordLog struct {
+	mu   sync.Mutex
+	recs []reqlog.Record
+}
+
+// Record implements the handler's recorder.
+func (l *RecordLog) Record(rec reqlog.Record) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.recs = append(l.recs, rec)
+}
+
+// List returns up to limit records, newest first.
+func (l *RecordLog) List(limit int) []reqlog.Record {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []reqlog.Record
+	for i := len(l.recs) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, l.recs[i])
+	}
+	return out
 }
 
 // Hits returns the number of requests received by the named upstream.
@@ -141,13 +167,8 @@ func Run(t *testing.T, cfg Config, fn func(t *testing.T, env *Env)) {
 
 	handler := composition.NewHandler(compiled, authenticator)
 
-	ring := admin.NewRingBuffer(100)
-	stats := admin.NewStats()
-	handler.SetRecorder(&admin.MultiRecorder{
-		Ring:  ring,
-		Stats: stats,
-	})
-	env.Requests = ring
+	env.Requests = &RecordLog{}
+	handler.SetRecorder(env.Requests)
 
 	router := server.NewRouter()
 	handler.RegisterRoutes(router)

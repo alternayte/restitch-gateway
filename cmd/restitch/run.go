@@ -21,14 +21,14 @@ import (
 	"fmt"
 	iofs "io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync/atomic"
+	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/alternayte/restitch-gateway/v2/internal/admin"
 	"github.com/alternayte/restitch-gateway/v2/internal/composition"
 	"github.com/alternayte/restitch-gateway/v2/internal/gwconfig"
 	"github.com/alternayte/restitch-gateway/v2/internal/hotreload"
@@ -55,6 +55,7 @@ type gatewayOptions struct {
 	registryURL     string
 	registryKey     string
 	pollInterval    time.Duration
+	opsPort         int
 	set             map[string]bool
 }
 
@@ -74,6 +75,7 @@ func parseGatewayFlags(args []string, lookup func(string) (string, bool)) (*gate
 	flags.StringVar(&o.registryURL, "registry-url", "", "Registry URL for polling mode")
 	flags.StringVar(&o.registryKey, "registry-key", "", "Key for registry auth")
 	flags.DurationVar(&o.pollInterval, "poll-interval", 10*time.Second, "Registry poll interval")
+	flags.IntVar(&o.opsPort, "ops-port", 0, "Port for /metrics (0 turns it off)")
 	if err := flags.Parse(args); err != nil {
 		return nil, err
 	}
@@ -165,7 +167,6 @@ func gatewayCmd(args []string) int {
 			return 1
 		}
 	}
-	gwconfig.ApplyEnvOverrides(gwcfg)
 
 	// Process settings come from flags and their env twins only.
 	gwcfg.Server = gwconfig.ServerConfig{
@@ -281,79 +282,6 @@ func gatewayCmd(args []string) int {
 
 		handler := composition.NewHandler(compiled, authenticator)
 
-		// Wire request recording (ring buffer + stats)
-		ringSize := gwcfg.Admin.RequestLogSize
-		ring := admin.NewRingBuffer(ringSize)
-		stats := admin.NewStats()
-
-		// Create time-series storage backend from config.
-		adminCfg := gwcfg.Admin
-		var store admin.Storage
-		switch adminCfg.Storage.Type {
-		case "sqlite":
-			var err error
-			retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 7*24*time.Hour)
-			store, err = admin.NewSQLStorage(adminCfg.Storage.URL, adminCfg.Storage.AuthToken, retention)
-			if err != nil {
-				slog.Error("failed to open SQLite storage", "error", err)
-				// fall back to memory
-				store = admin.NewMemoryStorage(retention)
-			}
-		case "turso":
-			var err error
-			retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 30*24*time.Hour)
-			store, err = admin.NewSQLStorage(adminCfg.Storage.URL, adminCfg.Storage.AuthToken, retention)
-			if err != nil {
-				slog.Error("failed to connect to Turso", "error", err)
-				store = admin.NewMemoryStorage(retention)
-			}
-		default:
-			retention := admin.ParseRangeDuration(adminCfg.Storage.Retention, 24*time.Hour)
-			store = admin.NewMemoryStorage(retention)
-		}
-
-		// Durable request records go through a bounded async writer so a slow
-		// or locked database cannot stall request completion (finding M6).
-		// Memory storage is fast and never wrapped.
-		if adminCfg.Storage.Type == "sqlite" || adminCfg.Storage.Type == "turso" {
-			store = admin.NewAsyncStore(store, metrics.RequestRecordsDroppedTotal)
-		}
-
-		acc := admin.NewAccumulator()
-
-		// Start flush goroutine: periodically drains the accumulator into
-		// durable storage and compacts old data.
-		flushCtx, flushCancel := context.WithCancel(context.Background())
-		flushDone := make(chan struct{})
-		go func() {
-			defer close(flushDone)
-			ticker := time.NewTicker(60 * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					buckets := acc.Flush()
-					for _, b := range buckets {
-						if err := store.RecordBucket(context.Background(), b); err != nil {
-							slog.Error("failed to record time-series bucket", "error", err)
-						}
-					}
-					retentionDur := admin.ParseRangeDuration(adminCfg.Storage.Retention, 24*time.Hour)
-					if err := store.Compact(context.Background(), retentionDur); err != nil {
-						slog.Error("failed to compact time-series storage", "error", err)
-					}
-				case <-flushCtx.Done():
-					return
-				}
-			}
-		}()
-
-		// recorder is shared across reloads: the reload path must call
-		// SetRecorder on each new handler, or recording silently stops after
-		// the first hot reload (finding H2).
-		recorder := &admin.MultiRecorder{Ring: ring, Stats: stats, Accumulator: acc, Storage: store}
-		handler.SetRecorder(recorder)
-
 		router := server.NewRouter()
 		handler.RegisterRoutes(router)
 		router.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
@@ -371,12 +299,6 @@ func gatewayCmd(args []string) int {
 
 		wrapped := applyMiddleware(swapper, middlewares...)
 		srv.SetHandler(wrapped)
-
-		// Build an upstream health checker for the admin API. It is rebuilt
-		// on every reload (finding H3) and swapped atomically so the admin
-		// handler never reads a checker whose upstream map is stale.
-		var healthChecker atomic.Pointer[upstream.Checker]
-		healthChecker.Store(upstream.NewChecker(compiled.Upstreams, 10*time.Second))
 
 		// reloadFromBytes compiles raw YAML and hot-swaps the pipeline. It is
 		// shared between file-mode reload (SIGHUP/fsnotify/admin API) and
@@ -421,9 +343,7 @@ func gatewayCmd(args []string) int {
 				Compiled: newCompiled,
 				Executor: composition.NewExecutor(newCompiled),
 			}
-			healthChecker.Store(upstream.NewChecker(newCompiled.Upstreams, 10*time.Second))
 			newHandler := composition.NewHandler(newCompiled, newAuth)
-			newHandler.SetRecorder(recorder)
 			newRouter := server.NewRouter()
 			newHandler.RegisterRoutes(newRouter)
 			newRouter.Handle(http.MethodGet, "/health", server.HealthHandler(srv))
@@ -450,27 +370,15 @@ func gatewayCmd(args []string) int {
 			return reloadFromBytes(raw)
 		}
 
-		// Mode-specific reload wiring. adminReloadFn and registryStatusFn are
-		// captured by admin.Deps below; admin.New copies Deps by value, so
-		// these must be finalized before it is constructed.
-		var adminReloadFn func() (string, error)
-		var registryStatusFn func() any
-
 		bgCtx, bgCancel := context.WithCancel(context.Background())
 		defer bgCancel()
 		var rl *reloader
 
-		shutdown.acc = acc
-		shutdown.store = store
-		// The registry poller and SIGHUP goroutine never touch the store, so
-		// cancelling them is enough; the flusher does, so wait for it.
 		shutdown.stopBackground = func() {
 			bgCancel()
 			if rl != nil {
 				rl.stop()
 			}
-			flushCancel()
-			<-flushDone
 		}
 
 		if registryMode {
@@ -478,27 +386,6 @@ func gatewayCmd(args []string) int {
 			metrics.RegisterRegistryMetrics()
 
 			poller := hotreload.NewPoller(regClient, *pollInterval, reloadFromBytes, metrics)
-
-			registryStatusFn = func() any {
-				s := poller.Status()
-				return map[string]any{
-					"mode":                  "registry",
-					"registry_url":          *registryURL,
-					"poll_interval_seconds": pollInterval.Seconds(),
-					"last_poll":             s.LastPollTime,
-					"last_success":          s.LastSuccessTime,
-					"etag":                  s.LastETag,
-					"composition_count":     s.CompositionCount,
-					"error":                 nilIfEmpty(s.LastError),
-					"error_type":            nilIfEmpty(s.ErrorType),
-					"consecutive_errors":    s.ConsecutiveErrors,
-				}
-			}
-
-			adminReloadFn = func() (string, error) {
-				poller.Trigger()
-				return swapper.Current().Hash, nil
-			}
 
 			go func() {
 				if err := poller.Run(bgCtx); err != nil && !errors.Is(err, context.Canceled) {
@@ -526,60 +413,25 @@ func gatewayCmd(args []string) int {
 			rl = newReloader(*configFile, doReload)
 			rl.watchSignals()
 			rl.watchFile()
-			adminReloadFn = rl.reload
 		}
 
-		// Admin server. The enabled flag is honored here: admin.New and
-		// admin.Start only run when admin.enabled is true (finding C3).
-		if gwcfg.Admin.IsEnabled() {
-			adminSrv := admin.New(admin.Config{
-				Enabled: gwcfg.Admin.IsEnabled(),
-				Port:    gwcfg.Admin.Port,
-				Bind:    gwcfg.Admin.Bind,
-				APIKey:  gwcfg.Admin.APIKey,
-				Storage: adminCfg.Storage,
-			}, admin.Deps{
-				Metrics:    metrics.Handler(),
-				Version:    version,
-				ConfigPath: configPath,
-				ConfigHash: func() string { return swapper.Current().Hash },
-				Compositions: func() []admin.CompositionInfo {
-					return compositionsFromPipeline(swapper.Current())
-				},
-				Upstreams: func(ctx context.Context) []admin.UpstreamInfo {
-					return upstreamsFromPipeline(swapper.Current(), &healthChecker, ctx)
-				},
-				Requests: ring,
-				Stats:    stats,
-				Storage:  store,
-				Validate: func(yamlBytes []byte) []string {
-					_, err := composition.ParseConfig(yamlBytes)
-					if err != nil {
-						return []string{err.Error()}
-					}
-					return nil
-				},
-				Reload:         adminReloadFn,
-				RegistryStatus: registryStatusFn,
-			})
-			if err := adminSrv.Start(); err != nil {
-				// An admin server that cannot bind its port is a deployment
-				// error, not a reason to run without the control plane
-				// (finding L18).
-				slog.Error("admin server failed to start", "error", err)
-				if err := shutdown.run(); err != nil {
-					slog.Error("shutdown error", "error", err)
-				}
-				return 1
+		// The optional ops port serves /metrics only. The probes stay on the
+		// data port, because a container platform probes one port.
+		if opts.opsPort != 0 {
+			opsMux := http.NewServeMux()
+			opsMux.Handle("GET /metrics", metrics.Handler())
+			opsSrv := &http.Server{
+				Addr:              net.JoinHostPort("", strconv.Itoa(opts.opsPort)),
+				Handler:           opsMux,
+				ReadHeaderTimeout: 10 * time.Second,
 			}
-			shutdown.servers = append(shutdown.servers, func(ctx context.Context) error {
-				if err := adminSrv.Shutdown(ctx); err != nil {
-					return fmt.Errorf("admin server shutdown: %w", err)
+			go func() {
+				if err := opsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					slog.Error("ops server failed", "error", err)
 				}
-				return nil
-			})
-		} else {
-			slog.Info("admin server disabled by config", "enabled", false)
+			}()
+			slog.Info("ops server starting", "port", opts.opsPort)
+			shutdown.servers = append(shutdown.servers, opsSrv.Shutdown)
 		}
 	}
 
@@ -625,13 +477,6 @@ func gatewayCmd(args []string) int {
 	return 0
 }
 
-func nilIfEmpty(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
-}
-
 func applyMiddleware(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
 	for i := len(mws) - 1; i >= 0; i-- {
 		h = mws[i](h)
@@ -665,98 +510,4 @@ func recoveryMiddleware(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
-}
-
-func compositionsFromPipeline(p *Pipeline) []admin.CompositionInfo {
-	if p == nil || p.Compiled == nil {
-		return nil
-	}
-	var result []admin.CompositionInfo
-	for name, comp := range p.Compiled.Config.Compositions {
-		ci := admin.CompositionInfo{
-			Name:   name,
-			Path:   comp.Path,
-			Method: comp.Method,
-			Public: comp.Public,
-		}
-		for _, step := range comp.Steps {
-			si := admin.StepInfo{
-				Name:     step.Name,
-				Upstream: step.Upstream,
-				Method:   step.Method,
-				Optional: step.Optional,
-			}
-			if step.Timeout != nil {
-				si.TimeoutMS = step.Timeout.Milliseconds()
-			}
-			if step.DependsOn != nil {
-				si.DependsOn = step.DependsOn
-			} else {
-				si.DependsOn = []string{}
-			}
-
-			// Compute inferred deps: all deps minus explicit deps
-			if cc, ok := p.Compiled.Compositions[name]; ok {
-				if cs, ok := cc.Steps[step.Name]; ok {
-					explicit := make(map[string]bool, len(step.DependsOn))
-					for _, d := range step.DependsOn {
-						explicit[d] = true
-					}
-					var inferred []string
-					for _, d := range cs.Deps {
-						if !explicit[d] {
-							inferred = append(inferred, d)
-						}
-					}
-					if inferred == nil {
-						inferred = []string{}
-					}
-					si.InferredDeps = inferred
-				}
-			}
-			if si.InferredDeps == nil {
-				si.InferredDeps = []string{}
-			}
-
-			ci.Steps = append(ci.Steps, si)
-		}
-		if cc, ok := p.Compiled.Compositions[name]; ok && cc.ExecutionPlan != nil {
-			ci.Waves = cc.ExecutionPlan.Waves
-		}
-		result = append(result, ci)
-	}
-	return result
-}
-
-func upstreamsFromPipeline(p *Pipeline, checker *atomic.Pointer[upstream.Checker], ctx context.Context) []admin.UpstreamInfo {
-	if p == nil || p.Compiled == nil {
-		return nil
-	}
-	var healthMap map[string]upstream.HealthStatus
-	if chk := checker.Load(); chk != nil {
-		healthMap = chk.Check(ctx)
-	}
-	var result []admin.UpstreamInfo
-	for name, up := range p.Compiled.Config.Upstreams {
-		ui := admin.UpstreamInfo{
-			Name:      name,
-			URL:       up.URL,
-			TimeoutMS: up.Timeout.Milliseconds(),
-		}
-		if up.Auth != nil {
-			ui.AuthType = up.Auth.Type()
-		} else {
-			ui.AuthType = "none"
-		}
-		if hs, ok := healthMap[name]; ok {
-			ui.Health = admin.UpstreamHealthInfo{
-				Status:    hs.Status,
-				LatencyMS: hs.LatencyMS,
-				CheckedAt: hs.CheckedAt.Format(time.RFC3339),
-				Error:     hs.Error,
-			}
-		}
-		result = append(result, ui)
-	}
-	return result
 }

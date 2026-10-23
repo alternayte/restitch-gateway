@@ -14,45 +14,26 @@
 
 package admin
 
-import (
-	"context"
-	"log/slog"
-	"time"
+import "github.com/alternayte/restitch-gateway/v2/internal/reqlog"
 
-	"github.com/alternayte/restitch-gateway/v2/internal/reqlog"
-)
-
-// MultiRecorder feeds request records to the ring buffer, stats, the
-// time-series accumulator, and durable storage.
+// MultiRecorder feeds request records to the time-series accumulator.
+// The gateway pushes the accumulated buckets to Studio.
 type MultiRecorder struct {
-	Ring        *RingBuffer
-	Stats       *Stats
 	Accumulator *Accumulator
-	Storage     Storage
 }
 
 func (mr *MultiRecorder) Record(rec reqlog.Record) {
-	mr.Ring.Record(rec)
-	mr.Stats.Record(rec.Composition, rec.DurationMS, rec.Status >= 500, rec.Partial)
-
-	if mr.Accumulator != nil {
-		var stepSamples []StepSample
-		for _, s := range rec.Steps {
-			stepSamples = append(stepSamples, StepSample{
-				Name:       s.Name,
-				Upstream:   s.Upstream,
-				DurationMS: s.DurationMS,
-				IsError:    s.Status == "failed",
-			})
-		}
-		mr.Accumulator.Record(rec.Composition, rec.DurationMS, rec.Status >= 500, rec.Partial, stepSamples)
+	if mr.Accumulator == nil {
+		return
 	}
-
-	if mr.Storage != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := mr.Storage.RecordRequest(ctx, rec); err != nil {
-			slog.Error("failed to persist request record", "error", err)
-		}
+	var stepSamples []StepSample
+	for _, s := range rec.Steps {
+		stepSamples = append(stepSamples, StepSample{
+			Name:       s.Name,
+			Upstream:   s.Upstream,
+			DurationMS: s.DurationMS,
+			IsError:    s.Status == "failed",
+		})
 	}
+	mr.Accumulator.Record(rec.Composition, rec.DurationMS, rec.Status >= 500, rec.Partial, stepSamples)
 }

@@ -19,13 +19,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/alternayte/restitch-gateway/v2/internal/admin"
 )
 
 // Duration wraps time.Duration for YAML unmarshaling from Go duration strings.
@@ -55,7 +52,6 @@ func (d Duration) MarshalYAML() (interface{}, error) {
 // artifact itself.
 type File struct {
 	Server ServerConfig
-	Admin  AdminConfig
 
 	raw []byte // original bytes for hash
 }
@@ -85,25 +81,6 @@ type ServerConfig struct {
 	ShutdownTimeout Duration
 	LogFormat       string
 	LogLevel        string
-}
-
-// AdminConfig holds admin API server settings, set from RESTITCH_ADMIN_*
-// env vars only.
-type AdminConfig struct {
-	Enabled        *bool
-	Port           int
-	Bind           string
-	APIKey         string
-	RequestLogSize int
-	Storage        admin.StorageConfig
-}
-
-// IsEnabled returns whether the admin server is enabled (default true).
-func (a AdminConfig) IsEnabled() bool {
-	if a.Enabled == nil {
-		return true
-	}
-	return *a.Enabled
 }
 
 // ReadAndExpand reads a config file and performs whole-file env expansion.
@@ -186,15 +163,14 @@ func v1BlockErrors(block string, val *yaml.Node) []error {
 		name := block + "." + val.Content[i].Value
 		dest, known := v1Moved[name]
 		switch {
+		case block == "admin":
+			errs = append(errs, fmt.Errorf("%s removed in v2: the gateway has no admin API; Studio shows its state", name))
 		case known && dest == "":
 			errs = append(errs, fmt.Errorf("%s removed in v2", name))
 		case known:
 			errs = append(errs, fmt.Errorf("%s moved to %s", name, dest))
 		default:
 			flagName := strings.ReplaceAll(val.Content[i].Value, "_", "-")
-			if block == "admin" {
-				flagName = "admin-" + flagName
-			}
 			errs = append(errs, fmt.Errorf("%s moved to %s", name, EnvName(flagName)))
 		}
 	}
@@ -229,15 +205,6 @@ func applyDefaults(f *File) {
 	if f.Server.ShutdownTimeout.Duration == 0 {
 		f.Server.ShutdownTimeout.Duration = 30 * time.Second
 	}
-	if f.Admin.Port == 0 {
-		f.Admin.Port = 9090
-	}
-	if f.Admin.Bind == "" {
-		f.Admin.Bind = "127.0.0.1"
-	}
-	if f.Admin.RequestLogSize == 0 {
-		f.Admin.RequestLogSize = 500
-	}
 }
 
 // Validate checks the config for errors. Returns joined errors for all problems.
@@ -250,9 +217,6 @@ func (f *File) Validate() error {
 	if f.Server.TLSPort != 0 && (f.Server.TLSPort < 1 || f.Server.TLSPort > 65535) {
 		errs = append(errs, fmt.Errorf("RESTITCH_TLS_PORT must be 1-65535, got %d", f.Server.TLSPort))
 	}
-	if f.Admin.Port < 1 || f.Admin.Port > 65535 {
-		errs = append(errs, fmt.Errorf("RESTITCH_ADMIN_PORT must be 1-65535, got %d (admin.port)", f.Admin.Port))
-	}
 
 	logFormat := strings.ToLower(f.Server.LogFormat)
 	if logFormat != "json" && logFormat != "text" {
@@ -261,22 +225,6 @@ func (f *File) Validate() error {
 	logLevel := strings.ToLower(f.Server.LogLevel)
 	if logLevel != "debug" && logLevel != "info" && logLevel != "warn" && logLevel != "error" {
 		errs = append(errs, fmt.Errorf("RESTITCH_LOG_LEVEL must be debug/info/warn/error, got %q", f.Server.LogLevel))
-	}
-
-	switch f.Admin.Storage.Type {
-	case "", "memory":
-		// valid, no additional fields required
-	case "sqlite":
-		if f.Admin.Storage.URL == "" {
-			errs = append(errs, fmt.Errorf("admin.storage.url is required when type is %q", f.Admin.Storage.Type))
-		}
-	case "turso":
-		// The bundled sqlite driver cannot speak libsql (finding L8): a
-		// libsql:// DSN used to silently create a local file named after the
-		// URL. Reject it until a real libSQL client exists.
-		errs = append(errs, fmt.Errorf("admin.storage.type %q is not supported by this build; use sqlite or memory", f.Admin.Storage.Type))
-	default:
-		errs = append(errs, fmt.Errorf("admin.storage.type must be memory, sqlite, or turso, got %q", f.Admin.Storage.Type))
 	}
 
 	if len(errs) == 0 {
@@ -289,24 +237,4 @@ func (f *File) Validate() error {
 func (f *File) Hash() string {
 	h := sha256.Sum256(f.raw)
 	return fmt.Sprintf("%x", h)
-}
-
-// ApplyEnvOverrides applies the RESTITCH_ADMIN_* environment variables.
-// Server settings are flags, bound to env by BindEnv.
-func ApplyEnvOverrides(f *File) {
-	if v := os.Getenv("RESTITCH_ADMIN_PORT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			f.Admin.Port = n
-		}
-	}
-	if v := os.Getenv("RESTITCH_ADMIN_BIND"); v != "" {
-		f.Admin.Bind = v
-	}
-	if v := os.Getenv("RESTITCH_ADMIN_ENABLED"); v != "" {
-		b := strings.ToLower(v) == "true" || v == "1"
-		f.Admin.Enabled = &b
-	}
-	if v := os.Getenv("RESTITCH_ADMIN_API_KEY"); v != "" {
-		f.Admin.APIKey = v
-	}
 }

@@ -10,7 +10,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C01 — `restitch gateway` runs standalone from RESTITCH_CONFIG under the /v2 module
 - [x] C02 — A v1 file with server: or admin: is refused with the replacement env var named
 - [x] C03 — An artifact with a non-public composition and no auth policy is refused
-- [ ] C04 — The gateway has no admin API; probes on the data port, metrics on the ops port
+- [x] C04 — The gateway has no admin API; probes on the data port, metrics on the ops port
 
 ### Studio core
 - [x] C05 — `restitch studio` signs in a bootstrap owner and refuses anonymous API calls
@@ -87,7 +87,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C04 — The gateway has no admin API; probes on the data port, metrics on the ops port
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C01
 - **Files:** `cmd/restitch/run.go`, `cmd/restitch/shutdown.go`, `internal/admin/`, `internal/server/server.go`, `cmd/restitch/run_test.go`
 - **Goal:** The gateway opens only the data port, with /health and /ready, plus RESTITCH_OPS_PORT for /metrics when set.
@@ -95,6 +95,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and `internal/admin` keeps only the accumulator and recorder that C12 and C13 export.
 - **Spec:** Decision on removing the admin API and gateway-side storage.
 - **Notes:** Delete the admin server, SQL and memory storage, async store and their tests. Keep the ordered shutdown in `shutdown.go`; it loses the store steps.
+  Done: `internal/admin` keeps `accumulator.go`, `bucket.go` (Bucket, StepBucket, StepSample) and `recorder.go` (MultiRecorder feeds the accumulator only); run.go wires no recorder until C12. `gwconfig.File` has no Admin block; v1 admin.* keys say "removed in v2: the gateway has no admin API". `-ops-port` (RESTITCH_OPS_PORT, 0 = off) serves only /metrics. `gatewayShutdown` runs servers, then background work, then an optional `final` step with its own deadline: C12 puts the last telemetry push there. The upstream health checker went with the admin API; C12 brings upstream health back as pushed telemetry. The old `cmd/restitch-studio` dashboards now fail against a v2 gateway: C24 replaces them. testenv records request records in its own `RecordLog`.
 
 ---
 
