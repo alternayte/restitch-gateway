@@ -63,6 +63,13 @@ func checkResource(kind, name string, body map[string]any) error {
 	case !singleton && !resourceName.MatchString(name):
 		return fmt.Errorf("name %q must match %s", name, resourceName)
 	}
+	data, err := yaml.Marshal(body)
+	if err != nil {
+		return err
+	}
+	if err := checkVarNames(string(data)); err != nil {
+		return err
+	}
 	switch kind {
 	case KindUpstream:
 		return parseArtifact(map[string]any{"upstreams": map[string]any{name: body}})

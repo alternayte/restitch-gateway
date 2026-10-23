@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -64,6 +65,42 @@ func ExpandEnvStrict(s string) (string, error) {
 // caller. Studio validates an artifact without the gateway's environment
 // by passing a lookup that answers a placeholder for every name.
 func ExpandWith(s string, lookup func(string) (string, bool)) (string, error) {
+	return scan(s, func(r Reference) (string, error) {
+		val, exists := lookup(r.Name)
+		if exists && val != "" {
+			return val, nil
+		}
+		if r.HasDefault {
+			return r.Default, nil
+		}
+		return "", fmt.Errorf("environment variable %s is not set", r.Name)
+	})
+}
+
+// Reference is one ${NAME} or ${NAME:default} in a string.
+type Reference struct {
+	Name       string
+	Default    string
+	HasDefault bool
+}
+
+// VarName is the syntax of a name inside ${...}: a shell variable name.
+var VarName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// References returns every ${...} in s in order, with the same syntax
+// rules as ExpandWith. It does not check names against VarName.
+func References(s string) ([]Reference, error) {
+	var refs []Reference
+	_, err := scan(s, func(r Reference) (string, error) {
+		refs = append(refs, r)
+		return "", nil
+	})
+	return refs, err
+}
+
+// scan copies s, replacing each ${...} with what replace returns. "$$" is
+// a literal "$"; any other "$" is an error.
+func scan(s string, replace func(Reference) (string, error)) (string, error) {
 	var b strings.Builder
 	i := 0
 
@@ -100,26 +137,16 @@ func ExpandWith(s string, lookup func(string) (string, bool)) (string, error) {
 		content := s[i+2 : i+2+end]
 		i = i + 2 + end + 1
 
-		varName := content
-		defaultVal := ""
-		hasDefault := false
-
+		r := Reference{Name: content}
 		if colonIdx := strings.Index(content, ":"); colonIdx >= 0 {
-			varName = content[:colonIdx]
-			defaultVal = content[colonIdx+1:]
-			hasDefault = true
+			r = Reference{Name: content[:colonIdx], Default: content[colonIdx+1:], HasDefault: true}
 		}
 
-		val, exists := lookup(varName)
-		if !exists || val == "" {
-			if hasDefault {
-				b.WriteString(defaultVal)
-			} else {
-				return "", fmt.Errorf("environment variable %s is not set", varName)
-			}
-		} else {
-			b.WriteString(val)
+		val, err := replace(r)
+		if err != nil {
+			return "", err
 		}
+		b.WriteString(val)
 	}
 
 	return b.String(), nil

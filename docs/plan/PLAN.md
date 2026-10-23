@@ -31,7 +31,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C18 — A resource form generated from the schema saves a resource, with a YAML tab
 - [x] C19 — The step graph widget edits depends_on
 - [x] C20 — Expression fields show server lint errors as the user types
-- [ ] C21 — The secret picker inserts ${VAR} names and the environment lists required names
+- [x] C21 — The secret picker inserts ${VAR} names and the environment lists required names
 - [x] C22 — The publish screen shows the diff, history, rollback and promote
 - [x] C23 — Owners manage gateway tokens and users in settings
 - [x] C24 — Environment dashboards show aggregates, sampled requests and instances
@@ -320,12 +320,13 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### C21 — The secret picker inserts ${VAR} names and the environment lists required names
 
-- **Status:** todo
+- **Status:** done
 - **Depends on:** C18
 - **Files:** `internal/studio/secrets.go`, `internal/studio/secrets_test.go`, `studio/src/features/resources/secret-picker.tsx`
 - **Goal:** Studio lists the ${VAR} names a draft and each version need; string fields offer a picker over those names.
 - **First failing test:** `internal/studio/secrets_test.go` — "TestRequiredNamesListsEveryReference"
 - **Done when:** the test command passes and no secret value is stored in Studio.
+  Done: `gwconfig.ExpandWith` and the new `gwconfig.References` share one scanner, so Studio finds references with the gateway's own syntax rules ($$, ${NAME:default}). GET /api/v1/environments/{env}/secrets and /versions/{number}/secrets (viewer) return each name, the kind/name of each resource that uses it, and `optional` when every reference gives a default. Studio refuses a save, import, promote or publish whose ${...} name does not match `gwconfig.VarName` (`^[A-Za-z_][A-Za-z0-9_]*$`); the gateway itself does not check names. The version endpoint splits the stored YAML without re-checking it, so an older version still lists. Text fields and string-map values (headers) carry a key button that inserts ${NAME} at the cursor from the draft's names or a new valid name; fields with a schema pattern (durations) have none. The Draft page lists the names with links to the resources; the version View dialog lists the version's names. Studio stores names only, never values. Verified in a browser against `restitch dev`: Authorization header `Bearer ${API_TOKEN}` inserted through the picker, listed on the Draft page, published, listed in version 1; light, dark and 390px.
 
 ---
 

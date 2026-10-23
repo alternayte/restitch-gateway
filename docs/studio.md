@@ -74,6 +74,18 @@ expands the variable from its own environment. Studio validates the draft
 with every variable replaced by `x`, and never sees the value. See
 [configuration.md](configuration.md#environment-variable-expansion).
 
+A text field has a key button on its right. Click it to insert `${NAME}` at
+the cursor. The list shows the names that the draft already uses. Type a new
+name to add it. A name uses letters, digits and `_`, and does not start with
+a digit. Studio refuses a save or a publish with any other name. A field with
+a fixed format, such as a duration, has no key button.
+
+The **Draft** page lists every name that the draft uses, with the resources
+that use it. Set each name as an environment variable on every gateway of
+the environment. A name that every reference gives a default
+(`${NAME:default}`) shows **has default**. Click **View** on a version in
+**Publish and history** to see the names that the version needs.
+
 ## Publish
 
 On **Publish and history**, click **Publish**. Studio compiles the whole

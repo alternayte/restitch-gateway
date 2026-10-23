@@ -148,6 +148,10 @@ for secrets: the secret stays on the gateway host and never reaches Studio.
 
 A `$` that is not part of `$$` or `${...}` is an error.
 
+Studio also checks each name: it uses letters, digits and `_`, and does not
+start with a digit. Studio lists the names that each draft and each version
+need. See [studio.md](studio.md#secrets).
+
 Put a `${VAR}` in a string field. Write the scheme of a URL out:
 `https://${USERS_HOST}`, not `${USERS_URL}`. Studio validates an artifact
 with every variable replaced by `x`, so it ignores defaults.

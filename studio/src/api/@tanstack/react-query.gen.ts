@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminResetUserPassword, adminSetUserRole, createApiKey, createEnvironment, deleteResource, emailChange, emailChangeVerify, emailVerificationSend, emailVerificationVerify, exportDraft, getArtifactSchema, getEnvironmentSettings, getMe, getPreferences, getResource, getSession, getUsage, getVersion, importDraft, issueGatewayToken, lintTemplate, listApiKeys, listEnvironments, listGatewayTokens, listInstances, listRequests, listResources, listSessions, listVersions, type Options, passwordChange, passwordForgot, passwordReset, previewPublish, promote, publish, putPreferences, revokeAllSessions, revokeApiKey, revokeGatewayToken, revokeSession, rollback, saveResource, signInEmail, signOut, updateEnvironmentSettings, userDelete, userDeleteVerify } from '../sdk.gen';
-import type { AdminCreateUserData, AdminCreateUserError, AdminCreateUserResponse2, AdminDisableUserData, AdminDisableUserError, AdminDisableUserResponse, AdminEnableUserData, AdminEnableUserError, AdminEnableUserResponse, AdminListUsersData, AdminListUsersError, AdminListUsersResponse, AdminResetUserPasswordData, AdminResetUserPasswordError, AdminResetUserPasswordResponse, AdminSetUserRoleData, AdminSetUserRoleError, AdminSetUserRoleResponse, CreateApiKeyData, CreateApiKeyError, CreateApiKeyResponse, CreateEnvironmentData, CreateEnvironmentError, CreateEnvironmentResponse, DeleteResourceData, DeleteResourceError, DeleteResourceResponse, EmailChangeData, EmailChangeError, EmailChangeResponse, EmailChangeVerifyData, EmailChangeVerifyError, EmailChangeVerifyResponse, EmailVerificationSendData, EmailVerificationSendError, EmailVerificationSendResponse, EmailVerificationVerifyData, EmailVerificationVerifyError, EmailVerificationVerifyResponse, ExportDraftData, ExportDraftError, ExportDraftResponse2, GetArtifactSchemaData, GetArtifactSchemaError, GetArtifactSchemaResponse2, GetEnvironmentSettingsData, GetEnvironmentSettingsError, GetEnvironmentSettingsResponse, GetMeData, GetMeError, GetMeResponse, GetPreferencesData, GetPreferencesError, GetPreferencesResponse, GetResourceData, GetResourceError, GetResourceResponse, GetSessionData, GetSessionResponse, GetUsageData, GetUsageError, GetUsageResponse, GetVersionData, GetVersionError, GetVersionResponse, ImportDraftData, ImportDraftError, ImportDraftResponse2, IssueGatewayTokenData, IssueGatewayTokenError, IssueGatewayTokenResponse2, LintTemplateData, LintTemplateError, LintTemplateResponse2, ListApiKeysData, ListApiKeysError, ListApiKeysResponse, ListEnvironmentsData, ListEnvironmentsError, ListEnvironmentsResponse2, ListGatewayTokensData, ListGatewayTokensError, ListGatewayTokensResponse2, ListInstancesData, ListInstancesError, ListInstancesResponse2, ListRequestsData, ListRequestsError, ListRequestsResponse2, ListResourcesData, ListResourcesError, ListResourcesResponse2, ListSessionsData, ListSessionsError, ListSessionsResponse, ListVersionsData, ListVersionsError, ListVersionsResponse2, PasswordChangeData, PasswordChangeError, PasswordChangeResponse, PasswordForgotData, PasswordForgotError, PasswordForgotResponse, PasswordResetData, PasswordResetError, PasswordResetResponse, PreviewPublishData, PreviewPublishError, PreviewPublishResponse, PromoteData, PromoteError, PromoteResponse2, PublishData, PublishError, PublishResponse, PutPreferencesData, PutPreferencesError, PutPreferencesResponse, RevokeAllSessionsData, RevokeAllSessionsError, RevokeAllSessionsResponse, RevokeApiKeyData, RevokeApiKeyError, RevokeApiKeyResponse, RevokeGatewayTokenData, RevokeGatewayTokenError, RevokeGatewayTokenResponse, RevokeSessionData, RevokeSessionError, RevokeSessionResponse, RollbackData, RollbackError, RollbackResponse, SaveResourceData, SaveResourceError, SaveResourceResponse, SignInEmailData, SignInEmailError, SignInEmailResponse, SignOutData, SignOutError, SignOutResponse, UpdateEnvironmentSettingsData, UpdateEnvironmentSettingsError, UpdateEnvironmentSettingsResponse, UserDeleteData, UserDeleteError, UserDeleteResponse, UserDeleteVerifyData, UserDeleteVerifyError, UserDeleteVerifyResponse } from '../types.gen';
+import { adminCreateUser, adminDisableUser, adminEnableUser, adminListUsers, adminResetUserPassword, adminSetUserRole, createApiKey, createEnvironment, deleteResource, emailChange, emailChangeVerify, emailVerificationSend, emailVerificationVerify, exportDraft, getArtifactSchema, getEnvironmentSettings, getMe, getPreferences, getResource, getSession, getUsage, getVersion, importDraft, issueGatewayToken, lintTemplate, listApiKeys, listDraftSecretNames, listEnvironments, listGatewayTokens, listInstances, listRequests, listResources, listSessions, listVersions, listVersionSecretNames, type Options, passwordChange, passwordForgot, passwordReset, previewPublish, promote, publish, putPreferences, revokeAllSessions, revokeApiKey, revokeGatewayToken, revokeSession, rollback, saveResource, signInEmail, signOut, updateEnvironmentSettings, userDelete, userDeleteVerify } from '../sdk.gen';
+import type { AdminCreateUserData, AdminCreateUserError, AdminCreateUserResponse2, AdminDisableUserData, AdminDisableUserError, AdminDisableUserResponse, AdminEnableUserData, AdminEnableUserError, AdminEnableUserResponse, AdminListUsersData, AdminListUsersError, AdminListUsersResponse, AdminResetUserPasswordData, AdminResetUserPasswordError, AdminResetUserPasswordResponse, AdminSetUserRoleData, AdminSetUserRoleError, AdminSetUserRoleResponse, CreateApiKeyData, CreateApiKeyError, CreateApiKeyResponse, CreateEnvironmentData, CreateEnvironmentError, CreateEnvironmentResponse, DeleteResourceData, DeleteResourceError, DeleteResourceResponse, EmailChangeData, EmailChangeError, EmailChangeResponse, EmailChangeVerifyData, EmailChangeVerifyError, EmailChangeVerifyResponse, EmailVerificationSendData, EmailVerificationSendError, EmailVerificationSendResponse, EmailVerificationVerifyData, EmailVerificationVerifyError, EmailVerificationVerifyResponse, ExportDraftData, ExportDraftError, ExportDraftResponse2, GetArtifactSchemaData, GetArtifactSchemaError, GetArtifactSchemaResponse2, GetEnvironmentSettingsData, GetEnvironmentSettingsError, GetEnvironmentSettingsResponse, GetMeData, GetMeError, GetMeResponse, GetPreferencesData, GetPreferencesError, GetPreferencesResponse, GetResourceData, GetResourceError, GetResourceResponse, GetSessionData, GetSessionResponse, GetUsageData, GetUsageError, GetUsageResponse, GetVersionData, GetVersionError, GetVersionResponse, ImportDraftData, ImportDraftError, ImportDraftResponse2, IssueGatewayTokenData, IssueGatewayTokenError, IssueGatewayTokenResponse2, LintTemplateData, LintTemplateError, LintTemplateResponse2, ListApiKeysData, ListApiKeysError, ListApiKeysResponse, ListDraftSecretNamesData, ListDraftSecretNamesError, ListDraftSecretNamesResponse, ListEnvironmentsData, ListEnvironmentsError, ListEnvironmentsResponse2, ListGatewayTokensData, ListGatewayTokensError, ListGatewayTokensResponse2, ListInstancesData, ListInstancesError, ListInstancesResponse2, ListRequestsData, ListRequestsError, ListRequestsResponse2, ListResourcesData, ListResourcesError, ListResourcesResponse2, ListSessionsData, ListSessionsError, ListSessionsResponse, ListVersionsData, ListVersionSecretNamesData, ListVersionSecretNamesError, ListVersionSecretNamesResponse, ListVersionsError, ListVersionsResponse2, PasswordChangeData, PasswordChangeError, PasswordChangeResponse, PasswordForgotData, PasswordForgotError, PasswordForgotResponse, PasswordResetData, PasswordResetError, PasswordResetResponse, PreviewPublishData, PreviewPublishError, PreviewPublishResponse, PromoteData, PromoteError, PromoteResponse2, PublishData, PublishError, PublishResponse, PutPreferencesData, PutPreferencesError, PutPreferencesResponse, RevokeAllSessionsData, RevokeAllSessionsError, RevokeAllSessionsResponse, RevokeApiKeyData, RevokeApiKeyError, RevokeApiKeyResponse, RevokeGatewayTokenData, RevokeGatewayTokenError, RevokeGatewayTokenResponse, RevokeSessionData, RevokeSessionError, RevokeSessionResponse, RollbackData, RollbackError, RollbackResponse, SaveResourceData, SaveResourceError, SaveResourceResponse, SignInEmailData, SignInEmailError, SignInEmailResponse, SignOutData, SignOutError, SignOutResponse, UpdateEnvironmentSettingsData, UpdateEnvironmentSettingsError, UpdateEnvironmentSettingsResponse, UserDeleteData, UserDeleteError, UserDeleteResponse, UserDeleteVerifyData, UserDeleteVerifyError, UserDeleteVerifyResponse } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -779,6 +779,26 @@ export const saveResourceMutation = (options?: Partial<Options<SaveResourceData>
     return mutationOptions;
 };
 
+export const listDraftSecretNamesQueryKey = (options: Options<ListDraftSecretNamesData>) => createQueryKey('listDraftSecretNames', options);
+
+/**
+ * List the ${NAME} references in the draft
+ *
+ * Lists each ${NAME} reference. The gateway resolves the names from its environment; Studio stores no value.
+ */
+export const listDraftSecretNamesOptions = (options: Options<ListDraftSecretNamesData>) => queryOptions<ListDraftSecretNamesResponse, ListDraftSecretNamesError, ListDraftSecretNamesResponse, ReturnType<typeof listDraftSecretNamesQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await listDraftSecretNames({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: listDraftSecretNamesQueryKey(options)
+});
+
 export const getUsageQueryKey = (options: Options<GetUsageData>) => createQueryKey('getUsage', options);
 
 /**
@@ -851,6 +871,26 @@ export const rollbackMutation = (options?: Partial<Options<RollbackData>>): UseM
     };
     return mutationOptions;
 };
+
+export const listVersionSecretNamesQueryKey = (options: Options<ListVersionSecretNamesData>) => createQueryKey('listVersionSecretNames', options);
+
+/**
+ * List the ${NAME} references in an artifact version
+ *
+ * Lists each ${NAME} reference. The gateway resolves the names from its environment; Studio stores no value.
+ */
+export const listVersionSecretNamesOptions = (options: Options<ListVersionSecretNamesData>) => queryOptions<ListVersionSecretNamesResponse, ListVersionSecretNamesError, ListVersionSecretNamesResponse, ReturnType<typeof listVersionSecretNamesQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await listVersionSecretNames({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: listVersionSecretNamesQueryKey(options)
+});
 
 /**
  * Check one template string the way publish does

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CodeField } from "@/features/resources/code-field";
 import { useTemplateLint } from "@/features/resources/lint";
+import { StringInput } from "@/features/resources/secret-picker";
 
 /** Schema is the subset of JSON Schema that the artifact schema uses. */
 export type Schema =
@@ -237,13 +238,18 @@ function ScalarField({
       <label htmlFor={id} className="text-sm font-medium">
         {label(name)}
       </label>
-      <Input
-        id={id}
-        type={type}
-        value={value}
-        aria-invalid={invalid || lintError !== "" || undefined}
-        onChange={(e) => onChange(e.target.value)}
-      />
+      {/* A field with a pattern, such as a duration, cannot hold a ${NAME}: it gets no secret picker. */}
+      {type === "text" && pattern === undefined ? (
+        <StringInput id={id} fieldLabel={label(name)} value={value} aria-invalid={invalid || lintError !== "" || undefined} onChange={onChange} />
+      ) : (
+        <Input
+          id={id}
+          type={type}
+          value={value}
+          aria-invalid={invalid || lintError !== "" || undefined}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
       {invalid && <p className="text-xs text-destructive">{hint ?? "This value has the wrong format."}</p>}
       {!invalid && lintError && (
         <p role="alert" className="font-mono text-xs break-words text-destructive">
@@ -274,7 +280,7 @@ function MapField({
       {entries.map(([k, v]) => (
         <div key={k} className="flex items-center gap-2">
           <span className="w-40 truncate font-mono text-xs">{k}</span>
-          <Input aria-label={`${label(name)} ${k}`} value={v} onChange={(e) => onChange({ ...value, [k]: e.target.value })} />
+          <StringInput aria-label={`${label(name)} ${k}`} fieldLabel={`${label(name)} ${k}`} value={v} onChange={(text) => onChange({ ...value, [k]: text })} />
           <Button
             type="button"
             size="sm"
