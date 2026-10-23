@@ -3,10 +3,12 @@ import { GitCompareArrows, History, Rocket, RotateCcw, Upload } from "lucide-rea
 import { useState } from "react";
 import {
   getVersionOptions,
+  listDraftSecretNamesQueryKey,
   listEnvironmentsOptions,
   listResourcesQueryKey,
   listVersionsOptions,
   listVersionsQueryKey,
+  listVersionSecretNamesOptions,
   previewPublishMutation,
   promoteMutation,
   publishMutation,
@@ -24,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { toast } from "@/components/ui/toast";
+import { RequiredNames } from "@/features/resources/secret-picker";
 import { useCurrentUser } from "@/lib/auth";
 import { errorMessage } from "@/lib/errors";
 import { can } from "@/lib/roles";
@@ -200,10 +203,18 @@ function PublishPanel({ env }: { env: string }) {
 
 function VersionDialog({ env, number, onClose }: { env: string; number: number; onClose: () => void }) {
   const query = useQuery(getVersionOptions({ path: { env, number } }));
+  const secrets = useQuery(listVersionSecretNamesOptions({ path: { env, number } }));
   return (
     <Dialog open onClose={onClose} title={`${env} version ${number}`} size="lg">
+      <section className="flex flex-col gap-2">
+        <h3 className="text-sm font-semibold">Secret names</h3>
+        <p className="text-xs text-muted-foreground">A gateway that runs this version needs these environment variables set.</p>
+        <DataState query={secrets} skeleton="lines">
+          {(d) => <RequiredNames env={env} names={d.names ?? []} />}
+        </DataState>
+      </section>
       <DataState query={query} skeleton="lines">
-        {(v) => <pre className="max-h-[60vh] overflow-auto rounded-control border bg-panel p-3 font-mono text-xs">{v.yaml}</pre>}
+        {(v) => <pre className="max-h-[50vh] overflow-auto rounded-control border bg-panel p-3 font-mono text-xs">{v.yaml}</pre>}
       </DataState>
     </Dialog>
   );
@@ -223,6 +234,7 @@ function PromoteDialog({ env, open, onClose }: { env: string; open: boolean; onC
     ...promoteMutation(),
     onSuccess: (out) => {
       void qc.invalidateQueries({ queryKey: listResourcesQueryKey({ path: { env } }) });
+      void qc.invalidateQueries({ queryKey: listDraftSecretNamesQueryKey({ path: { env } }) });
       setDiff(out.diff);
       toast({ title: "Draft replaced", description: `${env} now holds ${source} version ${chosen}. Publish to apply it.` });
     },

@@ -8,6 +8,8 @@ import {
   getArtifactSchemaOptions,
   getResourceOptions,
   getResourceQueryKey,
+  listDraftSecretNamesOptions,
+  listDraftSecretNamesQueryKey,
   listResourcesQueryKey,
   saveResourceMutation,
 } from "@/api/@tanstack/react-query.gen";
@@ -23,6 +25,7 @@ import { CodeField } from "@/features/resources/code-field";
 import { kindLabel, type Kind } from "@/features/resources/kinds";
 import { StepNames } from "@/features/resources/lint";
 import { ObjectFields, type Schema } from "@/features/resources/schema-form";
+import { SecretNames } from "@/features/resources/secret-picker";
 import { StepGraph, type Step } from "@/features/resources/step-graph";
 import { useCurrentUser } from "@/lib/auth";
 import { errorMessage } from "@/lib/errors";
@@ -105,6 +108,8 @@ function EditorForm({
   const [yamlError, setYamlError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const dirty = JSON.stringify(body) !== JSON.stringify(initial);
+  const secrets = useQuery(listDraftSecretNamesOptions({ path: { env } }));
+  const secretNames = (secrets.data?.names ?? []).map((n) => n.name);
 
   useEffect(() => {
     if (view === "yaml") setYamlText(YAML.stringify(body));
@@ -117,6 +122,7 @@ function EditorForm({
     onSuccess: (saved) => {
       qc.setQueryData(getResourceQueryKey({ path }), saved);
       void qc.invalidateQueries({ queryKey: listResourcesQueryKey({ path: { env } }) });
+      void qc.invalidateQueries({ queryKey: listDraftSecretNamesQueryKey({ path: { env } }) });
       toast({ title: "Saved", description: `${kindLabel(kind)} ${name}, revision ${saved.revision}` });
     },
   });
@@ -124,6 +130,7 @@ function EditorForm({
     ...deleteResourceMutation(),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: listResourcesQueryKey({ path: { env } }) });
+      void qc.invalidateQueries({ queryKey: listDraftSecretNamesQueryKey({ path: { env } }) });
       toast({ title: "Deleted", description: `${kindLabel(kind)} ${name}` });
       void navigate({ to: "/environments/$env/draft", params: { env } });
     },
@@ -175,20 +182,22 @@ function EditorForm({
       />
       <fieldset disabled={!canEdit} className="min-w-0">
         {view === "form" ? (
-          <StepNames.Provider value={kind === "composition" ? stepNamesOf(body) : null}>
-            {kind === "composition" && (
-              <section aria-labelledby="step-graph-heading" className="mb-5 flex flex-col gap-2">
-                <h2 id="step-graph-heading" className="text-sm font-medium">
-                  Step graph
-                </h2>
-                <StepGraph
-                  steps={Array.isArray(body.steps) ? (body.steps as Step[]) : []}
-                  onChange={(steps) => setBody({ ...body, steps })}
-                />
-              </section>
-            )}
-            <ObjectFields schema={schema} defs={defs} value={body} onChange={setBody} path={kind} />
-          </StepNames.Provider>
+          <SecretNames.Provider value={secretNames}>
+            <StepNames.Provider value={kind === "composition" ? stepNamesOf(body) : null}>
+              {kind === "composition" && (
+                <section aria-labelledby="step-graph-heading" className="mb-5 flex flex-col gap-2">
+                  <h2 id="step-graph-heading" className="text-sm font-medium">
+                    Step graph
+                  </h2>
+                  <StepGraph
+                    steps={Array.isArray(body.steps) ? (body.steps as Step[]) : []}
+                    onChange={(steps) => setBody({ ...body, steps })}
+                  />
+                </section>
+              )}
+              <ObjectFields schema={schema} defs={defs} value={body} onChange={setBody} path={kind} />
+            </StepNames.Provider>
+          </SecretNames.Provider>
         ) : (
           <div className="flex flex-col gap-1.5">
             <CodeField

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { FileCode2, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { listResourcesOptions } from "@/api/@tanstack/react-query.gen";
+import { listDraftSecretNamesOptions, listResourcesOptions } from "@/api/@tanstack/react-query.gen";
 import { DataState } from "@/components/data-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { kindLabel, kinds, type Kind } from "@/features/resources/kinds";
+import { RequiredNames } from "@/features/resources/secret-picker";
 import { useCurrentUser } from "@/lib/auth";
 import { can } from "@/lib/roles";
 import { formatTime } from "@/lib/utils";
@@ -20,6 +21,7 @@ import { formatTime } from "@/lib/utils";
 export function DraftPage({ env }: { env: string }) {
   const me = useCurrentUser();
   const query = useQuery(listResourcesOptions({ path: { env } }));
+  const secrets = useQuery(listDraftSecretNamesOptions({ path: { env } }));
   const [adding, setAdding] = useState(false);
   const add = can(me.role, "editor") ? (
     <Button onClick={() => setAdding(true)}>
@@ -28,7 +30,6 @@ export function DraftPage({ env }: { env: string }) {
     </Button>
   ) : undefined;
   const actions = add;
-
 
   return (
     <div className="flex flex-col gap-5">
@@ -75,6 +76,17 @@ export function DraftPage({ env }: { env: string }) {
           </Table>
         )}
       </DataState>
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-base font-semibold">Secret names</h2>
+          <p className="text-sm text-muted-foreground">
+            Set these as environment variables on every gateway of {env}. Studio stores the names, never the values.
+          </p>
+        </div>
+        <DataState query={secrets} skeleton="lines">
+          {(d) => <RequiredNames env={env} names={d.names ?? []} linkResources />}
+        </DataState>
+      </section>
       <NewResourceDialog env={env} open={adding} onClose={() => setAdding(false)} />
     </div>
   );

@@ -293,6 +293,25 @@ export type PublishRequest = {
     message: string;
 };
 
+export type RequiredName = {
+    name: string;
+    /**
+     * True when every reference gives a default, as in ${NAME:default}.
+     */
+    optional: boolean;
+    /**
+     * kind/name of each resource that references the name, sorted.
+     */
+    used_by: Array<string> | null;
+};
+
+export type RequiredNamesBody = {
+    /**
+     * Sorted by name.
+     */
+    names: Array<RequiredName> | null;
+};
+
 export type Resource = {
     body: {
         [key: string]: unknown;
@@ -1758,6 +1777,33 @@ export type SaveResourceResponses = {
 
 export type SaveResourceResponse = SaveResourceResponses[keyof SaveResourceResponses];
 
+export type ListDraftSecretNamesData = {
+    body?: never;
+    path: {
+        env: string;
+    };
+    query?: never;
+    url: '/api/v1/environments/{env}/secrets';
+};
+
+export type ListDraftSecretNamesErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListDraftSecretNamesError = ListDraftSecretNamesErrors[keyof ListDraftSecretNamesErrors];
+
+export type ListDraftSecretNamesResponses = {
+    /**
+     * OK
+     */
+    200: RequiredNamesBody;
+};
+
+export type ListDraftSecretNamesResponse = ListDraftSecretNamesResponses[keyof ListDraftSecretNamesResponses];
+
 export type GetUsageData = {
     body?: never;
     path: {
@@ -1880,6 +1926,34 @@ export type RollbackResponses = {
 };
 
 export type RollbackResponse = RollbackResponses[keyof RollbackResponses];
+
+export type ListVersionSecretNamesData = {
+    body?: never;
+    path: {
+        env: string;
+        number: number;
+    };
+    query?: never;
+    url: '/api/v1/environments/{env}/versions/{number}/secrets';
+};
+
+export type ListVersionSecretNamesErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListVersionSecretNamesError = ListVersionSecretNamesErrors[keyof ListVersionSecretNamesErrors];
+
+export type ListVersionSecretNamesResponses = {
+    /**
+     * OK
+     */
+    200: RequiredNamesBody;
+};
+
+export type ListVersionSecretNamesResponse = ListVersionSecretNamesResponses[keyof ListVersionSecretNamesResponses];
 
 export type LintTemplateData = {
     body: LintTemplateRequest;

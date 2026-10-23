@@ -41,6 +41,9 @@ const secretPlaceholder = "x"
 
 // validateArtifact runs the gateway validator on an unexpanded artifact.
 func validateArtifact(ctx context.Context, doc []byte) error {
+	if err := checkVarNames(string(doc)); err != nil {
+		return err
+	}
 	expanded, err := gwconfig.ExpandWith(string(doc), func(string) (string, bool) { return secretPlaceholder, true })
 	if err != nil {
 		return err
@@ -291,8 +294,22 @@ func (s *Server) version(ctx context.Context, env string, number int) (*artifact
 }
 
 // artifactResources splits an artifact into draft resources, the inverse
-// of assembleArtifact.
+// of assembleArtifact, and checks each one as a save would.
 func artifactResources(doc []byte) ([]resource, error) {
+	out, err := splitArtifact(doc)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range out {
+		if err := checkResource(r.Kind, r.Name, r.Body); err != nil {
+			return nil, fmt.Errorf("%s %s: %w", r.Kind, r.Name, err)
+		}
+	}
+	return out, nil
+}
+
+// splitArtifact splits an artifact into resources without checking them.
+func splitArtifact(doc []byte) ([]resource, error) {
 	var top map[string]any
 	if err := yaml.Unmarshal(doc, &top); err != nil {
 		return nil, fmt.Errorf("invalid YAML: %w", err)
@@ -333,11 +350,6 @@ func artifactResources(doc []byte) ([]resource, error) {
 	}
 	if len(settings) > 0 {
 		out = append(out, resource{Kind: KindSettings, Name: singletonName, Body: settings})
-	}
-	for _, r := range out {
-		if err := checkResource(r.Kind, r.Name, r.Body); err != nil {
-			return nil, fmt.Errorf("%s %s: %w", r.Kind, r.Name, err)
-		}
 	}
 	return out, nil
 }

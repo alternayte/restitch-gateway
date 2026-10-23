@@ -131,3 +131,32 @@ describe("template fields", () => {
     expect(linted).toEqual([{ template: "/x/{{ req.path.id }}", steps: ["u"] }]);
   });
 });
+
+describe("the secret picker", () => {
+  it("inserts a ${NAME} at the cursor and refuses an invalid new name", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: Request) => {
+        if (input.url.endsWith("/api/v1/me")) return json(200, { id: "u", email: "e@x", role: "editor" });
+        if (input.url.endsWith("/api/v1/schema")) return json(200, schema);
+        if (input.url.endsWith("/secrets"))
+          return json(200, { names: [{ name: "USERS_HOST", optional: false, used_by: ["upstream/users"] }] });
+        return json(200, { kind: "upstream", name: "users", revision: 1, body: { url: "https:///v1" }, updated_at: "2026-10-24T00:00:00Z", updated_by: "x" });
+      }),
+    );
+    renderAt("/environments/staging/resources/upstream/users");
+    const url = (await screen.findByLabelText("Url")) as HTMLInputElement;
+    url.setSelectionRange(8, 8);
+    fireEvent.click(screen.getByRole("button", { name: "Insert a secret name into Url" }));
+    fireEvent.click(await screen.findByRole("button", { name: "${USERS_HOST}" }));
+    expect(url.value).toBe("https://${USERS_HOST}/v1");
+    expect(url.selectionStart).toBe(21);
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert a secret name into Url" }));
+    fireEvent.change(screen.getByLabelText("Secret name"), { target: { value: "1BAD" } });
+    expect(screen.getByRole("alert")).toHaveTextContent("do not start with a digit");
+    fireEvent.change(screen.getByLabelText("Secret name"), { target: { value: "API_TOKEN" } });
+    fireEvent.click(screen.getByRole("button", { name: /Insert new name/ }));
+    expect(url.value).toBe("https://${USERS_HOST}${API_TOKEN}/v1");
+  });
+});
