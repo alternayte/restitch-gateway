@@ -67,7 +67,7 @@ Top-level server settings. All fields are optional.
 | `tls_key` | string | `""` | Path to TLS private key |
 | `read_timeout` | duration | `"10s"` | HTTP server read timeout |
 | `write_timeout` | duration | `"30s"` | HTTP server write timeout |
-| `shutdown_timeout` | duration | `"30s"` | Graceful shutdown deadline |
+| `shutdown_timeout` | duration | `"30s"` | Graceful shutdown deadline. It bounds the HTTP and admin server drain, and then separately the final time-series flush and request-record drain. |
 | `log_format` | string | `"json"` | Log output format: `json` or `text` |
 | `log_level` | string | `"info"` | Minimum log level: `debug`, `info`, `warn`, `error` |
 

@@ -189,6 +189,15 @@ func runCmd(args []string) int {
 		TLSPort: gwcfg.Server.TLSPort,
 	})
 
+	// shutdown replaces the per-component defers: deferred closes ran LIFO,
+	// which closed the store before the final accumulator flush. The
+	// configured server.shutdown_timeout governs the drain window (default
+	// 30s; finding L6).
+	shutdown := &gatewayShutdown{
+		servers: []func(context.Context) error{srv.Shutdown},
+		timeout: gwcfg.Server.ShutdownTimeout.Duration,
+	}
+
 	if noConfigFile {
 		slog.Warn("no composition config found, starting with health endpoints only",
 			"config_file", *configFile)
@@ -284,7 +293,7 @@ func runCmd(args []string) int {
 		// or locked database cannot stall request completion (finding M6).
 		// Memory storage is fast and never wrapped.
 		if adminCfg.Storage.Type == "sqlite" || adminCfg.Storage.Type == "turso" {
-			store = admin.NewAsyncStore(store)
+			store = admin.NewAsyncStore(store, metrics.RequestRecordsDroppedTotal)
 		}
 
 		acc := admin.NewAccumulator()
@@ -292,7 +301,9 @@ func runCmd(args []string) int {
 		// Start flush goroutine: periodically drains the accumulator into
 		// durable storage and compacts old data.
 		flushCtx, flushCancel := context.WithCancel(context.Background())
+		flushDone := make(chan struct{})
 		go func() {
+			defer close(flushDone)
 			ticker := time.NewTicker(60 * time.Second)
 			defer ticker.Stop()
 			for {
@@ -310,15 +321,6 @@ func runCmd(args []string) int {
 					}
 				case <-flushCtx.Done():
 					return
-				}
-			}
-		}()
-		defer func() {
-			flushCancel()
-			buckets := acc.Flush()
-			for _, b := range buckets {
-				if err := store.RecordBucket(context.Background(), b); err != nil {
-					slog.Error("failed to flush bucket on shutdown", "error", err)
 				}
 			}
 		}()
@@ -434,6 +436,20 @@ func runCmd(args []string) int {
 
 		bgCtx, bgCancel := context.WithCancel(context.Background())
 		defer bgCancel()
+		var rl *reloader
+
+		shutdown.acc = acc
+		shutdown.store = store
+		// The registry poller and SIGHUP goroutine never touch the store, so
+		// cancelling them is enough; the flusher does, so wait for it.
+		shutdown.stopBackground = func() {
+			bgCancel()
+			if rl != nil {
+				rl.stop()
+			}
+			flushCancel()
+			<-flushDone
+		}
 
 		if registryMode {
 			// Register registry metrics
@@ -485,7 +501,7 @@ func runCmd(args []string) int {
 			slog.Info("registry polling mode enabled",
 				"url", *registryURL, "poll_interval", pollInterval.String())
 		} else {
-			rl := newReloader(*configFile, doReload)
+			rl = newReloader(*configFile, doReload)
 			rl.watchSignals()
 			rl.watchFile()
 			adminReloadFn = rl.reload
@@ -529,23 +545,20 @@ func runCmd(args []string) int {
 				// error, not a reason to run without the control plane
 				// (finding L18).
 				slog.Error("admin server failed to start", "error", err)
+				if err := shutdown.run(); err != nil {
+					slog.Error("shutdown error", "error", err)
+				}
 				return 1
 			}
-			defer func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
+			shutdown.servers = append(shutdown.servers, func(ctx context.Context) error {
 				if err := adminSrv.Shutdown(ctx); err != nil {
-					slog.Error("admin server shutdown error", "error", err)
+					return fmt.Errorf("admin server shutdown: %w", err)
 				}
-			}()
+				return nil
+			})
 		} else {
 			slog.Info("admin server disabled by config", "enabled", false)
 		}
-		defer func() {
-			if err := store.Close(); err != nil {
-				slog.Error("failed to close storage", "error", err)
-			}
-		}()
 	}
 
 	tlsEnabled := gwcfg.Server.TLSCert != "" && gwcfg.Server.TLSKey != ""
@@ -575,13 +588,12 @@ func runCmd(args []string) int {
 	select {
 	case err := <-errChan:
 		slog.Error("server error", "error", err)
+		if err := shutdown.run(); err != nil {
+			slog.Error("shutdown error", "error", err)
+		}
 		return 1
 	case <-srv.WaitForShutdownSignal():
-		// The configured server.shutdown_timeout governs the drain window
-		// (default 30s); it was parsed but unused (finding L6).
-		ctx, cancel := context.WithTimeout(context.Background(), gwcfg.Server.ShutdownTimeout.Duration)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
+		if err := shutdown.run(); err != nil {
 			slog.Error("shutdown error", "error", err)
 			return 1
 		}

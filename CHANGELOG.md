@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Ordered gateway shutdown**: shutdown now runs in a fixed order (HTTP and
+  admin servers, registry poller and file watcher, final time-series flush,
+  request-record drain, storage close) instead of LIFO defers. The final
+  time-series window is no longer written to a closed store. The record drain
+  has one `server.shutdown_timeout` deadline instead of 5s per record. Records
+  sent after shutdown begins are dropped instead of panicking the process.
+  Dropped request records increment the new
+  `restitch_request_records_dropped_total{reason}` counter and log at most one
+  line per 10s.
+
 ## v1.2.0 — 2026-09-02
 
 First public release. Everything below this entry — the composition-engine

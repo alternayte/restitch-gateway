@@ -15,6 +15,7 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -26,32 +27,56 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+var errReloaderStopped = errors.New("reloader stopped: gateway is shutting down")
+
 type reloader struct {
 	configPath string
 	mu         sync.Mutex
+	stopped    bool
 	reloadFn   func() (string, error)
+
+	done     chan struct{}
+	stopOnce sync.Once
 }
 
 func newReloader(configPath string, reloadFn func() (string, error)) *reloader {
-	return &reloader{configPath: configPath, reloadFn: reloadFn}
+	return &reloader{configPath: configPath, reloadFn: reloadFn, done: make(chan struct{})}
 }
 
 func (r *reloader) reload() (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.stopped {
+		return "", errReloaderStopped
+	}
 	return r.reloadFn()
+}
+
+// stop ends the SIGHUP and file watchers and waits for an in-flight reload
+// to finish. Later reloads return errReloaderStopped.
+func (r *reloader) stop() {
+	r.stopOnce.Do(func() { close(r.done) })
+	r.mu.Lock()
+	r.stopped = true
+	r.mu.Unlock()
 }
 
 func (r *reloader) watchSignals() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGHUP)
 	go func() {
-		for range ch {
-			slog.Info("SIGHUP received, reloading config")
-			if hash, err := r.reload(); err != nil {
-				slog.Error("reload failed", "error", err)
-			} else {
-				slog.Info("config reloaded", "hash", hash)
+		defer signal.Stop(ch)
+		for {
+			select {
+			case <-r.done:
+				return
+			case <-ch:
+				slog.Info("SIGHUP received, reloading config")
+				if hash, err := r.reload(); err != nil {
+					slog.Error("reload failed", "error", err)
+				} else {
+					slog.Info("config reloaded", "hash", hash)
+				}
 			}
 		}
 	}()
@@ -77,6 +102,11 @@ func (r *reloader) watchFile() {
 		var timer *time.Timer
 		for {
 			select {
+			case <-r.done:
+				if timer != nil {
+					timer.Stop()
+				}
+				return
 			case ev, ok := <-watcher.Events:
 				if !ok {
 					return

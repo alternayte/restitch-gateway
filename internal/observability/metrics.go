@@ -39,6 +39,8 @@ type Metrics struct {
 	CacheMissesTotal      *prometheus.CounterVec
 	CoalescedTotal        *prometheus.CounterVec
 
+	RequestRecordsDroppedTotal *prometheus.CounterVec
+
 	RegistryPollsTotal   *prometheus.CounterVec
 	RegistryPollDuration prometheus.Histogram
 	RegistryLastSuccess  prometheus.Gauge
@@ -105,6 +107,11 @@ func NewMetrics() *Metrics {
 			Name: "restitch_coalesced_total",
 			Help: "Coalesced (deduplicated) step requests",
 		}, []string{"composition", "step"}),
+
+		RequestRecordsDroppedTotal: f.NewCounterVec(prometheus.CounterOpts{
+			Name: "restitch_request_records_dropped_total",
+			Help: "Request records not persisted to durable admin storage (queue_full, closed, drain_timeout)",
+		}, []string{"reason"}),
 	}
 }
 
