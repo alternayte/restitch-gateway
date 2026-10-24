@@ -184,6 +184,17 @@ jobs:
 
       - uses: grafana/setup-k6-action@db07bd9765aac508ef18982e52ab937fe633a065 # v1
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: studio/package-lock.json
+
+      # cmd/restitch embeds internal/studio/dist, which only the frontend
+      # build produces.
+      - run: npm ci && npm run build
+        working-directory: studio
+
       - name: Build binaries
         run: |
           go build -o bin/restitch ./cmd/restitch
