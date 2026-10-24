@@ -181,6 +181,7 @@ func (s *Server) build(ctx context.Context, cfg Config, public *url.URL) error {
 	s.registerImportExport()
 	s.registerSchema()
 	s.registerLint()
+	s.registerStepDependencies()
 	s.registerSecrets()
 
 	mux := http.NewServeMux()

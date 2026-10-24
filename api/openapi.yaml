@@ -818,6 +818,51 @@ components:
         - user
         - session
       type: object
+    StepDependencies:
+      additionalProperties: false
+      properties:
+        explicit:
+          description: Names in the step's depends_on.
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        inferred:
+          description: Steps the step's templates reference that are not in depends_on.
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - explicit
+        - inferred
+      type: object
+    StepDependenciesOutputBody:
+      additionalProperties: false
+      properties:
+        error:
+          description: Why the gateway would refuse the steps, or empty.
+          type: string
+        steps:
+          additionalProperties:
+            $ref: "#/components/schemas/StepDependencies"
+          description: Each step by name.
+          type: object
+      required:
+        - steps
+        - error
+      type: object
+    StepDependenciesRequest:
+      additionalProperties: false
+      properties:
+        composition:
+          additionalProperties: {}
+          type: object
+      required:
+        - composition
+      type: object
     StepRecord:
       additionalProperties: false
       properties:
@@ -2827,5 +2872,31 @@ paths:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
       summary: The JSON Schema of the artifact and of each resource kind
+      tags:
+        - draft
+  /api/v1/step-dependencies:
+    post:
+      description: Compiles the steps of an unsaved composition the way the gateway does and returns, per step, its depends_on names and the steps its templates reference.
+      operationId: stepDependencies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StepDependenciesRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StepDependenciesOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List what each step of a composition waits for
       tags:
         - draft

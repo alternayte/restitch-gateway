@@ -377,6 +377,36 @@ export type SessionResponse = {
     user: User;
 };
 
+export type StepDependencies = {
+    /**
+     * Names in the step's depends_on.
+     */
+    explicit: Array<string> | null;
+    /**
+     * Steps the step's templates reference that are not in depends_on.
+     */
+    inferred: Array<string> | null;
+};
+
+export type StepDependenciesOutputBody = {
+    /**
+     * Why the gateway would refuse the steps, or empty.
+     */
+    error: string;
+    /**
+     * Each step by name.
+     */
+    steps: {
+        [key: string]: StepDependencies;
+    };
+};
+
+export type StepDependenciesRequest = {
+    composition: {
+        [key: string]: unknown;
+    };
+};
+
 export type StepRecord = {
     body_size: number;
     cached: boolean;
@@ -2079,3 +2109,28 @@ export type GetArtifactSchemaResponses = {
 };
 
 export type GetArtifactSchemaResponse2 = GetArtifactSchemaResponses[keyof GetArtifactSchemaResponses];
+
+export type StepDependenciesData = {
+    body: StepDependenciesRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/step-dependencies';
+};
+
+export type StepDependenciesErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type StepDependenciesError = StepDependenciesErrors[keyof StepDependenciesErrors];
+
+export type StepDependenciesResponses = {
+    /**
+     * OK
+     */
+    200: StepDependenciesOutputBody;
+};
+
+export type StepDependenciesResponse = StepDependenciesResponses[keyof StepDependenciesResponses];

@@ -23,7 +23,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { CodeField } from "@/features/resources/code-field";
 import { kindLabel, type Kind } from "@/features/resources/kinds";
-import { StepNames } from "@/features/resources/lint";
+import { StepNames, useStepDependencies } from "@/features/resources/lint";
 import { ObjectFields, type Schema } from "@/features/resources/schema-form";
 import { SecretNames } from "@/features/resources/secret-picker";
 import { StepGraph, type Step } from "@/features/resources/step-graph";
@@ -110,6 +110,7 @@ function EditorForm({
   const dirty = JSON.stringify(body) !== JSON.stringify(initial);
   const secrets = useQuery(listDraftSecretNamesOptions({ path: { env } }));
   const secretNames = (secrets.data?.names ?? []).map((n) => n.name);
+  const stepDeps = useStepDependencies(kind === "composition" ? (body.steps ?? []) : null);
 
   useEffect(() => {
     if (view === "yaml") setYamlText(YAML.stringify(body));
@@ -191,6 +192,8 @@ function EditorForm({
                   </h2>
                   <StepGraph
                     steps={Array.isArray(body.steps) ? (body.steps as Step[]) : []}
+                    inferred={stepDeps.inferred}
+                    problem={stepDeps.problem}
                     onChange={(steps) => setBody({ ...body, steps })}
                   />
                 </section>

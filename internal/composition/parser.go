@@ -368,20 +368,26 @@ func compileStep(step *Step, env map[string]any) (*CompiledStep, error) {
 		compiled.Headers[key] = headerTmpl
 	}
 
-	var allDeps []string
-	allDeps = append(allDeps, compiled.PathPart.Deps...)
-	if compiled.QueryPart != nil {
-		allDeps = append(allDeps, compiled.QueryPart.Deps...)
-	}
-	if compiled.BodyTmpl != nil {
-		allDeps = append(allDeps, compiled.BodyTmpl.Deps...)
-	}
-	for _, h := range compiled.Headers {
-		allDeps = append(allDeps, h.Deps...)
-	}
-	compiled.Deps = MergeDependencies(step.DependsOn, allDeps)
+	compiled.Deps = MergeDependencies(step.DependsOn, templateDeps(compiled))
 
 	return compiled, nil
+}
+
+// templateDeps lists the step names that the compiled templates of a step
+// reference: its path, query, body and headers.
+func templateDeps(compiled *CompiledStep) []string {
+	var deps []string
+	deps = append(deps, compiled.PathPart.Deps...)
+	if compiled.QueryPart != nil {
+		deps = append(deps, compiled.QueryPart.Deps...)
+	}
+	if compiled.BodyTmpl != nil {
+		deps = append(deps, compiled.BodyTmpl.Deps...)
+	}
+	for _, h := range compiled.Headers {
+		deps = append(deps, h.Deps...)
+	}
+	return deps
 }
 
 func compileResponse(resp *ResponseTemplate, env map[string]any) (*CompiledResponse, error) {
