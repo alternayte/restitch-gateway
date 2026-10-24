@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CodeField } from "@/features/resources/code-field";
 import { useTemplateLint } from "@/features/resources/lint";
+import { takesSecret } from "@/features/resources/secret-fields";
 import { StringInput } from "@/features/resources/secret-picker";
 
 /** Schema is the subset of JSON Schema that the artifact schema uses. */
@@ -102,6 +103,7 @@ export function SchemaField({
 }) {
   const s = resolve(schema, defs);
   const id = `f${path.replace(/[^a-zA-Z0-9]/g, "-")}`;
+  const secret = takesSecret(path);
 
   // A schema of true, or an open object, takes any value: edit it as YAML.
   if (s === true || (s.type === "object" && !s.properties && !s.additionalProperties)) {
@@ -130,7 +132,7 @@ export function SchemaField({
     );
   }
   if (s.type === "object" && s.additionalProperties) {
-    return <MapField id={id} name={name} value={(value as Record<string, string>) ?? {}} onChange={onChange} />;
+    return <MapField id={id} name={name} secret={secret} value={(value as Record<string, string>) ?? {}} onChange={onChange} />;
   }
   if (s.type === "array") {
     const items = resolve(s.items ?? true, defs);
@@ -178,6 +180,7 @@ export function SchemaField({
         id={id}
         name={name}
         hint="Separate values with commas."
+        secret={secret}
         value={list.join(", ")}
         onChange={(text) => {
           const parts = text.split(",").map((p) => p.trim()).filter(Boolean);
@@ -211,6 +214,7 @@ export function SchemaField({
       name={name}
       hint={s.description}
       pattern={s.pattern}
+      secret={secret}
       value={typeof value === "string" ? value : ""}
       onChange={(text) => onChange(text)}
     />
@@ -225,6 +229,7 @@ function ScalarField({
   hint,
   pattern,
   type = "text",
+  secret = false,
 }: {
   id: string;
   name: string;
@@ -233,6 +238,8 @@ function ScalarField({
   hint?: string;
   pattern?: string;
   type?: string;
+  /** secret gives the field the ${NAME} picker; secret-fields.ts decides which fields. */
+  secret?: boolean;
 }) {
   const invalid = pattern !== undefined && value !== "" && !new RegExp(pattern).test(value);
   const lintError = useTemplateLint(type === "text" ? value : "");
@@ -241,8 +248,7 @@ function ScalarField({
       <label htmlFor={id} className="text-sm font-medium">
         {label(name)}
       </label>
-      {/* A field with a pattern, such as a duration, cannot hold a ${NAME}: it gets no secret picker. */}
-      {type === "text" && pattern === undefined ? (
+      {secret ? (
         <StringInput id={id} fieldLabel={label(name)} value={value} aria-invalid={invalid || lintError !== "" || undefined} onChange={onChange} />
       ) : (
         <Input
@@ -269,9 +275,11 @@ function MapField({
   name,
   value,
   onChange,
+  secret,
 }: {
   id: string;
   name: string;
+  secret: boolean;
   value: Record<string, string>;
   onChange: (next: Record<string, string> | undefined) => void;
 }) {
@@ -283,7 +291,11 @@ function MapField({
       {entries.map(([k, v]) => (
         <div key={k} className="flex items-center gap-2">
           <span className="w-40 truncate font-mono text-xs">{k}</span>
-          <StringInput aria-label={`${label(name)} ${k}`} fieldLabel={`${label(name)} ${k}`} value={v} onChange={(text) => onChange({ ...value, [k]: text })} />
+          {secret ? (
+            <StringInput aria-label={`${label(name)} ${k}`} fieldLabel={`${label(name)} ${k}`} value={v} onChange={(text) => onChange({ ...value, [k]: text })} />
+          ) : (
+            <Input aria-label={`${label(name)} ${k}`} value={v} onChange={(e) => onChange({ ...value, [k]: e.target.value })} />
+          )}
           <Button
             type="button"
             size="sm"

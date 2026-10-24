@@ -33,6 +33,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C19 — The step graph widget edits depends_on
 - [x] C20 — Expression fields show server lint errors as the user types
 - [x] C21 — The secret picker inserts ${VAR} names and the environment lists required names
+- [x] C29 — The secret picker shows only on credential and endpoint fields
 - [x] C22 — The publish screen shows the diff, history, rollback and promote
 - [x] C23 — Owners manage gateway tokens and users in settings
 - [x] C24 — Environment dashboards show aggregates, sampled requests and instances
@@ -405,6 +406,19 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and AGENTS.md lines for registry and bundle are replaced by an accepted agents-audit item.
 - **Notes:** The test reads the env names from the C01 derivation function, so docs cannot drift.
   Done: `TestDocsListEveryEnvVar` parses `cmd/restitch/*.go`, takes every flag of each flag set passed to `gwconfig.BindEnv`, names it with `gwconfig.EnvName`, and checks one `| \`RESTITCH_X\` | commands |` row per name in `docs/configuration.md`, with the right commands and no unknown name. README, configuration, deployment (generic container platforms), studio, architecture, observability, resilience, SECURITY, VERSIONING and CONTRIBUTING describe v2; CHANGELOG has a v2.0.0 entry. deploy/README.md no longer claims an import button: the UI has none, import is the API and `restitch publish`.
+
+---
+
+### C29 — The secret picker shows only on credential and endpoint fields
+
+- **Status:** done
+- **Depends on:** C21
+- **Files:** `studio/src/features/resources/secret-fields.ts`, `studio/src/features/resources/schema-form.tsx`, `studio/src/features/resources/resource-form.test.tsx`, `docs/studio.md`
+- **Goal:** The key button appears only on fields that carry a credential or an endpoint location, not on names, methods or upstream references.
+- **First failing test:** `studio/src/features/resources/resource-form.test.tsx` — "shows the secret picker on an auth value but not on a step name"
+- **Done when:** the test command passes and the forms show the key button only on allowlisted fields.
+- **Notes:** User decision 2026-10-24. Studio's required-names list and its name validation (`internal/studio/secrets.go`) do not change: any string can still hold ${VAR} in YAML; only the picker narrows.
+  Done: `secret-fields.ts` holds the allowlist as form paths (kind first, `*` for an array index) with the rule in its comment; `takesSecret(path)` decides, and `schema-form.tsx` passes the result to text fields, string maps (values only) and string arrays. The list, from the artifact schema: upstream `url`, `health_path`, `auth.header.value`, `auth.basic.username`, `auth.basic.password`, `auth.oauth2.token_url`, `auth.oauth2.client_id`, `auth.oauth2.client_secret`; composition `steps.*.path`, `steps.*.headers` (values), `steps.*.body`; auth policy `api_keys`, `jwt.jwks_url`, `jwt.issuer`, `jwt.audience`. Left out: header and step names, methods, step upstream, the inbound composition path, content type, oauth2 scopes, depends_on, rate-limit key, durations, numbers and booleans. The schema has no JWT secret field and steps have no separate query field (the query is part of the path template). Verified in a browser against `restitch dev`: the upstream form has the key button on Url, header Value and Health path, not on header Name or Timeout; the composition form has it on the step Path, Body and header value, not on Name, Upstream, Method or the composition Path; the auth policy form has it on Api keys and the JWT fields; light, dark and 390px.
 
 ---
 

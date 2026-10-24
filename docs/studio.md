@@ -74,11 +74,23 @@ expands the variable from its own environment. Studio validates the draft
 with every variable replaced by `x`, and never sees the value. See
 [configuration.md](configuration.md#environment-variable-expansion).
 
-A text field has a key button on its right. Click it to insert `${NAME}` at
-the cursor. The list shows the names that the draft already uses. Type a new
-name to add it. A name uses letters, digits and `_`, and does not start with
-a digit. Studio refuses a save or a publish with any other name. A field with
-a fixed format, such as a duration, has no key button.
+A field that holds a credential or an endpoint location has a key button on
+its right. Click it to insert `${NAME}` at the cursor. The list shows the
+names that the draft already uses. Type a new name to add it. A name uses
+letters, digits and `_`, and does not start with a digit. Studio refuses a
+save or a publish with any other name.
+
+These fields have the key button:
+
+- upstream: `url`, `health_path`, `auth.header.value`, `auth.basic.username`,
+  `auth.basic.password`, `auth.oauth2.token_url`, `auth.oauth2.client_id`,
+  `auth.oauth2.client_secret`.
+- composition steps: `path`, `body`, and the value of each header.
+- auth policy: `api_keys`, `jwt.jwks_url`, `jwt.issuer`, `jwt.audience`.
+
+Names, methods, upstream references, durations, numbers and switches have no
+key button. You can still type `${NAME}` into any text field, or into the
+YAML tab. Studio validates and lists it the same way.
 
 The **Draft** page lists every name that the draft uses, with the resources
 that use it. Set each name as an environment variable on every gateway of
