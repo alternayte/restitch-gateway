@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/expr-lang/expr"
@@ -49,9 +49,6 @@ const (
 	EscapeQuery                   // url.QueryEscape per interpolated value
 	EscapeJSON                    // JSON-encode the value (bodies)
 )
-
-// stepRefPattern matches steps.<name> references in expressions.
-var stepRefPattern = regexp.MustCompile(`\bsteps\.([A-Za-z_][A-Za-z0-9_]*)`)
 
 // CompileTemplate parses raw, compiles every {{...}} against env.
 func CompileTemplate(raw string, env map[string]any) (*Template, error) {
@@ -96,21 +93,16 @@ func CompileTemplate(raw string, env map[string]any) (*Template, error) {
 	}, nil
 }
 
-// extractStepDeps returns step names referenced in an expression string.
+// extractStepDeps returns the step names an expression reads, from its
+// syntax tree: steps.name and steps["name"] count, a "steps.x" inside a
+// string literal does not. The expression has already compiled, so a parse
+// error cannot occur here.
 func extractStepDeps(exprStr string) []string {
-	matches := stepRefPattern.FindAllStringSubmatch(exprStr, -1)
-	if matches == nil {
+	deps, err := ExtractDependencies(exprStr)
+	if err != nil {
 		return nil
 	}
-
-	seen := map[string]bool{}
-	var deps []string
-	for _, m := range matches {
-		if len(m) > 1 && !seen[m[1]] {
-			deps = append(deps, m[1])
-			seen[m[1]] = true
-		}
-	}
+	sort.Strings(deps)
 	return deps
 }
 

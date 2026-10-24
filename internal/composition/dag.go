@@ -16,6 +16,7 @@ package composition
 
 import (
 	"fmt"
+	"sort"
 )
 
 // ExecutionPlan represents the order in which steps should execute.
@@ -108,6 +109,7 @@ func buildExecutionPlan(deps map[string][]string) (*ExecutionPlan, error) {
 				cycleSteps = append(cycleSteps, step)
 			}
 		}
+		sort.Strings(cycleSteps)
 		return nil, fmt.Errorf("circular dependency detected involving steps: %v", cycleSteps)
 	}
 

@@ -1,7 +1,7 @@
 /**
- * The step graph of a composition, built from depends_on alone. The gateway
- * also infers edges from {{ steps.X }} references in templates; Studio does
- * not parse templates, so those edges are not here.
+ * The step graph of a composition. depends_on holds every step a step waits
+ * for; callers add the template references that POST /api/v1/step-dependencies
+ * reports. The frontend never parses templates itself.
  */
 export interface DagStep {
   name: string;

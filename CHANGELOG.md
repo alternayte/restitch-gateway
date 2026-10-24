@@ -90,6 +90,13 @@ move from a v1 file.
 
 ### Bug Fixes
 
+- **Bracket references order steps.** A template that reads
+  `steps["user-svc"]` now makes its step wait for `user-svc`. The compiler
+  found dependencies with a pattern that saw only `steps.name`, so a step
+  named with a hyphen ran in the same wave as the step it read. The
+  compiler now reads the expression syntax tree, which also stops a
+  `"steps.x"` string literal from counting as a dependency.
+
 - **`RestitchConfigReloadFailing` no longer fires on healthy gateways.** It
   matched every pull result except `success`, so the `not_modified` pulls of
   an unchanged version made it fire. It now matches `result="error"` only.

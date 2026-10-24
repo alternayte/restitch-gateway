@@ -1,13 +1,15 @@
 import {
   Background,
+  BaseEdge,
   Controls,
+  getBezierPath,
   Handle,
   MarkerType,
   Position,
   ReactFlow,
   type Connection,
-  type Edge,
   type EdgeChange,
+  type EdgeProps,
   type Node,
   type NodeProps,
 } from "@xyflow/react";
@@ -15,12 +17,12 @@ import "@xyflow/react/dist/style.css";
 import { X } from "lucide-react";
 import { useState, type CSSProperties } from "react";
 import { Button } from "@/components/ui/button";
+import { inferredFor, stepEdges, type Inferred, type Named } from "@/features/resources/step-edges";
 import { computeWaves, dependsOnTransitively } from "@/lib/dag";
 
 /** Step is one entry of a composition's steps list; fields other than name and depends_on pass through. */
 export type Step = Record<string, unknown> & { name?: unknown; depends_on?: unknown };
 
-type Named = { name: string; depends_on: string[] };
 
 /** named lists the steps that have a name, with their depends_on as strings. */
 function named(steps: Step[]): Named[] {
@@ -65,9 +67,24 @@ function StepNodeView({ data }: NodeProps<StepNode>) {
 
 const nodeTypes = { step: StepNodeView };
 
+/**
+ * WaveEdgeView draws an edge between adjacent waves as a bezier. An edge that
+ * skips a wave would run straight under the steps in between, so it bows
+ * below them.
+ */
+function WaveEdgeView({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, markerEnd }: EdgeProps) {
+  const [path] =
+    targetX - sourceX > COL
+      ? [`M ${sourceX},${sourceY} C ${sourceX + 80},${sourceY + ROW} ${targetX - 80},${targetY + ROW} ${targetX},${targetY}`]
+      : getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  return <BaseEdge path={path} style={style} markerEnd={markerEnd} />;
+}
+
+const edgeTypes = { wave: WaveEdgeView };
+
 const fitOptions = { padding: 0.2, maxZoom: 1 };
 
-const edgeOptions = { markerEnd: { type: MarkerType.ArrowClosed, color: "var(--muted-foreground)" } };
+const edgeOptions = { type: "wave", markerEnd: { type: MarkerType.ArrowClosed, color: "var(--muted-foreground)" } };
 
 // React Flow reads its colours from these variables; the tokens follow the light and dark themes.
 const flowStyle = {
@@ -87,11 +104,25 @@ const flowStyle = {
  * StepGraph draws the steps of a composition and edits their depends_on.
  * An edge runs from a dependency to the step that depends on it. Drawing an
  * edge adds depends_on, deleting one removes it, and an edge that would make
- * a cycle is refused. Template references to steps.X also order steps at
- * runtime; the graph does not show them.
+ * a cycle is refused. inferred holds the template references Studio's
+ * compiler found; they are drawn dashed, count in the cycle check and cannot
+ * be removed here. problem is why the gateway refuses the steps, if it does.
  */
-export function StepGraph({ steps, onChange }: { steps: Step[]; onChange: (next: Step[]) => void }) {
+export function StepGraph({
+  steps,
+  inferred = {},
+  problem = "",
+  onChange,
+}: {
+  steps: Step[];
+  inferred?: Inferred;
+  problem?: string;
+  onChange: (next: Step[]) => void;
+}) {
   const list = named(steps);
+  const names = new Set(list.map((s) => s.name));
+  // What each step waits for at runtime: depends_on plus template references.
+  const runtime = list.map((s) => ({ name: s.name, depends_on: [...s.depends_on, ...inferredFor(s, inferred, names)] }));
   const [error, setError] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -119,7 +150,7 @@ export function StepGraph({ steps, onChange }: { steps: Step[]; onChange: (next:
       setError("");
       return;
     }
-    if (dependsOnTransitively(list, dep, step)) {
+    if (dependsOnTransitively(runtime, dep, step)) {
       setError(`${step} cannot depend on ${dep}: ${dep} already depends on ${step}.`);
       return;
     }
@@ -137,16 +168,8 @@ export function StepGraph({ steps, onChange }: { steps: Step[]; onChange: (next:
     onChange(next);
   };
 
-  const names = new Set(list.map((s) => s.name));
-  const edges: Edge[] = list.flatMap((s) =>
-    s.depends_on
-      .filter((d) => names.has(d))
-      .map((d) => {
-        const id = `${d}->${s.name}`;
-        return { id, source: d, target: s.name, selected: selected.has(id) };
-      }),
-  );
-  const nodes: StepNode[] = computeWaves(list).flatMap((wave, x) =>
+  const edges = stepEdges(list, inferred, selected);
+  const nodes: StepNode[] = computeWaves(runtime).flatMap((wave, x) =>
     wave.map((name, y) => ({
       id: name,
       type: "step",
@@ -169,13 +192,16 @@ export function StepGraph({ steps, onChange }: { steps: Step[]; onChange: (next:
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           fitViewOptions={fitOptions}
           defaultEdgeOptions={edgeOptions}
           proOptions={{ hideAttribution: true }}
           onEdgesChange={onEdgesChange}
           onConnect={(c: Connection) => connect(c.target, c.source)}
-          onEdgesDelete={(deleted) => disconnect(deleted.map((e) => ({ step: e.target, dep: e.source })))}
+          onEdgesDelete={(deleted) =>
+            disconnect(deleted.filter((e) => e.deletable !== false).map((e) => ({ step: e.target, dep: e.source })))
+          }
           nodesDraggable={false}
           panOnScroll={false}
           zoomOnScroll={false}
@@ -187,8 +213,14 @@ export function StepGraph({ steps, onChange }: { steps: Step[]; onChange: (next:
       </div>
       <p className="text-xs text-muted-foreground">
         Drag from the right handle of a step to the left handle of a step that depends on it. Select an edge and press
-        Backspace to remove it. Steps referenced in templates as steps.name are not drawn.
+        Backspace to remove it. Dashed edges come from template references such as {"{{ steps.name.body }}"}; edit the
+        template to change them.
       </p>
+      {problem && (
+        <p aria-live="polite" className="text-xs text-destructive">
+          The gateway refuses these steps: {problem}
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-xs text-destructive">
           {error}
@@ -196,22 +228,32 @@ export function StepGraph({ steps, onChange }: { steps: Step[]; onChange: (next:
       )}
       {edges.length > 0 && (
         <ul className="flex flex-col gap-1" aria-label="Edges">
-          {edges.map((e) => (
-            <li key={e.id} className="flex items-center gap-2 font-mono text-xs">
-              <span>
-                {e.target} depends on {e.source}
-              </span>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                aria-label={`Remove edge ${e.source} to ${e.target}`}
-                onClick={() => disconnect([{ step: e.target, dep: e.source }])}
-              >
-                <X className="h-3.5 w-3.5" aria-hidden />
-              </Button>
-            </li>
-          ))}
+          {edges.map((e) =>
+            e.deletable === false ? (
+              <li key={e.id} className="flex h-8 items-center gap-2 font-mono text-xs text-muted-foreground">
+                <span aria-hidden className="w-4 border-t border-dashed border-current" />
+                <span>
+                  {e.target} uses {e.source} in a template
+                </span>
+              </li>
+            ) : (
+              <li key={e.id} className="flex items-center gap-2 font-mono text-xs">
+                <span aria-hidden className="w-4 border-t border-current" />
+                <span>
+                  {e.target} depends on {e.source}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Remove edge ${e.source} to ${e.target}`}
+                  onClick={() => disconnect([{ step: e.target, dep: e.source }])}
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden />
+                </Button>
+              </li>
+            ),
+          )}
         </ul>
       )}
       <div className="flex flex-wrap items-center gap-2 text-sm">

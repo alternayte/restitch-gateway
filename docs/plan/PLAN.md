@@ -38,6 +38,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - [x] C23 — Owners manage gateway tokens and users in settings
 - [x] C24 — Environment dashboards show aggregates, sampled requests and instances
 - [x] C25 — The command palette and keyboard shortcuts reach every page and action
+- [x] C28 — The step graph draws dependencies inferred from template references
 
 ### Delivery
 - [x] C26 — One image runs every role, with Compose and Kubernetes files linted in CI
@@ -406,6 +407,19 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Done when:** the test command passes and AGENTS.md lines for registry and bundle are replaced by an accepted agents-audit item.
 - **Notes:** The test reads the env names from the C01 derivation function, so docs cannot drift.
   Done: `TestDocsListEveryEnvVar` parses `cmd/restitch/*.go`, takes every flag of each flag set passed to `gwconfig.BindEnv`, names it with `gwconfig.EnvName`, and checks one `| \`RESTITCH_X\` | commands |` row per name in `docs/configuration.md`, with the right commands and no unknown name. README, configuration, deployment (generic container platforms), studio, architecture, observability, resilience, SECURITY, VERSIONING and CONTRIBUTING describe v2; CHANGELOG has a v2.0.0 entry. deploy/README.md no longer claims an import button: the UI has none, import is the API and `restitch publish`.
+
+---
+
+### C28 — The step graph draws dependencies inferred from template references
+
+- **Status:** done
+- **Depends on:** C19
+- **Files:** `internal/composition/stepdeps.go`, `internal/composition/parser.go`, `internal/composition/dag.go`, `internal/studio/lint.go`, `internal/studio/stepdeps_test.go`, `api/openapi.yaml`, `studio/src/api`, `studio/src/features/resources/lint.tsx`, `studio/src/features/resources/step-edges.ts`, `studio/src/features/resources/step-graph.tsx`, `studio/src/features/resources/step-graph.test.tsx`, `studio/src/features/resources/ResourceEditor.tsx`, `studio/src/lib/dag.ts`
+- **Goal:** The step graph shows every dependency the gateway compiler computes: depends_on edges solid and editable, template references dashed and read-only. The cycle check counts both. (User decision 2026-10-24.)
+- **First failing test:** `internal/studio/stepdeps_test.go` — "TestStepDependenciesIncludeTemplateReferences"
+- **Done when:** the test command passes, and `studio/src/features/resources/step-graph.test.tsx` covers the dashed read-only edge and the refusal of a cycle that runs through a template reference.
+- **Notes:** One Go source of truth: the compiler's own dependency code. The frontend does not parse templates.
+  Done: `composition.StepDependencies` compiles each step with `compileStep`, the function the gateway uses, and returns per step the depends_on names (explicit) and the template references that are not also explicit (inferred). `compileStep` now gets its template deps from `templateDeps` (path, query, body, headers), shared by both. The compiler takes template deps from `Template.Deps` (the `steps.name` regex in template.go), not from `ExtractDependencies` in deps.go, so the graph follows what the gateway runs; bracket access such as `steps["a"]` is not a dependency in either. A step that does not compile keeps its explicit deps; the error is the first step error, or else the `BuildDAG` error (unknown step, cycle). Cycle step names are now sorted, so the message is stable. POST /api/v1/step-dependencies (viewer role, like /api/v1/lint) takes `{composition}` and answers `{steps: {name: {explicit, inferred}}, error}`; the editor sends only the unsaved steps, 400ms after they stop changing. The graph draws inferred edges dashed, not selectable and not deletable, lists them as "b uses a in a template" with no remove button, lays out waves over both kinds, and shows the compile error as "The gateway refuses these steps: ...". An edge that skips a wave bows below the steps between, because a straight edge ran under them and hid. Verified in a browser against `restitch dev`: a dashed user to orders edge from `/orders/{{ steps.user.body.id }}`; typing `{{ steps.user.body.id }}` into audit's path added a second dashed edge after the debounce; user depends on audit refused through the inferred edge; a template cycle showed the gateway error; light, dark, 390px.
 
 ---
 

@@ -53,3 +53,45 @@ func (s *Server) registerLint() {
 		return out, nil
 	})
 }
+
+type stepDependencies struct {
+	Explicit []string `json:"explicit" doc:"Names in the step's depends_on."`
+	Inferred []string `json:"inferred" doc:"Steps the step's templates reference that are not in depends_on."`
+}
+
+type stepDependenciesOutput struct {
+	Body struct {
+		Steps map[string]stepDependencies `json:"steps" doc:"Each step by name."`
+		Error string                      `json:"error" doc:"Why the gateway would refuse the steps, or empty."`
+	}
+}
+
+func (s *Server) registerStepDependencies() {
+	viewer := huma.Middlewares{humaauth.RequireRole(s.api, s.auth, RoleViewer)}
+	huma.Register(s.api, huma.Operation{
+		OperationID: "stepDependencies", Method: http.MethodPost, Path: "/api/v1/step-dependencies",
+		Summary:     "List what each step of a composition waits for",
+		Description: "Compiles the steps of an unsaved composition the way the gateway does and returns, per step, its depends_on names and the steps its templates reference.",
+		Tags:        []string{"draft"}, Middlewares: viewer,
+	}, func(_ context.Context, in *struct {
+		Body struct {
+			Composition map[string]any `json:"composition"`
+		}
+	}) (*stepDependenciesOutput, error) {
+		out := &stepDependenciesOutput{}
+		out.Body.Steps = map[string]stepDependencies{}
+		var comp composition.Composition
+		if err := strictDecode(in.Body.Composition, &comp); err != nil {
+			out.Body.Error = err.Error()
+			return out, nil
+		}
+		deps, err := composition.StepDependencies(&comp)
+		for name, d := range deps {
+			out.Body.Steps[name] = stepDependencies{Explicit: d.Explicit, Inferred: d.Inferred}
+		}
+		if err != nil {
+			out.Body.Error = err.Error()
+		}
+		return out, nil
+	})
+}
