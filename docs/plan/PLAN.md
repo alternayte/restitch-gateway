@@ -42,6 +42,7 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 
 ### Delivery
 - [x] C26 — One image runs every role, with Compose and Kubernetes files linted in CI
+- [x] C31 — The README shows Studio: a GIF of the flow and four screenshots in both themes
 - [x] C27 — The docs describe v2: container platforms, configuration, Studio, CHANGELOG
 
 ---
@@ -447,3 +448,16 @@ Setup command: `make studio`; Postgres tests also need `RESTITCH_TEST_DATABASE_U
 - **Notes:** User decision 2026-10-24: v2.0.0 is not tagged and already breaks, so the rename goes in now. CHANGELOG lists it under the v2.0.0 breaking changes.
   Done: `Metrics.RegisterStudioPullMetrics` replaces `RegisterRegistryMetrics`; the fields are `StudioPullsTotal`, `StudioPullDuration` and `StudioLastPullSuccess`. `TestPullMetricsAreNamedForStudio` scrapes `/metrics` after one pull and checks the three names and that no `restitch_registry_` name remains. The alert keeps the name `RestitchConfigReloadFailing`, so alert routes do not change; its summary and description now say pulls from Studio, and `alerts_test.yml` asserts the new text.
   Also: RestitchConfigReloadFailing matched result!="success", so the not_modified pulls of a healthy gateway made it fire in steady state; it now matches result="error", and a promtool case with only not_modified pulls pins that.
+
+---
+
+### C31 — The README shows Studio: a GIF of the flow and four screenshots in both themes
+
+- **Status:** done
+- **Depends on:** C24, C25, C28, C29
+- **Files:** `README.md`, `docs/images/`, `studio/src/components/charts/charts-impl.tsx`, `docs/partial-responses.md`
+- **Goal:** A reader of the README sees Studio before installing it.
+- **First failing test:** none; the README YAML test still passes and the images were checked by eye.
+- **Done when:** the README shows the GIF and the four screenshots, each switching with the GitHub theme.
+- **Notes:** User request 2026-10-24.
+  Done: captured from the `deploy/` Compose stack (Postgres, Studio, two managed gateways named edge-eu-1 and edge-eu-2 through a local override, so no host name leaks) with 30 minutes of generated traffic, varying latency and a burst of upstream 502s forwarded by a response status template. The GIF is assembled from screenshots with ffmpeg because agent-browser's recorder could not open its output file. Found while capturing: the bar chart clipped its y-axis labels (left margin -20, now -4), and docs/partial-responses.md claimed an upstream 5xx fails a step, while the gateway passes it through as step data by design (executor test "upstream 500 is not step failure").

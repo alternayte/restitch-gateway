@@ -8,8 +8,8 @@ error information for any failed or skipped steps.
 
 A partial response is returned when:
 
-- An **optional** step fails (network error, timeout, upstream 5xx, circuit
-  breaker open).
+- An **optional** step fails (network error, timeout, circuit breaker open,
+  auth failure).
 - A step is **skipped** because one of its dependencies (inferred or explicit)
   failed or was skipped.
 - At least one **required** step succeeded, so the composition can still
@@ -17,6 +17,12 @@ A partial response is returned when:
 
 If a **required** step fails, the gateway returns a hard error (502 or 504)
 instead of a partial response.
+
+An upstream response with a 4xx or 5xx status is not a step failure. The
+step completes, and `steps.<name>.status` and `steps.<name>.body` hold the
+upstream status and body, after any retries. To pass the status on, set the
+response `status` to an expression such as `"{{ steps.stock.status }}"`. To
+replace the body for a status, use `error_rules`.
 
 ## Response Headers
 
@@ -65,7 +71,7 @@ response body:
 | Message | Meaning |
 |---------|---------|
 | `timeout` | Step exceeded its timeout |
-| `upstream error` | Network error, upstream 5xx after retries, circuit breaker open, or auth failure |
+| `upstream error` | Network error, circuit breaker open, or auth failure |
 | `dependency_failed` | Step was skipped because a dependency failed |
 
 Messages are sanitized — internal error strings, upstream URLs, and
