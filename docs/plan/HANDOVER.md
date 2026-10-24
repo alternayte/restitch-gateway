@@ -1,10 +1,10 @@
 # Handover
 
-Updated: 2026-10-24, session 5 (closed; every chunk done)
+Updated: 2026-10-24, session 5 (closed; v2.0.0 released)
 
 ## Where we are
 
-Every chunk C01-C27 is done. C01-C24, C26 and C27 are merged to main (PRs #34-#37); C25 is PR #38, merged when its CI passed. The v2 control plane described in `docs/specs/studio-control-plane.md` is built: Studio with environments, drafts, publish, rollback, promote, gateway tokens, users, dashboards, the step graph, the secret picker and the command palette; managed and standalone gateways; one image; Compose and Kubernetes files; docs for v2.
+Every chunk C01-C31 is done and merged to main (PRs #34-#42). v2.0.0 is released from main: the release workflow publishes ghcr.io/alternayte/restitch-gateway:v2.0.0 and :latest and attaches four binaries. The README shows Studio with a flow GIF and screenshots.
 
 ## Prove it
 
@@ -19,11 +19,8 @@ None. The plan has no open chunk.
 
 Ask the user what comes next. Open items, none of them in the plan:
 - The spec's manual check: a gateway with two env vars and Studio with three on Postgres serve traffic on one container platform from docs/deployment.md. Only the user can run it.
-- Release v2.0.0: no tag is cut. `.github/workflows/release.yml` publishes the image on a v* tag.
-- The step graph does not draw dependencies from {{ steps.X }} references; that needs an API that returns the dependencies the gateway computes.
-- Metrics keep the v1 names `restitch_registry_*`; renaming breaks dashboards.
-- The secret picker shows on every free string field, step names and methods included.
-- Jaeger was dropped from deploy/; the gateway still exports OTLP traces when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+- Studio's upstream table counts a step failure as an upstream error, so upstream 5xx responses (passed through as step data by design) show 0% errors there, while `restitch_upstream_requests_total{status_class="5xx"}` counts them.
+- Jaeger is not in deploy/; the gateway still exports OTLP traces when OTEL_EXPORTER_OTLP_ENDPOINT is set.
 
 ## Decisions
 

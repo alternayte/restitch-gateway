@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.0.0 — Unreleased
+## v2.0.0 — 2026-10-24
 
 Studio becomes a multi-environment control plane, and gateways pull
 published artifact versions from it. One binary and one image serve every
@@ -84,6 +84,17 @@ move from a v1 file.
   client, forms derived from the artifact JSON Schema, a YAML view, server
   lint of expressions, an environment overview with usage charts,
   instances and sampled requests, and user and token management.
+- **Step graph**: a graph in the composition editor edits `depends_on`. It
+  also draws, dashed and read-only, the dependencies that the gateway
+  compiler infers from template references, and refuses an edge that makes
+  a cycle.
+- **Secrets as `${VAR}` names**: Studio lists the names each draft and each
+  version need, checks their syntax on save, import, promote and publish,
+  and offers a picker on credential and endpoint fields. Studio never
+  stores a value.
+- **Command palette and shortcuts**: Cmd+K finds pages, environments,
+  resources and actions; `?` lists the shortcuts; `g` plus a letter jumps
+  to a page.
 - **Deployment**: a generic container-platform guide
   ([docs/deployment.md](docs/deployment.md)), a Docker Compose stack and
   plain Kubernetes manifests in `deploy/`, linted in CI.
