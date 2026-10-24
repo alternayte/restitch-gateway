@@ -117,7 +117,7 @@ export function StackedBars({
       {/* The chart is aria-hidden; its data table serves screen readers, so the chart takes no focus. */}
       <BarChart
         data={data}
-        margin={{ top: 8, right: 4, bottom: 0, left: -20 }}
+        margin={{ top: 8, right: 4, bottom: 0, left: -4 }}
         barCategoryGap="22%"
         accessibilityLayer={false}
       >

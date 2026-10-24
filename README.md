@@ -8,6 +8,63 @@ A REST API composition gateway. You declare compositions in YAML. Restitch
 runs the graph of upstream calls in parallel, connects the results with
 expressions, and returns one merged response. You write no BFF code.
 
+Restitch Studio is the control plane. You edit compositions per environment,
+review the diff, and publish. The gateways pull the new version and report
+their traffic back.
+
+![Studio: search with the command palette, open a composition and its step graph, then review the diff before publish](docs/images/studio-flow.gif)
+
+<table>
+<tr>
+<td width="50%">
+
+**Traffic from every gateway.** Requests, errors and p95 per minute, the
+upstreams with their breaker states, and the version each instance runs.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/studio-overview-dark.png">
+  <img alt="Environment overview with request and latency charts, upstreams and gateway instances" src="docs/images/studio-overview-light.png">
+</picture>
+
+</td>
+<td width="50%">
+
+**The step graph.** Solid edges are `depends_on`. Dashed edges come from
+template references. Studio refuses an edge that makes a cycle.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/studio-graph-dark.png">
+  <img alt="Composition editor with the step graph" src="docs/images/studio-graph-light.png">
+</picture>
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Review, then publish.** Publish validates the whole draft with the gateway
+validator and shows the diff from the current version.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/studio-publish-dark.png">
+  <img alt="Publish screen with the diff of the draft against version 1" src="docs/images/studio-publish-light.png">
+</picture>
+
+</td>
+<td width="50%">
+
+**Cmd+K reaches everything.** Pages, environments, resources and actions.
+Press `?` for the keyboard shortcuts.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/studio-palette-dark.png">
+  <img alt="Command palette searching resources across environments" src="docs/images/studio-palette-light.png">
+</picture>
+
+</td>
+</tr>
+</table>
+
 ## Install
 
 Container image (one image for every role):
