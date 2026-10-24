@@ -217,6 +217,26 @@ func TestTemplate_Deps(t *testing.T) {
 	}
 }
 
+// A step name with a hyphen can only be reached with bracket access. The
+// dependency must still be found, or the step runs in the same wave as the
+// step it reads.
+func TestTemplate_DepsFollowBracketAccessAndIgnoreStringLiterals(t *testing.T) {
+	env := map[string]any{
+		"steps": map[string]any{
+			"user-svc": map[string]any{"body": map[string]any{}},
+			"orders":   map[string]any{"body": map[string]any{}},
+		},
+	}
+
+	tmpl, err := CompileTemplate(`/x/{{ steps["user-svc"].body.id }}?note={{ "steps.orders" }}`, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tmpl.Deps) != 1 || tmpl.Deps[0] != "user-svc" {
+		t.Fatalf("deps = %v, want [user-svc]", tmpl.Deps)
+	}
+}
+
 func TestTemplate_PureLiteral(t *testing.T) {
 	env := map[string]any{}
 
